@@ -38,7 +38,7 @@ base64 = "0.22"
 rkyv = { version = "0.8.10", features = ["little_endian"] }
 compact_str = { version = "0.9.0", features = ["rkyv", "serde"] }
 nohash-hasher = "0.2.0"
-jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
+jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 
 [dev-dependencies]
 tokio = { version = "1.47", features = ["full"] }
