@@ -312,9 +312,9 @@ jobs:
       - name: Build
         run: |
           rustup target add ${{matrix.target}}
-          cargo build --release --target ${{matrix.target}} -p stalwart --no-default-features --features "sqlite postgres mysql rocks s3 redis azure nats enterprise"
+          cargo build --release --target ${{matrix.target}} -p flux --no-default-features --features "sqlite postgres mysql rocks s3 redis azure nats enterprise"
           mkdir -p artifacts
-          mv ./target/${{matrix.target}}/release/stalwart.exe ./artifacts/stalwart.exe
+          mv ./target/${{matrix.target}}/release/flux.exe ./artifacts/flux.exe
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
@@ -357,9 +357,9 @@ jobs:
       - name: Build
         run: |
           rustup target add ${{matrix.target}}
-          cargo build --release --target ${{matrix.target}} -p stalwart --no-default-features --features "sqlite postgres mysql rocks s3 redis azure nats enterprise"
+          cargo build --release --target ${{matrix.target}} -p flux --no-default-features --features "sqlite postgres mysql rocks s3 redis azure nats enterprise"
           mkdir -p artifacts
-          mv ./target/${{matrix.target}}/release/stalwart ./artifacts/stalwart
+          mv ./target/${{matrix.target}}/release/flux ./artifacts/flux
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7

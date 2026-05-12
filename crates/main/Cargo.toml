@@ -1,6 +1,6 @@
 [package]
-name = "stalwart"
-description = "Stalwart Mail and Collaboration Server"
+name = "flux"
+description = "Flux Mail and Collaboration Server"
 authors = [ "Stalwart Labs LLC <hello@stalw.art>"]
 repository = "https://github.com/stalwartlabs/stalwart"
 homepage = "https://stalw.art"
@@ -11,7 +11,7 @@ version = "0.16.4"
 edition = "2024"
 
 [[bin]]
-name = "stalwart"
+name = "flux"
 path = "src/main.rs"
 
 [dependencies]

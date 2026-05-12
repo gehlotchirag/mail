@@ -1,4 +1,4 @@
-# Stalwart Security Advisory
+# Flux Security Advisory
 
 **CVE ID:** CVE-YYYY-NNNNN
 **Publication Date:** YYYY-MM-DD  
@@ -10,7 +10,7 @@
 
 ## Affected Products and Versions
 
-**Product:** Stalwart Mail and Collaboration Server
+**Product:** Flux Mail and Collaboration Server
 
 **Affected Versions:**
 - Version X.X.X through Y.Y.Y
@@ -75,7 +75,7 @@
 
 ```bash
 # Example upgrade commands
-[Provide specific upgrade instructions for Stalwart]
+[Provide specific upgrade instructions for Flux]
 ```
 
 ### Workarounds
@@ -111,7 +111,7 @@ This vulnerability was discovered by [Researcher Name / Organization].
 
 ## References
 
-- Stalwart Mail Server: https://stalw.art/
+- Flux Mail Server: https://flux.example.com/
 - CVE Entry: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-YYYY-NNNNN
 - GitHub Advisory: [Link to GitHub Security Advisory if applicable]
 - Release Notes: [Link to release notes with fix]
@@ -120,10 +120,10 @@ This vulnerability was discovered by [Researcher Name / Organization].
 
 For questions or concerns regarding this advisory, please contact:
 
-**Security Team:** hello@stalw.art  
-**Website:** https://stalw.art
+**Security Team:** hello@flux.example.com  
+**Website:** https://flux.example.com
 
-To report security vulnerabilities in Stalwart, please follow our [responsible disclosure policy](https://github.com/stalwartlabs/stalwart/security/policy).
+To report security vulnerabilities in Flux, please follow our [responsible disclosure policy](https://github.com/fluxlabs/flux/security/policy).
 
 ## Disclaimer
 

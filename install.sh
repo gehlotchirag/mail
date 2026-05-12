@@ -12,7 +12,7 @@
 set -e
 set -u
 
-readonly BASE_URL="https://github.com/stalwartlabs/stalwart/releases/latest/download"
+readonly BASE_URL="${FLUX_RELEASE_BASE_URL:-https://github.com/stalwartlabs/stalwart/releases/latest/download}"
 
 main() {
     downloader --check
@@ -42,12 +42,20 @@ main() {
     esac
 
     # Parse arguments
-    local _component="stalwart"
+    local _component="flux"
+    local _local_binary=""
     local _prefix=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --fdb)
-                _component="stalwart-foundationdb"
+                _component="flux-foundationdb"
+                ;;
+            --local-binary)
+                shift
+                if [ $# -eq 0 ]; then
+                    err "❌ Missing value for --local-binary"
+                fi
+                _local_binary="$1"
                 ;;
             -h|--help)
                 print_usage
@@ -79,7 +87,7 @@ main() {
         _log_dir="${_prefix}/logs"
         _data_dir="${_prefix}/data"
     fi
-    _bin_file="${_bin_dir}/stalwart"
+    _bin_file="${_bin_dir}/flux"
     _config_file="${_conf_dir}/config.json"
     _env_file="${_conf_dir}/stalwart.env"
 
@@ -94,20 +102,25 @@ main() {
     # Create directories
     ensure mkdir -p "$_bin_dir" "$_conf_dir" "$_log_dir" "$_data_dir"
 
-    # Download and install the binary
-    say "⏳ Downloading ${_component} for ${_arch}..."
+    # Install the binary from a local build or download a release artifact.
     local _tmp _tar _src_name
-    _tmp="$(mktemp -d)"
-    _tar="${_tmp}/stalwart.tar.gz"
-    ensure downloader "${BASE_URL}/${_component}-${_arch}.tar.gz" "$_tar" "$_arch"
-    ensure tar zxf "$_tar" -C "$_tmp"
-    _src_name="stalwart"
-    if [ "$_component" = "stalwart-foundationdb" ]; then
-        _src_name="stalwart-foundationdb"
+    if [ -n "$_local_binary" ]; then
+        say "⏳ Installing local binary ${_local_binary}..."
+        ensure cp "$_local_binary" "$_bin_file"
+    else
+        say "⏳ Downloading ${_component} for ${_arch}..."
+        _tmp="$(mktemp -d)"
+        _tar="${_tmp}/flux.tar.gz"
+        ensure downloader "${BASE_URL}/${_component}-${_arch}.tar.gz" "$_tar" "$_arch"
+        ensure tar zxf "$_tar" -C "$_tmp"
+        _src_name="flux"
+        if [ "$_component" = "flux-foundationdb" ]; then
+            _src_name="flux-foundationdb"
+        fi
+        ensure cp "${_tmp}/${_src_name}" "$_bin_file"
+        ensure rm -rf "$_tmp"
     fi
-    ensure cp "${_tmp}/${_src_name}" "$_bin_file"
     ensure chmod 0755 "$_bin_file"
-    ensure rm -rf "$_tmp"
 
     # Create env file if absent (preserve user edits on reinstall)
     if [ ! -e "$_env_file" ]; then
@@ -147,25 +160,12 @@ main() {
     say ""
     say "🎉 Installation complete!"
     say ""
-    say "Stalwart is running in bootstrap mode. A temporary administrator"
-    say "password was generated at startup and printed to the service logs."
+    say "Flux is running in bootstrap mode with fixed administrator credentials."
     say ""
-    say "👉 To find the password, inspect the service logs:"
-    case "$_service_type" in
-        systemd)
-            say "     journalctl -u stalwart -n 200 | grep -A8 'bootstrap mode'"
-            ;;
-        initd)
-            say "     grep -A8 'bootstrap mode' /var/log/syslog 2>/dev/null \\"
-            say "       || grep -A8 'bootstrap mode' /var/log/messages"
-            ;;
-        launchd)
-            say "     sudo log show --predicate 'process == \"stalwart\"' --last 5m"
-            ;;
-    esac
+    say "   username: admin"
+    say "   password: admin"
     say ""
-    say "   Or set STALWART_RECOVERY_ADMIN=admin:<password> in"
-    say "   ${_env_file} and restart the service to pin a credential."
+    say "   The credential is configured in ${_env_file}."
     say ""
     say "   Finish setup at: http://${_host}:8080/admin"
     say ""
@@ -175,23 +175,24 @@ main() {
 
 print_usage() {
     cat <<'EOF'
-Usage: install.sh [--fdb] [PREFIX]
+Usage: install.sh [--fdb] [--local-binary PATH] [PREFIX]
 
-Install Stalwart into standard FHS paths or under a custom prefix.
+Install Flux into standard FHS paths or under a custom prefix.
 
 Options:
-  --fdb       Install the FoundationDB build.
-  -h, --help  Show this help.
+  --fdb                Install the FoundationDB build.
+  --local-binary PATH  Install an already compiled binary, for example target/release/flux.
+  -h, --help           Show this help.
 
 With no PREFIX, Stalwart is installed under standard FHS paths:
-  binary   /usr/local/bin/stalwart
+  binary   /usr/local/bin/flux
   config   /etc/stalwart/config.json      (created by the daemon on first run)
   env      /etc/stalwart/stalwart.env
   logs     /var/log/stalwart/
   data     /var/lib/stalwart/
 
 When PREFIX is provided, a self-contained layout is used instead:
-  binary   $PREFIX/bin/stalwart
+  binary   $PREFIX/bin/flux
   config   $PREFIX/etc/config.json
   env      $PREFIX/etc/stalwart.env
   logs     $PREFIX/logs/
@@ -220,9 +221,8 @@ write_env_file() {
 # HTTP port used in recovery mode. Default: 8080.
 #STALWART_RECOVERY_MODE_PORT=9090
 
-# Fixed administrator credentials — format: username:password
-# Default: a temporary random password is generated and printed to the logs.
-#STALWART_RECOVERY_ADMIN=admin:changeme
+# Fixed administrator credentials — format: username:password.
+STALWART_RECOVERY_ADMIN=admin:admin
 
 # Cluster role assigned to this node. Must match a role name defined in the
 # cluster registry. Leave unset for a standalone (non-clustered) deployment.
@@ -274,7 +274,7 @@ create_service_linux_systemd() {
     local _bin="$1" _config="$2" _env="$3" _user="$4"
     cat > /etc/systemd/system/stalwart.service <<EOF
 [Unit]
-Description=Stalwart
+Description=Flux
 Conflicts=postfix.service sendmail.service exim4.service
 After=network-online.target
 
@@ -287,7 +287,7 @@ Restart=on-failure
 RestartSec=5
 EnvironmentFile=-${_env}
 ExecStart=${_bin} --config=${_config}
-SyslogIdentifier=stalwart
+SyslogIdentifier=flux
 User=${_user}
 Group=${_user}
 AmbientCapabilities=CAP_NET_BIND_SERVICE
@@ -310,8 +310,8 @@ create_service_linux_initd() {
 # Required-Stop:     \$network
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: Stalwart Server
-# Description:       Starts and stops the Stalwart Server
+# Short-Description: Flux Server
+# Description:       Starts and stops the Flux Server
 # Conflicts:         postfix sendmail
 ### END INIT INFO
 
@@ -359,7 +359,7 @@ do_stop()
 
 case "\$1" in
   start)
-    [ "\$VERBOSE" != no ] && log_daemon_msg "Starting Stalwart Server" "stalwart"
+    [ "\$VERBOSE" != no ] && log_daemon_msg "Starting Flux Server" "flux"
     do_start
     case "\$?" in
         0|1) [ "\$VERBOSE" != no ] && log_end_msg 0 ;;
@@ -367,7 +367,7 @@ case "\$1" in
     esac
     ;;
   stop)
-    [ "\$VERBOSE" != no ] && log_daemon_msg "Stopping Stalwart Server" "stalwart"
+    [ "\$VERBOSE" != no ] && log_daemon_msg "Stopping Flux Server" "flux"
     do_stop
     case "\$?" in
         0|1) [ "\$VERBOSE" != no ] && log_end_msg 0 ;;
@@ -408,7 +408,7 @@ EOF
 
 create_service_macos() {
     local _bin="$1" _config="$2" _env="$3" _user="$4"
-    local _plist="/Library/LaunchDaemons/stalwart.plist"
+    local _plist="/Library/LaunchDaemons/flux.plist"
 
     # Remove any legacy LaunchAgent from a prior install
     if [ -f /Library/LaunchAgents/stalwart.mail.plist ]; then
@@ -426,7 +426,7 @@ create_service_macos() {
         <key>Label</key>
         <string>stalwart</string>
         <key>ServiceDescription</key>
-        <string>Stalwart</string>
+        <string>Flux</string>
         <key>UserName</key>
         <string>${_user}</string>
         <key>GroupName</key>

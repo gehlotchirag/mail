@@ -6,3 +6,8 @@ run.sh
 !.gitignore
 !.gitattributes
 !.github
+
+# Flux runtime files — contain credentials or are build artifacts
+config.json
+webui-flux.zip
+*.zip

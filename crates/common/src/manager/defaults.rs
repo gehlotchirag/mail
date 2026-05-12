@@ -58,12 +58,10 @@ async fn insert_safe_defaults(bp: &mut Bootstrap) -> trc::Result<()> {
             .write(RegistryWrite::insert(
                 &Application {
                     auto_update_frequency: Duration::from_millis(30 * 24 * 60 * 60 * 1000),
-                    description: "Stalwart Web Interface".to_string(),
+                    description: "Flux Web Interface".to_string(),
                     enabled: true,
                     #[cfg(not(feature = "dev_mode"))]
-                    resource_url:
-                        "https://github.com/stalwartlabs/webui/releases/latest/download/webui.zip"
-                            .into(),
+                    resource_url: "file:///home/ubuntu/flux/webui-flux.zip".into(),
                     #[cfg(feature = "dev_mode")]
                     resource_url: "file:///Users/me/code/webui/.ignore/webui.zip".into(),
                     unpack_directory: None,

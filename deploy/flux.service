@@ -1,0 +1,20 @@
+[Unit]
+Description=Flux Mail Server
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/flux
+Environment=RUST_MIN_STACK=33554432
+ExecStart=/home/ubuntu/flux/target/debug/flux --config /home/ubuntu/flux/config.json
+Restart=on-failure
+RestartSec=5
+User=ubuntu
+Group=ubuntu
+LimitNOFILE=65536
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

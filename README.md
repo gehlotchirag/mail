@@ -1,5 +1,5 @@
 <p align="center">
-    <a href="https://stalw.art">
+    <a href="https://flux.example.com">
     <img src="./img/logo-red.svg" height="150">
     </a>
 </p>
@@ -11,26 +11,26 @@
 <br>
 
 <p align="center">
-  <a href="https://github.com/stalwartlabs/stalwart/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/stalwartlabs/stalwart/ci.yml?style=flat-square" alt="continuous integration"></a>
+  <a href="https://github.com/fluxlabs/flux/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/fluxlabs/flux/ci.yml?style=flat-square" alt="continuous integration"></a>
   &nbsp;
   <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg?label=license&style=flat-square" alt="License: AGPL v3"></a>
   &nbsp;
-  <a href="https://stalw.art/docs/install/get-started"><img src="https://img.shields.io/badge/read_the-docs-red?style=flat-square" alt="Documentation"></a>
+  <a href="https://flux.example.com/docs/install/get-started"><img src="https://img.shields.io/badge/read_the-docs-red?style=flat-square" alt="Documentation"></a>
 </p>
 <p align="center">
-  <a href="https://mastodon.social/@stalwartlabs"><img src="https://img.shields.io/mastodon/follow/109929667531941122?style=flat-square&logo=mastodon&color=%236364ff&label=Follow%20on%20Mastodon" alt="Mastodon"></a>
+  <a href="https://mastodon.social/@fluxlabs"><img src="https://img.shields.io/mastodon/follow/109929667531941122?style=flat-square&logo=mastodon&color=%236364ff&label=Follow%20on%20Mastodon" alt="Mastodon"></a>
   &nbsp;
-  <a href="https://twitter.com/stalwartlabs"><img src="https://img.shields.io/twitter/follow/stalwartlabs?style=flat-square&logo=x&label=Follow%20on%20Twitter" alt="Twitter"></a>
+  <a href="https://twitter.com/fluxlabs"><img src="https://img.shields.io/twitter/follow/fluxlabs?style=flat-square&logo=x&label=Follow%20on%20Twitter" alt="Twitter"></a>
 </p>
 <p align="center">
-  <a href="https://discord.com/servers/stalwart-923615863037390889"><img src="https://img.shields.io/discord/923615863037390889?label=Join%20Discord&logo=discord&style=flat-square" alt="Discord"></a>
+  <a href="https://discord.com/servers/flux-923615863037390889"><img src="https://img.shields.io/discord/923615863037390889?label=Join%20Discord&logo=discord&style=flat-square" alt="Discord"></a>
   &nbsp;
-  <a href="https://www.reddit.com/r/stalwartlabs/"><img src="https://img.shields.io/reddit/subreddit-subscribers/stalwartlabs?label=Join%20%2Fr%2Fstalwartlabs&logo=reddit&style=flat-square" alt="Reddit"></a>
+  <a href="https://www.reddit.com/r/fluxlabs/"><img src="https://img.shields.io/reddit/subreddit-subscribers/fluxlabs?label=Join%20%2Fr%2Ffluxlabs&logo=reddit&style=flat-square" alt="Reddit"></a>
 </p>
 
 ## Features
 
-**Stalwart** is an open-source mail & collaboration server with JMAP, IMAP4, POP3, SMTP, CalDAV, CardDAV and WebDAV support and a wide range of modern features. It is written in Rust and designed to be secure, fast, robust and scalable.
+**Flux** is an open-source mail & collaboration server with JMAP, IMAP4, POP3, SMTP, CalDAV, CardDAV and WebDAV support and a wide range of modern features. It is written in Rust and designed to be secure, fast, robust and scalable.
 
 Key features:
 
@@ -42,7 +42,7 @@ Key features:
   - IMAP:
     * [IMAP4rev2](https://datatracker.ietf.org/doc/html/rfc9051) and [IMAP4rev1](https://datatracker.ietf.org/doc/html/rfc3501) server.
     * [ManageSieve](https://datatracker.ietf.org/doc/html/rfc5804) server.
-    * Numerous [extensions](https://stalw.art/docs/development/rfcs#imap4-and-extensions) supported.
+    * Numerous [extensions](https://flux.example.com/docs/development/rfcs#imap4-and-extensions) supported.
   - POP3:
     - [POP3](https://datatracker.ietf.org/doc/html/rfc1939) server.
     - [STLS](https://datatracker.ietf.org/doc/html/rfc2595) and [SASL](https://datatracker.ietf.org/doc/html/rfc5034) support as well as other [extensions](https://datatracker.ietf.org/doc/html/rfc2449).
@@ -91,7 +91,7 @@ Key features:
   - Automatic TLS certificate provisioning with [ACME](https://datatracker.ietf.org/doc/html/rfc8555) using `TLS-ALPN-01`, `DNS-01`, `DNS-PERSIST-01` or `HTTP-01` challenges.
   - Automated blocking of IP addresses that attack, abuse or scan the server for exploits.
   - Rate limiting.
-  - Security audited (read the [report](https://stalw.art/blog/security-audit)).
+  - Security audited (read the [report](https://flux.example.com/blog/security-audit)).
   - Memory safe (thanks to Rust).
 - **Scalable and fault-tolerant**:
   - Designed to handle growth seamlessly, from small setups to large-scale deployments of thousands of nodes.
@@ -128,26 +128,26 @@ Key features:
 
 ## Presentation
 
-**Want a deeper dive?** Need to explain to your boss why Stalwart is the perfect fit? Whether you're evaluating options, making a case to your team, or simply curious about how it all works under the hood, these slides walk you through the key features, architecture, and benefits of Stalwart. Browse the [slides](https://stalw.art/slides) to see what makes it stand out.
+**Want a deeper dive?** Need to explain to your boss why Flux is the perfect fit? Whether you're evaluating options, making a case to your team, or simply curious about how it all works under the hood, these slides walk you through the key features, architecture, and benefits of Flux. Browse the [slides](https://flux.example.com/slides) to see what makes it stand out.
 
 ## Get Started
 
-Install Stalwart on your server by following the instructions for your platform:
+Install Flux on your server by following the instructions for your platform:
 
-- [Linux / MacOS](https://stalw.art/docs/install/platform/linux)
-- [Windows](https://stalw.art/docs/install/platform/windows)
-- [Docker](https://stalw.art/docs/install/platform/docker)
+- [Linux / MacOS](https://flux.example.com/docs/install/platform/linux)
+- [Windows](https://flux.example.com/docs/install/platform/windows)
+- [Docker](https://flux.example.com/docs/install/platform/docker)
 
-All documentation is available at [stalw.art/docs](https://stalw.art/docs/install/get-started).
+All documentation is available at [flux.example.com/docs](https://flux.example.com/docs/install/get-started).
 
 ## Support
 
-If you are having problems running Stalwart, found a bug, or just have a question, please head to the [Stalwart Support Portal](https://support.stalw.art) at [support.stalw.art](https://support.stalw.art). 
-Additionally, you may purchase an [Enterprise License](https://stalw.art/enterprise) to obtain priority support from Stalwart Labs LLC, including response-time commitments and a private Priority Support area on the portal.
+If you are having problems running Flux, found a bug, or just have a question, please head to the [Flux Support Portal](https://support.flux.example.com) at [support.flux.example.com](https://support.flux.example.com). 
+Additionally, you may purchase an [Enterprise License](https://flux.example.com/enterprise) to obtain priority support from Flux Labs LLC, including response-time commitments and a private Priority Support area on the portal.
 
 ## Roadmap
 
-Stalwart has reached an exciting point in its journey, it’s now **feature complete**. All the core functionality and open standard email and collaboration protocols that we set out to support are in place. In other words, Stalwart already does everything you’d expect from a modern, standards-compliant mail and collaboration platform.
+Flux has reached an exciting point in its journey, it’s now **feature complete**. All the core functionality and open standard email and collaboration protocols that we set out to support are in place. In other words, Flux already does everything you’d expect from a modern, standards-compliant mail and collaboration platform.
 
 The next major milestone is all about refinement: finalizing the database schema and focusing on performance optimizations to ensure everything runs as efficiently and reliably as possible. Once that’s done, we’ll be ready to roll out version **1.0**.
 
@@ -155,7 +155,7 @@ Of course, development doesn’t stop there. The community has contributed hundr
 
 ## Sponsorship
 
-Your support is crucial in helping us continue to improve the project, add new features, and maintain the highest level of quality. By [becoming a sponsor](https://opencollective.com/stalwart), you help fund the development and future of Stalwart. As a thank-you, sponsors who contribute $5 per month or more will automatically receive a [Enterprise edition](https://stalw.art/enterprise/) license. And, sponsors who contribute $30 per month or more, also have access to [Premium Support](https://stalw.art/support) from Stalwart Labs.
+Your support is crucial in helping us continue to improve the project, add new features, and maintain the highest level of quality. By [becoming a sponsor](https://opencollective.com/flux), you help fund the development and future of Flux. As a thank-you, sponsors who contribute $5 per month or more will automatically receive a [Enterprise edition](https://flux.example.com/enterprise/) license. And, sponsors who contribute $30 per month or more, also have access to [Premium Support](https://flux.example.com/support) from Flux Labs.
 
 ## Funding
 
@@ -164,17 +164,17 @@ Part of the development of this project was funded through:
 - [NGI0 Entrust Fund](https://nlnet.nl/entrust), a fund established by [NLnet](https://nlnet.nl/) with financial support from the European Commission's [Next Generation Internet](https://ngi.eu/) programme, under the aegis of DG Communications Networks, Content and Technology under grant agreement No 101069594.
 - [NGI Zero Core](https://nlnet.nl/NGI0/), a fund established by [NLnet](https://nlnet.nl/) with financial support from the European Commission's programme, under the aegis of DG Communications Networks, Content and Technology under grant agreement No 101092990.
 
-If you find the project useful you can help by [becoming a sponsor](https://opencollective.com/stalwart). Thank you!
+If you find the project useful you can help by [becoming a sponsor](https://opencollective.com/flux). Thank you!
 
 ## License
 
-This project is dual-licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0; as published by the Free Software Foundation) and the **Stalwart Enterprise License v1 (SELv1)**:
+This project is dual-licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0; as published by the Free Software Foundation) and the **Flux Enterprise License v1 (SELv1)**:
 
 - The [GNU Affero General Public License v3.0](./LICENSES/AGPL-3.0-only.txt) is a free software license that ensures your freedom to use, modify, and distribute the software, with the condition that any modified versions of the software must also be distributed under the same license. 
-- The [Stalwart Enterprise License v1 (SELv1)](./LICENSES/LicenseRef-SEL.txt) is a proprietary license designed for commercial use. It offers additional features and greater flexibility for businesses that do not wish to comply with the AGPL-3.0 license requirements. 
+- The [Flux Enterprise License v1 (SELv1)](./LICENSES/LicenseRef-SEL.txt) is a proprietary license designed for commercial use. It offers additional features and greater flexibility for businesses that do not wish to comply with the AGPL-3.0 license requirements. 
 
 Each file in this project contains a license notice at the top, indicating the applicable license(s). The license notice follows the [REUSE guidelines](https://reuse.software/) to ensure clarity and consistency. The full text of each license is available in the [LICENSES](./LICENSES/) directory.
 
 ## Copyright
 
-Copyright (C) 2020, Stalwart Labs LLC
+Copyright (C) 2020, Flux Labs LLC
