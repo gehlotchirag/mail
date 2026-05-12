@@ -2051,7 +2051,7 @@ dependencies = [
 name = "email"
 version = "0.16.4"
 dependencies = [
- "aes 0.8.4",
+ "aes 0.9.0",
  "aes-gcm",
  "aes-gcm-siv",
  "cbc",
