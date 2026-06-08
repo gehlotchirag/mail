@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
   // esbuild ships native binaries + a README the bundler can't parse; load
   // it from node_modules at runtime instead of trying to bundle it. Used by
   // PLUGIN_DEV_DIR's on-the-fly bundler.
-  serverExternalPackages: ["esbuild"],
+  serverExternalPackages: ["esbuild", "firebase-admin"],
   turbopack: {
     root: import.meta.dirname,
   },
