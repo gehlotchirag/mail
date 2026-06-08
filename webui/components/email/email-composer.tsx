@@ -1,0 +1,2451 @@
+"use client";
+
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { X, Paperclip, Send, Save, Check, Loader2, AlertCircle, FileText, BookmarkPlus, ShieldCheck, Lock, Sparkles, Mic, MicOff } from "lucide-react";
+import { cn, formatFileSize, formatDateTime, generateUUID } from "@/lib/utils";
+import { debug } from "@/lib/debug";
+import { toast } from "@/stores/toast-store";
+import { sanitizeEmailHtml } from "@/lib/email-sanitization";
+import { emailHooks, contactHooks } from "@/lib/plugin-hooks";
+import type { OutgoingEmail, RecipientSuggestion } from "@/lib/plugin-types";
+import { useAuthStore } from "@/stores/auth-store";
+import { useIdentityStore } from "@/stores/identity-store";
+import { useAccountStore } from "@/stores/account-store";
+import { useSmimeStore } from "@/stores/smime-store";
+import { useEmailStore } from "@/stores/email-store";
+import { useSettingsStore } from "@/stores/settings-store";
+import { buildMimeMessage, wrapCmsAsSmimeMessage } from "@/lib/smime/mime-builder";
+import type { MimeAttachment } from "@/lib/smime/mime-builder";
+import { smimeSign } from "@/lib/smime/smime-sign";
+import { PluginSlot } from "@/components/plugins/plugin-slot";
+import { smimeEncrypt } from "@/lib/smime/smime-encrypt";
+import { useContactStore } from "@/stores/contact-store";
+import { useTemplateStore } from "@/stores/template-store";
+import { SubAddressHelper } from "@/components/identity/sub-address-helper";
+import { generateSubAddress } from "@/lib/sub-addressing";
+import { substitutePlaceholders } from "@/lib/template-utils";
+import { TemplatePicker } from "@/components/templates/template-picker";
+import { TemplateForm } from "@/components/templates/template-form";
+import type { EmailTemplate } from "@/lib/template-types";
+import { appendPlainTextSignature, getPlainTextSignature } from "@/lib/signature-utils";
+import { resolveReplyFrom } from "@/lib/reply-identity";
+import { computeReplyThreadingHeaders } from "@/lib/email-threading";
+import { RichTextEditor } from "@/components/email/rich-text-editor";
+import type { Editor } from "@tiptap/react";
+
+/** Strip HTML tags and decode entities to get a plain-text version */
+function htmlToPlainText(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return doc.body.textContent || '';
+}
+
+export interface ComposerDraftData {
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  body: string;
+  showCc: boolean;
+  showBcc: boolean;
+  selectedIdentityId: string | null;
+  subAddressTag: string;
+  mode: 'compose' | 'reply' | 'replyAll' | 'forward';
+  replyTo?: EmailComposerProps['replyTo'];
+  draftId: string | null;
+  /** When set, overrides the header From: — sent through the selected identity's envelope. */
+  fromOverrideEmail?: string;
+  fromOverrideName?: string;
+  fromOverrideEnabled?: boolean;
+}
+
+interface EmailComposerProps {
+  onSend?: (data: {
+    to: string[];
+    cc: string[];
+    bcc: string[];
+    subject: string;
+    body: string;
+    htmlBody?: string;
+    draftId?: string;
+    fromEmail?: string;
+    fromName?: string;
+    identityId?: string;
+    envelopeMailFrom?: string;
+    attachments?: Array<{ blobId: string; name: string; type: string; size: number; disposition?: 'attachment' | 'inline'; cid?: string }>;
+    inReplyTo?: string[];
+    references?: string[];
+  }) => void | Promise<void>;
+  onClose?: () => void;
+  onDiscardDraft?: (draftId: string) => void;
+  onSaveState?: (data: ComposerDraftData) => void;
+  className?: string;
+  initialDraftText?: string;
+  initialData?: ComposerDraftData | null;
+  mode?: 'compose' | 'reply' | 'replyAll' | 'forward';
+  replyTo?: {
+    from?: { email?: string; name?: string }[];
+    replyToAddresses?: { email?: string; name?: string }[];
+    to?: { email?: string; name?: string }[];
+    cc?: { email?: string; name?: string }[];
+    bcc?: { email?: string; name?: string }[];
+    subject?: string;
+    body?: string;
+    htmlBody?: string;
+    receivedAt?: string;
+    accountId?: string;
+    attachments?: Array<{ blobId: string; name?: string; type: string; size: number; cid?: string; disposition?: string }>;
+    // Threading: parent's Message-ID and References, used to set RFC 5322
+    // In-Reply-To and References on outgoing replies. See #234.
+    messageId?: string;
+    inReplyTo?: string[];
+    references?: string[];
+  };
+}
+
+type ComposerAttachment = {
+  file?: File;
+  name: string;
+  type: string;
+  size: number;
+  blobId?: string;
+  uploading?: boolean;
+  error?: boolean;
+  abortController?: AbortController;
+};
+
+type SignatureIdentityLike = {
+  htmlSignature?: string;
+  textSignature?: string;
+} | null | undefined;
+
+// Render the embedded signature for "above quote" mode. Bracketed with
+// `data-signature-block` marker paragraphs so we can swap the inner content
+// when the user switches identity without losing the surrounding draft or
+// quoted message. The markers are preserved through TipTap by the
+// StyledParagraph extension.
+function buildEmbeddedSignatureHtml(
+  identity: SignatureIdentityLike,
+  options: { embed: boolean; separator: boolean }
+): string {
+  if (!options.embed) return '';
+  const startMarker = options.separator
+    ? `<p data-signature-block="separator">-- </p>`
+    : `<p data-signature-block="start"></p>`;
+  const endMarker = `<p data-signature-block="end"></p>`;
+  if (identity?.htmlSignature) {
+    return `${startMarker}${sanitizeEmailHtml(identity.htmlSignature)}${endMarker}`;
+  }
+  if (identity?.textSignature) {
+    const escaped = identity.textSignature
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    return `${startMarker}<p>${escaped}</p>${endMarker}`;
+  }
+  return '';
+}
+
+export function EmailComposer({
+  onSend,
+  onClose,
+  onDiscardDraft,
+  onSaveState,
+  className,
+  initialDraftText,
+  initialData,
+  mode = 'compose',
+  replyTo
+}: EmailComposerProps) {
+  const t = useTranslations('email_composer');
+  const tCommon = useTranslations('common');
+  const timeFormat = useSettingsStore((state) => state.timeFormat);
+  const plainTextMode = useSettingsStore((state) => state.plainTextMode);
+  const subAddressDelimiter = useSettingsStore((state) => state.subAddressDelimiter);
+  const autoSelectReplyIdentity = useSettingsStore((state) => state.autoSelectReplyIdentity);
+  const attachmentReminderEnabled = useSettingsStore((state) => state.attachmentReminderEnabled);
+  const attachmentReminderKeywords = useSettingsStore((state) => state.attachmentReminderKeywords);
+  const signaturePosition = useSettingsStore((state) => state.signaturePosition);
+  const signatureSeparatorEnabled = useSettingsStore((state) => state.signatureSeparatorEnabled);
+  const identities = useIdentityStore((s) => s.identities);
+  const primaryIdentity = identities[0] ?? null;
+
+  // The signature identity used when embedding the signature into the initial
+  // body for "above quote" mode. Mirrors the signatureIdentity derivation
+  // below, but uses initialData (or primary) since selectedIdentityId state
+  // does not exist yet at this point.
+  const initialCurrentIdentityForSig = initialData?.selectedIdentityId
+    ? identities.find((i) => i.id === initialData.selectedIdentityId) || primaryIdentity
+    : primaryIdentity;
+  const initialSignatureIdentity = (initialCurrentIdentityForSig?.htmlSignature || initialCurrentIdentityForSig?.textSignature)
+    ? initialCurrentIdentityForSig
+    : primaryIdentity;
+  const shouldEmbedSignatureAboveQuote =
+    (mode === 'reply' || mode === 'replyAll' || mode === 'forward') &&
+    signaturePosition === 'above_quote' &&
+    !!(initialSignatureIdentity?.htmlSignature || initialSignatureIdentity?.textSignature);
+
+  // Initialize with reply/forward data if provided
+  const getInitialTo = () => {
+    if (!replyTo) return "";
+    // RFC 5322: use Reply-To header if present, otherwise fall back to From
+    const replyTarget = replyTo.replyToAddresses?.length
+      ? replyTo.replyToAddresses.filter(r => r.email).map(r => r.email).join(", ")
+      : replyTo.from?.[0]?.email || "";
+    if (mode === 'reply') {
+      return replyTarget ? replyTarget + ', ' : "";
+    } else if (mode === 'replyAll') {
+      const originalTo = replyTo.to?.filter(r => r.email).map(r => r.email).join(", ") || "";
+      const combined = [replyTarget, originalTo].filter(Boolean).join(", ");
+      return combined ? combined + ', ' : "";
+    }
+    return "";
+  };
+
+  const getInitialCc = () => {
+    if (!replyTo || mode !== 'replyAll') return "";
+    const cc = replyTo.cc?.map(r => r.email).join(", ") || "";
+    return cc ? cc + ', ' : "";
+  };
+
+  const getInitialSubject = () => {
+    if (!replyTo?.subject) return "";
+    if (mode === 'forward') {
+      const fwdPrefix = t('prefix.forward');
+      return `${fwdPrefix} ${replyTo.subject.replace(/^(Fwd:\s*|Tr:\s*)+/i, '')}`;
+    } else if (mode === 'reply' || mode === 'replyAll') {
+      const rePrefix = t('prefix.reply');
+      return `${rePrefix} ${replyTo.subject.replace(/^(Re:\s*)+/i, '')}`;
+    }
+    return "";
+  };
+
+  const getInitialBody = () => {
+    if (plainTextMode) {
+      // Plain text mode: produce plain text body with no HTML
+      const prefix = initialDraftText || "";
+      if (!replyTo?.body && !replyTo?.htmlBody) return prefix;
+
+      const date = replyTo.receivedAt ? formatDateTime(replyTo.receivedAt, timeFormat, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : "";
+      const from = replyTo.from?.[0];
+      const fromStr = from ? `${from.name || from.email}` : tCommon('unknown');
+
+      const originalText = replyTo.body || (replyTo.htmlBody ? htmlToPlainText(replyTo.htmlBody) : '');
+      const quotedText = originalText.split('\n').map(line => `> ${line}`).join('\n');
+
+      // When "above quote" is configured, splice signature between the user's
+      // drafting area and the quoted content so it reads naturally as a
+      // closing for the reply body. Send-time append is skipped — see
+      // shouldEmbedSignatureAboveQuote.
+      const plainSep = signatureSeparatorEnabled ? '\n\n-- \n' : '\n\n';
+      const signatureBlock = shouldEmbedSignatureAboveQuote
+        ? `${plainSep}${getPlainTextSignature(initialSignatureIdentity)}`
+        : '';
+
+      if (mode === 'forward') {
+        return `${prefix}${signatureBlock}\n\n---------- Forwarded message ----------\nFrom: ${fromStr}\nDate: ${date}\nSubject: ${replyTo.subject || ''}\n\n${originalText}`;
+      } else if (mode === 'reply' || mode === 'replyAll') {
+        return `${prefix}${signatureBlock}\n\nOn ${date}, ${fromStr} wrote:\n${quotedText}`;
+      }
+      return prefix;
+    }
+
+    const prefix = initialDraftText ? `<p>${initialDraftText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>` : "";
+    if (!replyTo?.body && !replyTo?.htmlBody) return prefix;
+
+    const date = replyTo.receivedAt ? formatDateTime(replyTo.receivedAt, timeFormat, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : "";
+    const from = replyTo.from?.[0];
+    const fromStr = from ? `${from.name || from.email}` : tCommon('unknown');
+
+    const signatureBlock = buildEmbeddedSignatureHtml(initialSignatureIdentity, {
+      embed: shouldEmbedSignatureAboveQuote,
+      separator: signatureSeparatorEnabled,
+    });
+
+    // Build quoted content as HTML
+    if (replyTo.htmlBody && (mode === 'reply' || mode === 'replyAll' || mode === 'forward')) {
+      const quoteHeader = mode === 'forward'
+        ? `---------- Forwarded message ----------<br>From: ${fromStr}<br>Date: ${date}<br>Subject: ${replyTo.subject || ''}<br><br>`
+        : `On ${date}, ${fromStr} wrote:<br>`;
+      return `${prefix}${signatureBlock}<br><div>${quoteHeader}</div><blockquote style="margin:0 0 0 0.8ex;border-left:2px solid #ccc;padding-left:1ex">${replyTo.htmlBody}</blockquote>`;
+    }
+
+    if (replyTo.body) {
+      const escapedOriginal = replyTo.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      if (mode === 'forward') {
+        return `${prefix}${signatureBlock}<br><br>---------- Forwarded message ----------<br>From: ${fromStr}<br>Date: ${date}<br>Subject: ${replyTo.subject || ''}<br><br>${escapedOriginal}`;
+      } else if (mode === 'reply' || mode === 'replyAll') {
+        return `${prefix}${signatureBlock}<br><br>On ${date}, ${fromStr} wrote:<br><blockquote style="margin:0 0 0 0.8ex;border-left:2px solid #ccc;padding-left:1ex">${escapedOriginal}</blockquote>`;
+      }
+    }
+    return prefix;
+  };
+
+  const [to, setTo] = useState(initialData?.to ?? getInitialTo());
+  const [cc, setCc] = useState(initialData?.cc ?? getInitialCc());
+  const [bcc, setBcc] = useState(initialData?.bcc ?? "");
+  const [subject, setSubject] = useState(initialData?.subject ?? getInitialSubject());
+  const [body, setBody] = useState(initialData?.body ?? getInitialBody());
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [aiVariants, setAiVariants] = useState<Array<{ subject: string; text: string }> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+  // Avoids stale-closure issues when auto-submitting from recognition.onend
+  const finalTranscriptRef = useRef<string>('');
+
+  const handleAiDraftWithPrompt = useCallback(async (promptText: string) => {
+    const trimmed = promptText.trim();
+    if (!trimmed || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const toAddresses = to.split(',').map((s) => s.trim()).filter(Boolean);
+      const plainBody = plainTextMode ? body : body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+
+      let threadBody: string | undefined;
+      let threadFrom: string | undefined;
+      if ((mode === 'reply' || mode === 'replyAll') && replyTo) {
+        threadBody = replyTo.body || (replyTo.htmlBody ? htmlToPlainText(replyTo.htmlBody) : undefined);
+        const sender = replyTo.from?.[0];
+        if (sender) {
+          threadFrom = sender.name ? `${sender.name} <${sender.email}>` : sender.email;
+        }
+      }
+
+      const res = await fetch('/api/ai/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: trimmed, subject, body: plainBody, to: toAddresses, threadBody, threadFrom, mode }),
+      });
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const { variants } = await res.json();
+      if (variants?.length > 1) {
+        setAiVariants(variants);
+        setAiPrompt('');
+      } else if (variants?.length === 1) {
+        const { subject: aiSubject, text } = variants[0];
+        if (text) {
+          setBody(plainTextMode ? text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : text);
+          if (aiSubject) setSubject(aiSubject);
+          setAiPrompt('');
+        }
+      }
+    } catch (err) {
+      debug.error('AI draft failed:', err);
+      toast.error('AI draft failed. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiLoading, to, subject, body, plainTextMode, mode, replyTo]);
+
+  const handleAiDraft = useCallback(() => {
+    return handleAiDraftWithPrompt(aiPrompt);
+  }, [aiPrompt, handleAiDraftWithPrompt]);
+
+  const applyVariant = useCallback((v: { subject: string; text: string }) => {
+    if (v.text) {
+      setBody(plainTextMode ? v.text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : v.text);
+      if (v.subject) setSubject(v.subject);
+    }
+    setAiVariants(null);
+  }, [plainTextMode]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      toast.error('Speech recognition is not supported in this browser.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    // Seed from current prompt value; updates via ref to avoid stale closure
+    finalTranscriptRef.current = aiPrompt;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscriptRef.current += result[0].transcript;
+        } else {
+          interim = result[0].transcript;
+        }
+      }
+      setAiPrompt(finalTranscriptRef.current + interim);
+    };
+
+    recognition.onerror = () => {
+      setIsRecording(false);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      const final = finalTranscriptRef.current.trim();
+      setAiPrompt(final);
+      if (final) handleAiDraftWithPrompt(final);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsRecording(true);
+  }, [isRecording, aiPrompt, handleAiDraftWithPrompt]);
+  const [showCc, setShowCc] = useState(initialData?.showCc ?? !!getInitialCc());
+  const [showBcc, setShowBcc] = useState(initialData?.showBcc ?? false);
+  const [draftId, setDraftId] = useState<string | null>(initialData?.draftId ?? null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedDataRef = useRef<string>("");
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>(() => {
+    if (mode === 'forward' && replyTo?.attachments?.length) {
+      return replyTo.attachments
+        // Skip inline cid-referenced images - they're embedded in the forwarded HTML body
+        // (matches the viewer's hideInlineImageAttachments logic).
+        .filter(att => !(att.cid && att.disposition === 'inline' && (att.type || '').startsWith('image/')))
+        .map(att => ({
+          name: att.name || 'attachment',
+          type: att.type || 'application/octet-stream',
+          size: att.size,
+          blobId: att.blobId,
+        }));
+    }
+    return [];
+  });
+  const inlineImagesRef = useRef<Array<{ cid: string; blobId: string; type: string; name: string; size: number; dataUrl: string }>>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [validationErrors, setValidationErrors] = useState<{ to?: boolean; subject?: boolean; body?: boolean }>({});
+  const [shakeField, setShakeField] = useState<string | null>(null);
+  const [selectedIdentityId, setSelectedIdentityId] = useState<string | null>(initialData?.selectedIdentityId ?? null);
+  const [subAddressTag, setSubAddressTag] = useState<string>(initialData?.subAddressTag ?? '');
+  const [fromOverrideEnabled, setFromOverrideEnabled] = useState<boolean>(initialData?.fromOverrideEnabled ?? false);
+  const [fromOverrideEmail, setFromOverrideEmail] = useState<string>(initialData?.fromOverrideEmail ?? '');
+  const [fromOverrideName, setFromOverrideName] = useState<string>(initialData?.fromOverrideName ?? '');
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [showAllAttachments, setShowAllAttachments] = useState(false);
+  const [smimeSign_, setSmimeSign] = useState(false);
+  const [smimeEncrypt_, setSmimeEncrypt] = useState(false);
+  const [smimePassphrasePrompt, setSmimePassphrasePrompt] = useState<{ keyId: string; resolve: (passphrase: string) => void; reject: () => void } | null>(null);
+  const [smimePassphraseInput, setSmimePassphraseInput] = useState('');
+  const [smimePassphraseError, setSmimePassphraseError] = useState('');
+  const [showAttachmentWarning, setShowAttachmentWarning] = useState(false);
+  const [attachmentWarningKeyword, setAttachmentWarningKeyword] = useState('');
+
+  const saveTemplateModalRef = useFocusTrap({
+    isActive: showSaveAsTemplate,
+    onEscape: () => setShowSaveAsTemplate(false),
+    restoreFocus: true,
+  });
+
+  const closeDialogRef = useFocusTrap({
+    isActive: showCloseDialog,
+    onEscape: () => setShowCloseDialog(false),
+    restoreFocus: true,
+  });
+
+  const attachmentWarningRef = useFocusTrap({
+    isActive: showAttachmentWarning,
+    onEscape: () => setShowAttachmentWarning(false),
+    restoreFocus: true,
+  });
+
+  const { client } = useAuthStore();
+  const currentIdentity = selectedIdentityId
+    ? identities.find((identity) => identity.id === selectedIdentityId) || primaryIdentity
+    : primaryIdentity;
+  // Alias identities often lack a configured signature - fall back to the primary
+  // identity's signature so replies (which auto-select a matching alias) still
+  // populate the user's signature.
+  const signatureIdentity = (currentIdentity?.htmlSignature || currentIdentity?.textSignature)
+    ? currentIdentity
+    : primaryIdentity;
+
+  // Hold the TipTap editor instance so we can swap the embedded signature
+  // when the user switches identity in "above quote" mode without rebuilding
+  // the whole body (which would lose user edits to the surrounding draft).
+  const editorRef = useRef<Editor | null>(null);
+  const prevSignatureIdentityIdRef = useRef<string | null | undefined>(signatureIdentity?.id);
+  const prevSignatureSeparatorRef = useRef<boolean>(signatureSeparatorEnabled);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const identityChanged = prevSignatureIdentityIdRef.current !== signatureIdentity?.id;
+    const separatorChanged = prevSignatureSeparatorRef.current !== signatureSeparatorEnabled;
+    prevSignatureIdentityIdRef.current = signatureIdentity?.id;
+    prevSignatureSeparatorRef.current = signatureSeparatorEnabled;
+    if (!editor) return;
+    if (!identityChanged && !separatorChanged) return;
+    if (plainTextMode) return;
+    if (mode !== 'reply' && mode !== 'replyAll' && mode !== 'forward') return;
+    if (signaturePosition !== 'above_quote') return;
+
+    const currentHtml = editor.getHTML();
+    const doc = new DOMParser().parseFromString(currentHtml, 'text/html');
+    const startEl = doc.querySelector('[data-signature-block="separator"], [data-signature-block="start"]');
+    if (!startEl) return;
+    const endEl = doc.querySelector('[data-signature-block="end"]');
+
+    const newSignature = buildEmbeddedSignatureHtml(signatureIdentity, {
+      embed: true,
+      separator: signatureSeparatorEnabled,
+    });
+    if (!newSignature) return;
+
+    // Build a temporary container holding the replacement nodes so we can
+    // splice them in without re-serializing/parsing twice.
+    const replacementHost = doc.createElement('div');
+    replacementHost.innerHTML = newSignature;
+    const replacementNodes = Array.from(replacementHost.childNodes);
+
+    const parent = startEl.parentNode;
+    if (!parent) return;
+
+    // Remove the existing signature range [startEl … endEl] inclusive, or
+    // from startEl to the next blockquote if no end marker is present.
+    const removeUntil = endEl && endEl.parentNode === parent ? endEl : null;
+    const toRemove: Node[] = [];
+    let cursor: Node | null = startEl;
+    while (cursor) {
+      toRemove.push(cursor);
+      if (cursor === removeUntil) break;
+      const next: Node | null = cursor.nextSibling;
+      if (!removeUntil && next && (next as Element).tagName === 'BLOCKQUOTE') break;
+      cursor = next;
+    }
+    const insertBefore = toRemove[toRemove.length - 1]?.nextSibling ?? null;
+    toRemove.forEach((node) => parent.removeChild(node));
+    replacementNodes.forEach((node) => parent.insertBefore(node, insertBefore));
+
+    const nextHtml = doc.body.innerHTML;
+    if (nextHtml !== currentHtml) {
+      editor.commands.setContent(nextHtml, { emitUpdate: true });
+    }
+  }, [signatureIdentity?.id, signatureIdentity?.htmlSignature, signatureIdentity?.textSignature, signatureSeparatorEnabled, signaturePosition, mode, plainTextMode]);
+
+  useEffect(() => {
+    if (!autoSelectReplyIdentity) return;
+    if (selectedIdentityId || initialData?.selectedIdentityId) return;
+    if (mode !== 'reply' && mode !== 'replyAll') return;
+
+    const resolved = resolveReplyFrom(identities, {
+      to: replyTo?.to,
+      cc: replyTo?.cc,
+      bcc: replyTo?.bcc,
+    });
+
+    if (resolved) {
+      setSelectedIdentityId(resolved.identityId);
+      if (resolved.overrideEmail && !fromOverrideEnabled) {
+        setFromOverrideEnabled(true);
+        setFromOverrideEmail(resolved.overrideEmail);
+        if (resolved.overrideName) setFromOverrideName(resolved.overrideName);
+      }
+      return;
+    }
+
+    // Fallback: match identity by the account's email when replying from unified view
+    if (replyTo?.accountId) {
+      const account = useAccountStore.getState().getAccountById(replyTo.accountId);
+      if (account?.email) {
+        const accountEmail = account.email.trim().toLowerCase();
+        const accountIdentity = identities.find(
+          (identity) => identity.email.trim().toLowerCase() === accountEmail
+        );
+        if (accountIdentity) {
+          setSelectedIdentityId(accountIdentity.id);
+        }
+      }
+    }
+  }, [
+    autoSelectReplyIdentity,
+    fromOverrideEnabled,
+    identities,
+    initialData?.selectedIdentityId,
+    mode,
+    replyTo?.accountId,
+    replyTo?.bcc,
+    replyTo?.cc,
+    replyTo?.to,
+    selectedIdentityId,
+  ]);
+
+  const composerSignatureHtml = signatureIdentity?.htmlSignature
+    ? `<div>${sanitizeEmailHtml(signatureIdentity.htmlSignature)}</div>`
+    : signatureIdentity?.textSignature
+      ? `<div>${getPlainTextSignature(signatureIdentity).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div>`
+      : '';
+  const getAutocomplete = useContactStore((s) => s.getAutocomplete);
+  const addToTrustedSendersBook = useContactStore((s) => s.addToTrustedSendersBook);
+  const addTrustedSender = useSettingsStore((s) => s.addTrustedSender);
+  const trustedSendersAddressBook = useSettingsStore((s) => s.trustedSendersAddressBook);
+  const addTemplate = useTemplateStore((s) => s.addTemplate);
+  const sendRawEmail = useEmailStore((s) => s.sendRawEmail);
+  const smimeStore = useSmimeStore();
+
+  // Determine S/MIME availability for the selected identity
+  const currentSmimeIdentityId = selectedIdentityId || primaryIdentity?.id;
+  const smimeKeyRecord = currentSmimeIdentityId ? smimeStore.getKeyRecordForIdentity(currentSmimeIdentityId) : undefined;
+  const canSmimeSign = !!smimeKeyRecord;
+  const canSmimeEncrypt = (() => {
+    if (!smimeKeyRecord) return false;
+    const toAddrs = to.split(',').map(e => e.trim()).filter(Boolean);
+    const ccAddrs = cc.split(',').map(e => e.trim()).filter(Boolean);
+    const bccAddrs = bcc.split(',').map(e => e.trim()).filter(Boolean);
+    const allRecipients = [...toAddrs, ...ccAddrs, ...bccAddrs];
+    if (allRecipients.length === 0) return false;
+    const { missing } = smimeStore.getRecipientCerts(allRecipients);
+    return missing.length === 0;
+  })();
+
+  // Initialize S/MIME defaults from store when identity changes
+  useEffect(() => {
+    if (currentSmimeIdentityId) {
+      setSmimeSign(!!smimeStore.defaultSignIdentity[currentSmimeIdentityId] && canSmimeSign);
+    }
+    setSmimeEncrypt(smimeStore.defaultEncrypt && canSmimeEncrypt);
+  // Only run when identity changes, not on every recipient edit
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSmimeIdentityId]);
+
+  // Keep a ref to current state for the unmount save
+  const stateRef = useRef({ to, cc, bcc, subject, body, showCc, showBcc, selectedIdentityId, subAddressTag, draftId, fromOverrideEnabled, fromOverrideEmail, fromOverrideName });
+  stateRef.current = { to, cc, bcc, subject, body, showCc, showBcc, selectedIdentityId, subAddressTag, draftId, fromOverrideEnabled, fromOverrideEmail, fromOverrideName };
+
+  // Track initial values for dirty detection (captured once on first render)
+  const initialValuesRef = useRef({ to, cc, bcc, subject, body, attachmentCount: attachments.length });
+  const isDirtyRef = useRef(false);
+  isDirtyRef.current = to !== initialValuesRef.current.to || cc !== initialValuesRef.current.cc ||
+    bcc !== initialValuesRef.current.bcc || subject !== initialValuesRef.current.subject ||
+    body !== initialValuesRef.current.body || attachments.length > initialValuesRef.current.attachmentCount;
+
+  // Ref to latest saveDraft for use in event handlers with stale closures
+  const saveDraftRef = useRef<() => Promise<string | null>>(() => Promise.resolve(null));
+
+  // Auto-save state on unmount (when user navigates away without explicitly closing)
+  useEffect(() => {
+    return () => {
+      if (onSaveState && isDirtyRef.current) {
+        const s = stateRef.current;
+        onSaveState({
+          ...s,
+          mode,
+          replyTo,
+        });
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-save draft to server on page close (best-effort)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isDirtyRef.current) {
+        saveDraftRef.current();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  // Auto-focus the To field when composing a new email or forwarding
+  useEffect(() => {
+    if (mode === 'forward' || mode === 'compose') {
+      // Small delay to ensure the input is rendered
+      const timer = setTimeout(() => {
+        toInputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [mode]);
+
+  const [autocompleteResults, setAutocompleteResults] = useState<Array<{ name: string; email: string }>>([]);
+  const [activeAutoField, setActiveAutoField] = useState<'to' | 'cc' | 'bcc' | null>(null);
+  const [autoSelectedIndex, setAutoSelectedIndex] = useState(-1);
+  const autocompleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const toInputRef = useRef<HTMLInputElement>(null);
+  const ccInputRef = useRef<HTMLInputElement>(null);
+  const bccInputRef = useRef<HTMLInputElement>(null);
+  const subjectInputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const toDropdownRef = useRef<HTMLDivElement>(null);
+  const ccDropdownRef = useRef<HTMLDivElement>(null);
+  const bccDropdownRef = useRef<HTMLDivElement>(null);
+
+  const focusSubject = useCallback(() => {
+    subjectInputRef.current?.focus();
+  }, []);
+
+  const focusBody = useCallback(() => {
+    if (plainTextMode) {
+      bodyRef.current?.focus();
+    } else {
+      const proseMirror = editorContainerRef.current?.querySelector('.ProseMirror') as HTMLElement | null;
+      proseMirror?.focus();
+    }
+  }, [plainTextMode]);
+
+  const handleAutocomplete = useCallback((value: string, field: 'to' | 'cc' | 'bcc') => {
+    if (autocompleteTimeoutRef.current) {
+      clearTimeout(autocompleteTimeoutRef.current);
+    }
+
+    const lastPart = value.split(',').pop()?.trim() || '';
+    if (lastPart.length < 1) {
+      setAutocompleteResults([]);
+      setActiveAutoField(null);
+      setAutoSelectedIndex(-1);
+      return;
+    }
+
+    autocompleteTimeoutRef.current = setTimeout(async () => {
+      const localResults = getAutocomplete(lastPart);
+      // Let plugins contribute extra suggestions (Slack handles, GitHub, CRM, …).
+      const initial: RecipientSuggestion[] = localResults.map(r => ({ name: r.name, email: r.email }));
+      const merged = await contactHooks.onProvideRecipientSuggestions.transform(initial, { query: lastPart });
+      setAutocompleteResults(merged.map(s => ({ name: s.name, email: s.email })));
+      setActiveAutoField(merged.length > 0 ? field : null);
+      setAutoSelectedIndex(-1);
+    }, 200);
+  }, [getAutocomplete]);
+
+  const insertAutocomplete = (email: string, field: 'to' | 'cc' | 'bcc') => {
+    const setter = field === 'to' ? setTo : field === 'cc' ? setCc : setBcc;
+    const getter = field === 'to' ? to : field === 'cc' ? cc : bcc;
+
+    const parts = getter.split(',').map(s => s.trim()).filter(Boolean);
+    if (!getter.trimEnd().endsWith(',') && parts.length > 0) {
+      parts.pop();
+    }
+    parts.push(email);
+    setter(parts.join(', ') + ', ');
+    setAutocompleteResults([]);
+    setActiveAutoField(null);
+    setAutoSelectedIndex(-1);
+
+    const ref = field === 'to' ? toInputRef : field === 'cc' ? ccInputRef : bccInputRef;
+    ref.current?.focus();
+  };
+
+  const handleAutoBlur = useCallback((e: React.FocusEvent, field: 'to' | 'cc' | 'bcc') => {
+    const dropdownRef = field === 'to' ? toDropdownRef : field === 'cc' ? ccDropdownRef : bccDropdownRef;
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (relatedTarget && dropdownRef.current?.contains(relatedTarget)) {
+      return;
+    }
+    if (activeAutoField === field) {
+      setActiveAutoField(null);
+      setAutoSelectedIndex(-1);
+    }
+  }, [activeAutoField]);
+
+  const handleAutoKeyDown = (e: React.KeyboardEvent, field: 'to' | 'cc' | 'bcc') => {
+    if (!activeAutoField || autocompleteResults.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setAutoSelectedIndex((prev) => Math.min(prev + 1, autocompleteResults.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setAutoSelectedIndex((prev) => Math.max(prev - 1, -1));
+    } else if (e.key === 'Enter' && autoSelectedIndex >= 0) {
+      e.preventDefault();
+      insertAutocomplete(autocompleteResults[autoSelectedIndex].email, field);
+    } else if (e.key === 'Escape') {
+      setAutocompleteResults([]);
+      setActiveAutoField(null);
+      setAutoSelectedIndex(-1);
+    }
+  };
+
+  const handleTemplateSelect = useCallback((template: EmailTemplate, filledValues: Record<string, string>) => {
+    const filledSubject = Object.keys(filledValues).length > 0
+      ? substitutePlaceholders(template.subject, filledValues)
+      : template.subject;
+    const filledBody = Object.keys(filledValues).length > 0
+      ? substitutePlaceholders(template.body, filledValues)
+      : template.body;
+
+    // In plain text mode, use template body as-is; otherwise convert to HTML
+    const bodyContent = plainTextMode
+      ? filledBody
+      : `<p>${filledBody.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`;
+
+    if (mode === 'compose') {
+      setSubject(filledSubject);
+      setBody(bodyContent);
+      if (template.defaultRecipients?.to?.length) {
+        setTo(template.defaultRecipients.to.join(', ') + ', ');
+      }
+      if (template.defaultRecipients?.cc?.length) {
+        setCc(template.defaultRecipients.cc.join(', ') + ', ');
+        setShowCc(true);
+      }
+      if (template.defaultRecipients?.bcc?.length) {
+        setBcc(template.defaultRecipients.bcc.join(', ') + ', ');
+        setShowBcc(true);
+      }
+    } else {
+      setBody((prev) => bodyContent + (plainTextMode ? '\n' : '') + prev);
+    }
+
+    if (template.identityId) {
+      setSelectedIdentityId(template.identityId);
+    }
+
+    setShowTemplatePicker(false);
+  }, [mode, plainTextMode]);
+
+  useEffect(() => {
+    const handleTemplateKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (target?.getAttribute('contenteditable') === 'true') return;
+      if (e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setShowTemplatePicker(true);
+      }
+    };
+    window.addEventListener('keydown', handleTemplateKey);
+    return () => window.removeEventListener('keydown', handleTemplateKey);
+  }, []);
+
+  const addFiles = useCallback(async (files: File[]) => {
+    if (!client || files.length === 0) return;
+
+    // Let plugins veto each upload before it's queued.
+    const allowedFiles: File[] = [];
+    for (const file of files) {
+      const ok = await emailHooks.onBeforeAttachmentUpload.intercept({
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+      });
+      if (ok) allowedFiles.push(file);
+    }
+    if (allowedFiles.length === 0) return;
+    files = allowedFiles;
+
+    const newAttachments: ComposerAttachment[] = files.map(file => {
+      const controller = new AbortController();
+      return {
+        file,
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        uploading: true,
+        abortController: controller,
+      };
+    });
+    setAttachments(prev => [...prev, ...newAttachments]);
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const controller = newAttachments[i].abortController;
+      try {
+        if (controller?.signal.aborted) continue;
+        const { blobId } = await client.uploadBlob(file);
+
+        if (controller?.signal.aborted) continue;
+        setAttachments(prev =>
+          prev.map(att =>
+            att.file === file
+              ? { ...att, blobId, uploading: false, abortController: undefined }
+              : att
+          )
+        );
+        emailHooks.onAfterAttachmentUpload.emit({
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          blobId,
+        });
+      } catch (error) {
+        if (controller?.signal.aborted) continue;
+        debug.error(`Failed to upload ${file.name}:`, error);
+        toast.error(t('upload_failed', { filename: file.name }));
+
+        setAttachments(prev =>
+          prev.map(att =>
+            att.file === file
+              ? { ...att, uploading: false, error: true, abortController: undefined }
+              : att
+          )
+        );
+      }
+    }
+  }, [client, t]);
+
+  const handleImageUpload = useCallback(async (
+    file: File,
+  ): Promise<{ src: string; cid: string } | null> => {
+    if (!client) return null;
+    try {
+      const readAsDataUrl = new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string) ?? null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      });
+      const [{ blobId }, dataUrl] = await Promise.all([
+        client.uploadBlob(file),
+        readAsDataUrl,
+      ]);
+      if (!dataUrl) throw new Error('Failed to read image as data URL');
+      const cid = `${generateUUID()}@webmail`;
+      inlineImagesRef.current.push({
+        cid,
+        blobId,
+        type: file.type || 'application/octet-stream',
+        name: file.name,
+        size: file.size,
+        dataUrl,
+      });
+      return { src: dataUrl, cid };
+    } catch (error) {
+      debug.error(`Failed to upload inline image ${file.name}:`, error);
+      toast.error(t('upload_failed', { filename: file.name }));
+      return null;
+    }
+  }, [client, t]);
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files) return;
+    await addFiles(Array.from(event.target.files));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearDragState = useCallback(() => {
+    if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+    dragTimeoutRef.current = null;
+    setIsDraggingOver(false);
+  }, []);
+
+  const resetDragTimeout = useCallback(() => {
+    if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+    dragTimeoutRef.current = setTimeout(clearDragState, 150);
+  }, [clearDragState]);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDraggingOver(true);
+      resetDragTimeout();
+    }
+  }, [resetDragTimeout]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resetDragTimeout();
+  }, [resetDragTimeout]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resetDragTimeout();
+  }, [resetDragTimeout]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearDragState();
+    if (e.dataTransfer.files?.length) {
+      addFiles(Array.from(e.dataTransfer.files));
+    }
+  }, [addFiles, clearDragState]);
+
+  const removeAttachment = (index: number) => {
+    const att = attachments[index];
+    att?.abortController?.abort();
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Auto-save draft functionality
+  const saveDraft = async (): Promise<string | null> => {
+    if (!client) return null;
+
+    const toAddresses = to.split(",").map(e => e.trim()).filter(Boolean);
+    const ccAddresses = cc.split(",").map(e => e.trim()).filter(Boolean);
+    const bccAddresses = bcc.split(",").map(e => e.trim()).filter(Boolean);
+
+    if (!toAddresses.length && !subject && !(plainTextMode ? body.trim() : htmlToPlainText(body).trim())) {
+      return null;
+    }
+
+    // Prepare attachments for draft
+    const uploadedAttachments = attachments
+      .filter(att => att.blobId && !att.uploading)
+      .map(att => ({
+        blobId: att.blobId!,
+        name: att.name,
+        type: att.type,
+        size: att.size,
+      }));
+
+    // Create a hash of current data to compare with last saved
+    const currentData = JSON.stringify({ to: toAddresses, cc: ccAddresses, bcc: bccAddresses, subject, body, attachments: uploadedAttachments, identityId: selectedIdentityId, subAddressTag });
+
+    // Only save if data has changed
+    if (currentData === lastSavedDataRef.current) {
+      return draftId;
+    }
+
+    setSaveStatus('saving');
+
+    // Get the selected identity or primary identity
+    // Generate sub-addressed email if tag is set
+    const identityFromEmail = currentIdentity?.email
+      ? subAddressTag
+        ? generateSubAddress(currentIdentity.email, subAddressTag, subAddressDelimiter)
+        : currentIdentity.email
+      : undefined;
+    const fromEmail = (fromOverrideEnabled && fromOverrideEmail.trim())
+      ? fromOverrideEmail.trim()
+      : identityFromEmail;
+    const fromName = (fromOverrideEnabled && fromOverrideEmail.trim())
+      ? (fromOverrideName.trim() || undefined)
+      : (currentIdentity?.name || undefined);
+
+    try {
+      const savedDraftId = await client.createDraft(
+        toAddresses,
+        subject || t('no_subject'),
+        plainTextMode ? body : htmlToPlainText(body),
+        ccAddresses,
+        bccAddresses,
+        currentIdentity?.id,
+        fromEmail,
+        draftId || undefined,
+        uploadedAttachments,
+        fromName,
+        plainTextMode ? undefined : body
+      );
+
+      setDraftId(savedDraftId);
+      lastSavedDataRef.current = currentData;
+      setSaveStatus('saved');
+
+      // Reset status after 2 seconds
+      setTimeout(() => setSaveStatus('idle'), 2000);
+
+      return savedDraftId;
+    } catch (error) {
+      console.error('Failed to save draft:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+      return null;
+    }
+  };
+
+  // Keep saveDraftRef pointing to latest saveDraft
+  saveDraftRef.current = saveDraft;
+
+  // Trigger auto-save when content changes (only if user modified something)
+  useEffect(() => {
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Don't auto-save if nothing has changed from initial state
+    if (!isDirtyRef.current) {
+      return;
+    }
+
+    // Set new timeout for auto-save (2 seconds after last change)
+    saveTimeoutRef.current = setTimeout(() => {
+      // Plugin observers (AI assist, grammar, …) get a debounced snapshot here.
+      emailHooks.onDraftChange.emit({
+        to: to.split(',').map(s => s.trim()).filter(Boolean),
+        cc: cc.split(',').map(s => s.trim()).filter(Boolean),
+        bcc: bcc.split(',').map(s => s.trim()).filter(Boolean),
+        subject,
+        htmlBody: plainTextMode ? '' : body,
+        textBody: plainTextMode ? body : htmlToPlainText(body),
+        identityId: selectedIdentityId || '',
+        attachments: attachments
+          .filter(a => a.blobId && !a.uploading && !a.error)
+          .map(a => ({ name: a.name, type: a.type || 'application/octet-stream', size: a.size })),
+      });
+      saveDraft();
+    }, 2000);
+
+    // Cleanup on unmount
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- saveDraft reads current state when called, not when effect is set up
+  }, [to, cc, bcc, subject, body, attachments]);
+
+  useEffect(() => {
+    return () => {
+      if (autocompleteTimeoutRef.current) {
+        clearTimeout(autocompleteTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const toAddresses = to.split(",").map(e => e.trim()).filter(Boolean);
+  const bodyPlainText = plainTextMode ? body.trim() : htmlToPlainText(body).trim();
+  const hasContent = bodyPlainText || attachments.some(att => att.blobId && !att.uploading);
+  const canSend = toAddresses.length > 0 && !!subject && hasContent;
+
+  const getSendTooltip = (): string | undefined => {
+    if (canSend) return undefined;
+    if (toAddresses.length === 0) return t('validation.recipient_required');
+    if (!subject) return t('validation.subject_required');
+    if (!hasContent) return t('validation.body_required');
+    return undefined;
+  };
+
+  // Rewrite data: URLs of dropped images (tagged with data-cid) into cid:
+  // references so recipient clients that strip data URIs can still render them.
+  const rewriteInlineImages = (html: string): {
+    html: string;
+    attachments: Array<{ blobId: string; name: string; type: string; size: number; disposition: 'inline'; cid: string }>;
+  } => {
+    const known = inlineImagesRef.current;
+    const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+    const used = new Map<string, typeof known[number]>();
+
+    if (known.length > 0) {
+      doc.querySelectorAll('img[data-cid]').forEach((img) => {
+        const cid = img.getAttribute('data-cid');
+        if (!cid) return;
+        const entry = known.find((e) => e.cid === cid);
+        if (!entry) return;
+        img.setAttribute('src', `cid:${cid}`);
+        img.removeAttribute('data-cid');
+        used.set(cid, entry);
+      });
+    }
+
+    // Recipient mail clients apply default <p> margins inside table cells,
+    // inflating row height. Tiptap wraps cell text in <p>, so force margin:0
+    // to match the composer's tight rows.
+    doc.querySelectorAll('td > p, th > p').forEach((p) => {
+      const existing = p.getAttribute('style') || '';
+      p.setAttribute('style', `margin:0;${existing}`);
+    });
+
+    return {
+      html: doc.body.innerHTML,
+      attachments: Array.from(used.values()).map((e) => ({
+        blobId: e.blobId,
+        name: e.name,
+        type: e.type,
+        size: e.size,
+        disposition: 'inline' as const,
+        cid: e.cid,
+      })),
+    };
+  };
+
+  const handleSend = async (skipAttachmentCheck = false) => {
+    const ccAddresses = cc.split(",").map(e => e.trim()).filter(Boolean);
+    const bccAddresses = bcc.split(",").map(e => e.trim()).filter(Boolean);
+
+    if (!canSend) {
+      const errors: { to?: boolean; subject?: boolean; body?: boolean } = {};
+      if (toAddresses.length === 0) errors.to = true;
+      if (!subject) errors.subject = true;
+      if (!hasContent) errors.body = true;
+      setValidationErrors(errors);
+
+      if (errors.to) {
+        setShakeField('to');
+        setTimeout(() => setShakeField(null), 400);
+        toInputRef.current?.focus();
+      }
+      return;
+    }
+
+    // Attachment reminder check
+    if (!skipAttachmentCheck && attachmentReminderEnabled) {
+      const hasAttachments = attachments.some(att => att.blobId && !att.uploading && !att.error);
+      if (!hasAttachments) {
+        const bodyText = htmlToPlainText(body);
+        const searchText = `${subject} ${bodyText}`.toLowerCase();
+        const matched = attachmentReminderKeywords.find(kw => searchText.includes(kw.toLowerCase()));
+        if (matched) {
+          setAttachmentWarningKeyword(matched);
+          setShowAttachmentWarning(true);
+          return;
+        }
+      }
+    }
+
+    let finalDraftId = draftId;
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      try {
+        const savedId = await saveDraft();
+        if (savedId) {
+          finalDraftId = savedId;
+        }
+      } catch (err) {
+        debug.error('Failed to save draft before send:', err);
+      }
+    }
+
+    const identityFromEmail = currentIdentity?.email
+      ? subAddressTag
+        ? generateSubAddress(currentIdentity.email, subAddressTag, subAddressDelimiter)
+        : currentIdentity.email
+      : undefined;
+    // When the user has typed a From override, that becomes the header From
+    // (and MIME-builder From in the S/MIME path). The identity still drives
+    // the SMTP envelope MAIL FROM — set explicitly so it doesn't mistakenly
+    // default to the override address.
+    const overrideActive = fromOverrideEnabled && fromOverrideEmail.trim().length > 0;
+    const fromEmail = overrideActive ? fromOverrideEmail.trim() : identityFromEmail;
+    const fromName = overrideActive
+      ? (fromOverrideName.trim() || undefined)
+      : (currentIdentity?.name || undefined);
+    const envelopeMailFrom = overrideActive ? identityFromEmail : undefined;
+
+    // Body is already HTML from the rich text editor (or plain text in plain text mode).
+    // When "above quote" mode is configured for replies/forwards, the signature
+    // was embedded into the body during init (see getInitialBody) so the
+    // trailing append must be skipped to avoid duplicating it.
+    const signatureAlreadyInBody =
+      (mode === 'reply' || mode === 'replyAll' || mode === 'forward') &&
+      signaturePosition === 'above_quote';
+
+    // Build HTML signature block (used only in rich text mode)
+    const buildSignatureHtml = (): string => {
+      if (signatureAlreadyInBody) return '';
+      const sep = signatureSeparatorEnabled ? `<br><br>-- <br>` : `<br><br>`;
+      if (signatureIdentity?.htmlSignature) {
+        return `${sep}${sanitizeEmailHtml(signatureIdentity.htmlSignature)}`;
+      }
+      if (signatureIdentity?.textSignature) {
+        return `${sep}${signatureIdentity.textSignature.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}`;
+      }
+      return '';
+    };
+
+    // RFC 5322 §3.6.4 threading - only continues the chain on a reply, not a forward.
+    const threadingHeaders = (mode === 'reply' || mode === 'replyAll')
+      ? computeReplyThreadingHeaders(replyTo)
+      : null;
+
+    // In plain text mode, send text/plain only (no HTML body)
+    const signatureOpts = { separator: signatureSeparatorEnabled };
+    const finalBody = plainTextMode
+      ? (signatureAlreadyInBody ? body : appendPlainTextSignature(body, signatureIdentity, signatureOpts))
+      : (signatureAlreadyInBody ? htmlToPlainText(body) : appendPlainTextSignature(htmlToPlainText(body), signatureIdentity, signatureOpts));
+
+    const rewritten = plainTextMode ? null : rewriteInlineImages(body);
+    const finalHtmlBody = plainTextMode
+      ? undefined
+      : `<div>${rewritten!.html}</div>${buildSignatureHtml()}`;
+    const inlineAttachments = rewritten?.attachments ?? [];
+
+    try {
+      // Let plugins veto the send (external-mail warning, mistyped-domain
+      // guards, etc.). Returning false from any handler aborts before either
+      // the S/MIME or standard JMAP path runs.
+      const sendablePreview: OutgoingEmail = {
+        to: toAddresses,
+        cc: ccAddresses,
+        bcc: bccAddresses,
+        subject,
+        htmlBody: finalHtmlBody || '',
+        textBody: finalBody,
+        identityId: currentIdentity?.id || '',
+        fromEmail,
+        attachments: attachments
+          .filter(att => att.blobId && !att.uploading && !att.error)
+          .map(a => ({ name: a.name, type: a.type || 'application/octet-stream', size: a.size })),
+        inReplyTo: threadingHeaders?.inReplyTo?.[0],
+      };
+      const sendAllowed = await emailHooks.onBeforeEmailSend.intercept(sendablePreview);
+      if (!sendAllowed) return;
+
+      // S/MIME send pipeline: build raw MIME → sign → encrypt → sendRawEmail
+      if ((smimeSign_ || smimeEncrypt_) && client && currentIdentity?.id) {
+        // 1. Resolve S/MIME key
+        if (smimeSign_ && !smimeKeyRecord) {
+          throw new Error('No S/MIME key bound to this identity');
+        }
+        // S/MIME binds to the identity's key; sending from an override address
+        // would produce a signature whose Subject differs from the visible
+        // From, which most clients reject or flag. Refuse up front.
+        if (overrideActive) {
+          throw new Error('Cannot use From override with S/MIME — disable one to send.');
+        }
+
+        // 2. Ensure key is unlocked for signing
+        if (smimeSign_ && smimeKeyRecord && !smimeStore.isKeyUnlocked(smimeKeyRecord.id)) {
+          const passphrase = await new Promise<string>((resolve, reject) => {
+            setSmimePassphrasePrompt({ keyId: smimeKeyRecord.id, resolve, reject });
+          });
+          try {
+            await smimeStore.unlockKey(smimeKeyRecord.id, passphrase);
+          } finally {
+            setSmimePassphrasePrompt(null);
+            setSmimePassphraseInput('');
+            setSmimePassphraseError('');
+          }
+        }
+
+        // 3. Resolve attachments as ArrayBuffers
+        const mimeAttachments: MimeAttachment[] = [];
+        for (const att of attachments) {
+          if (att.error || att.uploading) continue;
+          let content: ArrayBuffer;
+          if (att.file && att.file.size > 0) {
+            content = await att.file.arrayBuffer();
+          } else if (att.blobId && client) {
+            content = await client.fetchBlobArrayBuffer(att.blobId, att.name, att.type);
+          } else {
+            continue;
+          }
+          mimeAttachments.push({
+            filename: att.name,
+            contentType: att.type || 'application/octet-stream',
+            content,
+          });
+        }
+        for (const inline of inlineAttachments) {
+          if (!client) break;
+          const content = await client.fetchBlobArrayBuffer(inline.blobId, inline.name, inline.type);
+          mimeAttachments.push({
+            filename: inline.name,
+            contentType: inline.type,
+            content,
+            cid: inline.cid,
+          });
+        }
+
+        // 4. Build canonical MIME
+        // mime-builder takes inReplyTo as a single ref-form msg-id (with brackets);
+        // references stays an array. threadingHeaders contains bare msg-ids.
+        const mimeInReplyTo = threadingHeaders?.inReplyTo[0]
+          ? `<${threadingHeaders.inReplyTo[0]}>`
+          : undefined;
+        const mimeReferences = threadingHeaders?.references.length
+          ? threadingHeaders.references.map(id => `<${id}>`)
+          : undefined;
+        const mimeBytes = buildMimeMessage({
+          from: { name: currentIdentity.name || undefined, email: fromEmail || currentIdentity.email },
+          to: toAddresses.map(e => ({ email: e })),
+          cc: ccAddresses.length > 0 ? ccAddresses.map(e => ({ email: e })) : undefined,
+          bcc: bccAddresses.length > 0 ? bccAddresses.map(e => ({ email: e })) : undefined,
+          subject,
+          inReplyTo: mimeInReplyTo,
+          references: mimeReferences,
+          textBody: finalBody,
+          htmlBody: finalHtmlBody,
+          attachments: mimeAttachments.length > 0 ? mimeAttachments : undefined,
+        });
+
+        let payload: Blob = new Blob([mimeBytes.buffer as ArrayBuffer], { type: 'message/rfc822' });
+
+        const smimeHeaders = {
+          from: { name: currentIdentity.name || undefined, email: fromEmail || currentIdentity.email },
+          to: toAddresses.map(e => ({ email: e })),
+          cc: ccAddresses.length > 0 ? ccAddresses.map(e => ({ email: e })) : undefined,
+          subject,
+          inReplyTo: mimeInReplyTo,
+          references: mimeReferences,
+        };
+
+        // 5. Sign if enabled
+        if (smimeSign_ && smimeKeyRecord) {
+          const privateKey = smimeStore.getUnlockedKey(smimeKeyRecord.id);
+          if (!privateKey) throw new Error('S/MIME key is not unlocked');
+          const cmsBlob = await smimeSign(
+            mimeBytes,
+            privateKey,
+            smimeKeyRecord.certificate,
+            smimeKeyRecord.certificateChain || [],
+          );
+          const cmsBytes = new Uint8Array(await cmsBlob.arrayBuffer());
+          payload = wrapCmsAsSmimeMessage(cmsBytes, { ...smimeHeaders, smimeType: 'signed-data' });
+        }
+
+        // 6. Encrypt if enabled
+        if (smimeEncrypt_ && smimeKeyRecord) {
+          const allRecipients = [...toAddresses, ...ccAddresses, ...bccAddresses];
+          const { found, missing } = smimeStore.getRecipientCerts(allRecipients);
+          if (missing.length > 0) {
+            throw new Error(`Missing certificates for: ${missing.join(', ')}`);
+          }
+          const recipientCertsDer = found.map(c => c.certificate instanceof ArrayBuffer ? c.certificate : new Uint8Array(c.certificate as ArrayBuffer).buffer);
+          const payloadBytes = new Uint8Array(await payload.arrayBuffer());
+          const cmsBlob = await smimeEncrypt(
+            payloadBytes,
+            recipientCertsDer,
+            smimeKeyRecord.certificate,
+          );
+          const cmsBytes = new Uint8Array(await cmsBlob.arrayBuffer());
+          payload = wrapCmsAsSmimeMessage(cmsBytes, { ...smimeHeaders, smimeType: 'enveloped-data' });
+        }
+
+        // 7. Send via raw email path
+        await sendRawEmail(client, payload, currentIdentity.id);
+      } else {
+        // Standard JMAP send path
+        // Collect uploaded attachment blobIds for the send request
+        const uploadedAttachments: Array<{ blobId: string; name: string; type: string; size: number; disposition?: 'attachment' | 'inline'; cid?: string }> = attachments
+          .filter(att => att.blobId && !att.uploading && !att.error)
+          .map(att => ({ blobId: att.blobId!, name: att.name, type: att.type || 'application/octet-stream', size: att.size }));
+        uploadedAttachments.push(...inlineAttachments);
+
+        // Let plugins (signatures, link-rewriting, encryption, AI rewrite, …)
+        // transform the outgoing message immediately before submission.
+        const transformInput: OutgoingEmail = {
+          to: toAddresses,
+          cc: ccAddresses,
+          bcc: bccAddresses,
+          subject,
+          htmlBody: finalHtmlBody || '',
+          textBody: finalBody,
+          identityId: currentIdentity?.id || '',
+          fromEmail,
+          attachments: uploadedAttachments.map(a => ({ name: a.name, type: a.type, size: a.size })),
+          inReplyTo: threadingHeaders?.inReplyTo?.[0],
+        };
+        const outgoing = await emailHooks.onTransformOutgoingEmail.transform(transformInput);
+
+        await onSend?.({
+          to: outgoing.to,
+          cc: outgoing.cc,
+          bcc: outgoing.bcc,
+          subject: outgoing.subject,
+          body: outgoing.textBody,
+          htmlBody: outgoing.htmlBody || undefined,
+          draftId: finalDraftId || undefined,
+          fromEmail,
+          fromName,
+          identityId: outgoing.identityId || currentIdentity?.id,
+          envelopeMailFrom,
+          attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+          inReplyTo: threadingHeaders?.inReplyTo,
+          references: threadingHeaders?.references,
+        });
+
+        if (mode === 'reply' || mode === 'replyAll') {
+          for (const recipient of [...outgoing.to, ...outgoing.cc].filter(Boolean)) {
+            if (trustedSendersAddressBook && client) {
+              addToTrustedSendersBook(client, recipient).catch(err => {
+                debug.error('Failed to add trusted sender to address book:', err);
+              });
+            } else {
+              addTrustedSender(recipient);
+            }
+          }
+        }
+      }
+
+      setTo("");
+      setCc("");
+      setBcc("");
+      setSubject("");
+      setBody("");
+      setDraftId(null);
+      setSubAddressTag("");
+      setValidationErrors({});
+      // Clear ref so unmount effect doesn't re-save
+      stateRef.current = { to: '', cc: '', bcc: '', subject: '', body: '', showCc: false, showBcc: false, selectedIdentityId: null, subAddressTag: '', draftId: null, fromOverrideEnabled: false, fromOverrideEmail: '', fromOverrideName: '' };
+    } catch (err) {
+      debug.error('Failed to send email:', err);
+      toast.error(t('send_failed'));
+    }
+  };
+
+  const cleanClose = () => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    stateRef.current = { to: '', cc: '', bcc: '', subject: '', body: '', showCc: false, showBcc: false, selectedIdentityId: null, subAddressTag: '', draftId: null, fromOverrideEnabled: false, fromOverrideEmail: '', fromOverrideName: '' };
+    onClose?.();
+  };
+
+  const handleSaveDraftAndClose = async () => {
+    setShowCloseDialog(false);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    await saveDraft();
+    stateRef.current = { to: '', cc: '', bcc: '', subject: '', body: '', showCc: false, showBcc: false, selectedIdentityId: null, subAddressTag: '', draftId: null, fromOverrideEnabled: false, fromOverrideEmail: '', fromOverrideName: '' };
+    onClose?.();
+  };
+
+  const handleDiscardAndClose = () => {
+    setShowCloseDialog(false);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    if (draftId && onDiscardDraft) {
+      onDiscardDraft(draftId);
+    }
+    stateRef.current = { to: '', cc: '', bcc: '', subject: '', body: '', showCc: false, showBcc: false, selectedIdentityId: null, subAddressTag: '', draftId: null, fromOverrideEnabled: false, fromOverrideEmail: '', fromOverrideName: '' };
+    onClose?.();
+  };
+
+  const handleClose = () => {
+    if (isDirtyRef.current) {
+      setShowCloseDialog(true);
+    } else {
+      cleanClose();
+    }
+  };
+
+  return (
+    <div className={cn("flex h-full bg-background", className)}>
+      <PluginSlot
+        name="composer-sidebar"
+        className="hidden md:flex shrink-0 h-full overflow-hidden border-r border-border"
+      />
+      {/* Right-side composer sidebar slot is rendered after the main content div below. */}
+    <div
+      className="flex flex-col h-full bg-background relative flex-1 min-w-0"
+      data-tour="composer"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDraggingOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 border-2 border-dashed border-primary rounded-lg pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <Paperclip className="w-8 h-8" />
+            <span className="text-sm font-medium">{t('drop_files')}</span>
+          </div>
+        </div>
+      )}
+      {/* Header - mobile: clean bar with close/send, desktop: title bar */}
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9 md:h-8 md:w-8">
+            <X className="w-5 h-5 md:w-4 md:h-4" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-base">{t('new_message')}</h3>
+            {saveStatus === 'saving' && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Save className="w-3 h-3 animate-pulse" />
+                <span className="hidden md:inline">{t('saving')}</span>
+              </div>
+            )}
+            {saveStatus === 'saved' && (
+              <div className="flex items-center gap-1 text-xs text-green-600">
+                <Check className="w-3 h-3" />
+                <span className="hidden md:inline">{t('draft_saved')}</span>
+              </div>
+            )}
+            {saveStatus === 'error' && (
+              <div className="flex items-center gap-1 text-xs text-red-600">
+                <X className="w-3 h-3" />
+                <span className="hidden md:inline">{t('save_failed')}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Mobile: send button in header */}
+        <Button
+          onClick={() => handleSend()}
+          disabled={!canSend}
+          title={getSendTooltip()}
+          size="sm"
+          className="md:hidden h-9 px-4"
+        >
+          <Send className="w-4 h-4 mr-1.5" />
+          {t('send')}
+        </Button>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-auto">
+        {/* Fields section */}
+        <div className="space-y-0 border-b">
+          {/* From field */}
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50">
+            <span className="text-sm text-muted-foreground w-12 md:w-16 shrink-0">{t('from')}:</span>
+            <div className="flex-1 flex items-center gap-1 min-w-0">
+              {fromOverrideEnabled ? (
+                <div className="flex-1 flex items-center gap-1 min-w-0">
+                  <Input
+                    value={fromOverrideName}
+                    onChange={(e) => setFromOverrideName(e.target.value)}
+                    placeholder={t('from_override.name_placeholder')}
+                    className="h-7 text-sm w-32 md:w-40 shrink-0"
+                    aria-label={t('from_override.name_label')}
+                  />
+                  <Input
+                    value={fromOverrideEmail}
+                    onChange={(e) => setFromOverrideEmail(e.target.value)}
+                    placeholder={t('from_override.email_placeholder')}
+                    type="email"
+                    className="h-7 text-sm flex-1 min-w-0 font-mono"
+                    aria-label={t('from_override.email_label')}
+                  />
+                </div>
+              ) : identities.length > 1 ? (
+                <select
+                  value={selectedIdentityId || primaryIdentity?.id || ''}
+                  onChange={(e) => setSelectedIdentityId(e.target.value)}
+                  className="flex-1 bg-transparent text-sm text-foreground outline-none cursor-pointer hover:text-muted-foreground transition-colors min-w-0 truncate"
+                >
+                  {identities.map((identity) => {
+                    const displayEmail = subAddressTag
+                      ? generateSubAddress(identity.email, subAddressTag, subAddressDelimiter)
+                      : identity.email;
+                    return (
+                      <option key={identity.id} value={identity.id}>
+                        {identity.name ? `${identity.name} <${displayEmail}>` : displayEmail}
+                      </option>
+                    );
+                  })}
+                </select>
+              ) : (
+                <span className="text-sm text-foreground flex-1 truncate">
+                  {subAddressTag ? (
+                    <span className="font-mono">
+                      {generateSubAddress(primaryIdentity?.email || '', subAddressTag, subAddressDelimiter)}
+                    </span>
+                  ) : (
+                    <>
+                      {primaryIdentity?.name
+                        ? `${primaryIdentity.name} <${primaryIdentity.email}>`
+                        : primaryIdentity?.email || ''}
+                    </>
+                  )}
+                </span>
+              )}
+              {!fromOverrideEnabled && (
+                <SubAddressHelper
+                  baseEmail={
+                    (selectedIdentityId
+                      ? identities.find(id => id.id === selectedIdentityId)?.email
+                      : primaryIdentity?.email) || ''
+                  }
+                  recipientEmails={to.split(',').map(e => e.trim()).filter(Boolean)}
+                  onSelectTag={setSubAddressTag}
+                />
+              )}
+              {!fromOverrideEnabled && subAddressTag && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSubAddressTag('')}
+                  className="h-6 px-2 text-xs"
+                  title={t('remove_sub_address')}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant={fromOverrideEnabled ? 'outline' : 'ghost'}
+                size="sm"
+                onClick={() => {
+                  if (fromOverrideEnabled) {
+                    setFromOverrideEnabled(false);
+                  } else {
+                    setFromOverrideEnabled(true);
+                    if (!fromOverrideEmail && currentIdentity?.email) {
+                      setFromOverrideEmail(currentIdentity.email);
+                    }
+                    if (!fromOverrideName && currentIdentity?.name) {
+                      setFromOverrideName(currentIdentity.name);
+                    }
+                  }
+                }}
+                className="h-6 px-2 text-xs shrink-0"
+                title={t('from_override.toggle_tooltip')}
+              >
+                {fromOverrideEnabled ? t('from_override.toggle_on') : t('from_override.toggle_off')}
+              </Button>
+            </div>
+          </div>
+
+          {/* To field */}
+          <div className={cn("flex items-center gap-2 px-4 py-2.5 border-b border-border/50 relative", shakeField === 'to' && "animate-shake")}>
+            <span className="text-sm text-muted-foreground w-12 md:w-16 shrink-0">{t('to')}:</span>
+            <RecipientChipInput
+              value={to}
+              onChange={(v) => {
+                setTo(v);
+                if (validationErrors.to) setValidationErrors(prev => ({ ...prev, to: false }));
+              }}
+              inputRef={toInputRef}
+              placeholder={t('to_placeholder')}
+              field="to"
+              onAutocomplete={handleAutocomplete}
+              onAutoKeyDown={handleAutoKeyDown}
+              onAutoBlur={handleAutoBlur}
+              activeAutoField={activeAutoField}
+              autocompleteResults={autocompleteResults}
+              autoSelectedIndex={autoSelectedIndex}
+              dropdownRef={toDropdownRef}
+              onInsertAutocomplete={insertAutocomplete}
+              validationError={validationErrors.to}
+              validationMessage={t('validation.recipient_required')}
+              onTab={focusSubject}
+            />
+            <div className="flex gap-0.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCc(!showCc)}
+                className="text-xs h-7 px-2"
+              >
+                Cc
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowBcc(!showBcc)}
+                className="text-xs h-7 px-2"
+              >
+                Bcc
+              </Button>
+            </div>
+          </div>
+
+          {/* Cc field */}
+          {showCc && (
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50 relative">
+              <span className="text-sm text-muted-foreground w-12 md:w-16 shrink-0">{t('cc_label')}</span>
+              <RecipientChipInput
+                value={cc}
+                onChange={setCc}
+                inputRef={ccInputRef}
+                placeholder={t('cc_placeholder')}
+                field="cc"
+                onAutocomplete={handleAutocomplete}
+                onAutoKeyDown={handleAutoKeyDown}
+                onAutoBlur={handleAutoBlur}
+                activeAutoField={activeAutoField}
+                autocompleteResults={autocompleteResults}
+                autoSelectedIndex={autoSelectedIndex}
+                dropdownRef={ccDropdownRef}
+                onInsertAutocomplete={insertAutocomplete}
+              />
+            </div>
+          )}
+
+          {/* Bcc field */}
+          {showBcc && (
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50 relative">
+              <span className="text-sm text-muted-foreground w-12 md:w-16 shrink-0">{t('bcc_label')}</span>
+              <RecipientChipInput
+                value={bcc}
+                onChange={setBcc}
+                inputRef={bccInputRef}
+                placeholder={t('bcc_placeholder')}
+                field="bcc"
+                onAutocomplete={handleAutocomplete}
+                onAutoKeyDown={handleAutoKeyDown}
+                onAutoBlur={handleAutoBlur}
+                activeAutoField={activeAutoField}
+                autocompleteResults={autocompleteResults}
+                autoSelectedIndex={autoSelectedIndex}
+                dropdownRef={bccDropdownRef}
+                onInsertAutocomplete={insertAutocomplete}
+              />
+            </div>
+          )}
+
+          {/* Subject field */}
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <span className="text-sm text-muted-foreground w-12 md:w-16 shrink-0">{t('subject_label')}</span>
+            <Input
+              ref={subjectInputRef}
+              type="text"
+              placeholder={t('subject_placeholder')}
+              value={subject}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                if (validationErrors.subject) setValidationErrors(prev => ({ ...prev, subject: false }));
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab' && !e.shiftKey) {
+                  e.preventDefault();
+                  focusBody();
+                }
+              }}
+              className={cn(
+                "flex-1 border-0 focus-visible:ring-0 h-8 px-0 text-sm",
+                validationErrors.subject && "ring-2 ring-red-500 dark:ring-red-400"
+              )}
+              aria-invalid={validationErrors.subject || undefined}
+            />
+          </div>
+        </div>
+
+        {/* Body */}
+        {plainTextMode ? (
+          <textarea
+            ref={bodyRef}
+            value={body}
+            onChange={(e) => {
+              setBody(e.target.value);
+              if (validationErrors.body) setValidationErrors(prev => ({ ...prev, body: false }));
+            }}
+            placeholder={t('body_placeholder')}
+            className={cn(
+              "w-full min-h-[300px] px-4 py-3 text-sm text-foreground bg-transparent resize-y focus:outline-none font-mono",
+              validationErrors.body && "ring-2 ring-red-500 dark:ring-red-400 rounded"
+            )}
+            style={{ height: 'calc(100vh - 350px)' }}
+            aria-invalid={validationErrors.body || undefined}
+          />
+        ) : (
+          <div ref={editorContainerRef}>
+            <RichTextEditor
+              content={body}
+              onChange={(html) => {
+                setBody(html);
+                if (validationErrors.body) setValidationErrors(prev => ({ ...prev, body: false }));
+              }}
+              onImageUpload={handleImageUpload}
+              placeholder={t('body_placeholder')}
+              hasError={validationErrors.body}
+              onEditorReady={(ed) => { editorRef.current = ed; }}
+            />
+          </div>
+        )}
+
+        {/* Hide the visual signature preview when the signature has already been
+            embedded into the body above the quote (otherwise it would appear twice). */}
+        {((mode === 'reply' || mode === 'replyAll' || mode === 'forward') && signaturePosition === 'above_quote') ? null
+          : plainTextMode ? (
+          getPlainTextSignature(signatureIdentity) ? (
+            <div className="px-4 pb-3 text-sm leading-6 text-muted-foreground break-words whitespace-pre-wrap font-mono">
+              {signatureSeparatorEnabled ? '-- \n' : ''}{getPlainTextSignature(signatureIdentity)}
+            </div>
+          ) : null
+        ) : composerSignatureHtml ? (
+          <div
+            className="px-4 pb-3 text-sm leading-6 text-foreground break-words [&_a]:text-primary [&_a]:underline-offset-2 [&_a:hover]:underline"
+            dangerouslySetInnerHTML={{ __html: `${signatureSeparatorEnabled ? '<div>-- </div>' : ''}${composerSignatureHtml}` }}
+          />
+        ) : null}
+      </div>
+
+        {/* Attachments */}
+        {attachments.length > 0 && (
+          <div className="px-4 py-2 border-t shrink-0">
+            <div className="flex flex-wrap gap-2">
+              {(showAllAttachments ? attachments : attachments.slice(0, 3)).map((att, index) => (
+                <div
+                  key={index}
+                  className={cn(
+                    "relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm overflow-hidden",
+                    att.error ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-foreground"
+                  )}
+                >
+                  {att.uploading && (
+                    <div className="absolute inset-0 pointer-events-none">
+                      <div className="h-full bg-primary/10 animate-pulse" />
+                      <div className="absolute bottom-0 left-0 h-0.5 bg-primary/40 animate-[indeterminate_1.5s_ease-in-out_infinite]" style={{ width: '40%' }} />
+                    </div>
+                  )}
+                  <div className="relative flex items-center gap-2">
+                    {att.uploading ? (
+                      <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                    ) : att.error ? (
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <Paperclip className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <span className="max-w-[150px] md:max-w-[200px] truncate">{att.name}</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      ({formatFileSize(att.size)})
+                    </span>
+                    <button
+                      onClick={() => removeAttachment(index)}
+                      className="ml-1 hover:text-red-500 min-w-[20px] min-h-[20px] flex items-center justify-center"
+                      title={att.uploading ? t('upload_cancel') : undefined}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {attachments.length > 3 && (
+                <button
+                  onClick={() => setShowAllAttachments(prev => !prev)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showAllAttachments ? t('show_less') : `+${attachments.length - 3}`}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* AI variant picker */}
+        {aiVariants && aiVariants.length > 1 && (
+          <div className="border-t bg-muted/20 shrink-0">
+            <div className="flex items-center justify-between px-4 py-2">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-primary" />
+                AI Suggestions
+              </span>
+              <button type="button" onClick={() => setAiVariants(null)} title="Dismiss">
+                <X className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 px-4 pb-3">
+              {aiVariants.map((variant, idx) => {
+                const preview = variant.text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+                return (
+                  <div key={idx} className="flex flex-col gap-1.5 rounded-md border border-border bg-background p-3">
+                    <div className="text-xs font-semibold text-primary">Option {idx + 1}</div>
+                    {variant.subject && (
+                      <div className="text-xs font-medium truncate" title={variant.subject}>{variant.subject}</div>
+                    )}
+                    <p className="text-xs text-muted-foreground line-clamp-3 flex-1">
+                      {preview}{preview.length >= 120 ? '…' : ''}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => applyVariant(variant)}
+                      className="mt-1 w-full px-2 py-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      Use this
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* AI prompt bar */}
+        <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/30 shrink-0">
+          <Sparkles className="w-4 h-4 text-primary shrink-0" />
+          <input
+            type="text"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiDraft(); } }}
+            placeholder="Ask AI to draft or improve your email…"
+            disabled={aiLoading}
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={toggleRecording}
+            disabled={aiLoading}
+            title={isRecording ? 'Stop recording' : 'Speak your prompt'}
+            className={cn(
+              "flex items-center justify-center w-7 h-7 rounded-full transition-colors shrink-0",
+              isRecording
+                ? "bg-red-500 text-white animate-pulse"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            )}
+          >
+            {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={handleAiDraft}
+            disabled={!aiPrompt.trim() || aiLoading}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+            {aiLoading ? 'Drafting…' : 'Draft'}
+          </button>
+        </div>
+
+        {/* Bottom toolbar */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-t bg-background shrink-0">
+          {/* Left side actions */}
+          <div className="flex items-center gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              accept="*/*"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-9 w-9"
+              title={t('attach')}
+            >
+              <Paperclip className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowTemplatePicker(true)}
+              title={t('use_template')}
+              className="h-9 w-9"
+            >
+              <FileText className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSaveAsTemplate(true)}
+              title={t('save_as_template')}
+              className="h-9 w-9"
+            >
+              <BookmarkPlus className="w-4 h-4" />
+            </Button>
+
+            {/* S/MIME toggles */}
+            {canSmimeSign && (
+              <>
+                <div className="w-px h-5 bg-border mx-1" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSmimeSign(v => !v)}
+                  className={cn("h-9 w-9", smimeSign_ && "bg-primary/10 text-primary")}
+                  title={smimeSign_ ? t('smime_sign_on') : t('smime_sign_off')}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSmimeEncrypt(v => !v)}
+                  disabled={!canSmimeEncrypt}
+                  className={cn("h-9 w-9", smimeEncrypt_ && "bg-primary/10 text-primary")}
+                  title={smimeEncrypt_ ? t('smime_encrypt_on') : canSmimeEncrypt ? t('smime_encrypt_off') : t('smime_encrypt_unavailable')}
+                >
+                  <Lock className="w-4 h-4" />
+                </Button>
+              </>
+            )}
+            <PluginSlot name="composer-toolbar" />
+          </div>
+
+          {/* Right side - Discard + Send (desktop) */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="text-sm text-muted-foreground hover:text-red-500 transition-colors px-2 py-1"
+            >
+              {t('discard')}
+            </button>
+            <Button
+              onClick={() => handleSend()}
+              disabled={!canSend}
+              title={getSendTooltip()}
+              className="hidden md:inline-flex"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              {t('send')}
+            </Button>
+          </div>
+        </div>
+
+      {showTemplatePicker && (
+        <TemplatePicker
+          isOpen={showTemplatePicker}
+          onClose={() => setShowTemplatePicker(false)}
+          onSelect={handleTemplateSelect}
+        />
+      )}
+
+      {showSaveAsTemplate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div
+            ref={saveTemplateModalRef}
+            role="dialog"
+            aria-modal="true"
+            className="bg-background border border-border rounded-lg shadow-xl w-full max-w-lg p-6 animate-in zoom-in-95 duration-200"
+          >
+            <h3 className="text-lg font-semibold text-foreground mb-4">{t('save_as_template')}</h3>
+            <TemplateForm
+              initialData={{
+                subject,
+                body,
+                to: to.split(',').map(s => s.trim()).filter(Boolean),
+                cc: cc.split(',').map(s => s.trim()).filter(Boolean),
+                bcc: bcc.split(',').map(s => s.trim()).filter(Boolean),
+              }}
+              onSave={(data) => {
+                addTemplate(data);
+                setShowSaveAsTemplate(false);
+              }}
+              onCancel={() => setShowSaveAsTemplate(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* S/MIME passphrase prompt */}
+      {smimePassphrasePrompt && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-[1px] flex items-center justify-center z-[60] p-4 animate-in fade-in duration-150"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-background border border-border rounded-lg shadow-xl w-full max-w-sm animate-in zoom-in-95 duration-200"
+          >
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-foreground">{t('smime_unlock_title')}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{t('smime_unlock_message')}</p>
+              <input
+                type="password"
+                autoFocus
+                value={smimePassphraseInput}
+                onChange={(e) => {
+                  setSmimePassphraseInput(e.target.value);
+                  setSmimePassphraseError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && smimePassphraseInput) {
+                    smimePassphrasePrompt.resolve(smimePassphraseInput);
+                  }
+                }}
+                placeholder={t('smime_passphrase_placeholder')}
+                className="mt-3 w-full px-3 py-2 border border-border rounded-md text-sm bg-background text-foreground outline-none focus:ring-2 focus:ring-primary"
+              />
+              {smimePassphraseError && (
+                <p className="mt-1 text-xs text-red-500">{smimePassphraseError}</p>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 pb-6">
+              <Button variant="outline" onClick={() => {
+                smimePassphrasePrompt.reject();
+                setSmimePassphrasePrompt(null);
+                setSmimePassphraseInput('');
+                setSmimePassphraseError('');
+              }}>
+                {t('cancel')}
+              </Button>
+              <Button
+                disabled={!smimePassphraseInput}
+                onClick={() => smimePassphrasePrompt.resolve(smimePassphraseInput)}
+              >
+                {t('smime_unlock_button')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAttachmentWarning && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-[1px] flex items-center justify-center z-[60] p-4 animate-in fade-in duration-150"
+          onClick={() => setShowAttachmentWarning(false)}
+        >
+          <div
+            ref={attachmentWarningRef}
+            role="alertdialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-background border border-border rounded-lg shadow-xl w-full max-w-md animate-in zoom-in-95 duration-200"
+          >
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-foreground">{t('forgot_attachment.title')}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {t('forgot_attachment.message', { keyword: attachmentWarningKeyword })}
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 pb-6">
+              <Button variant="outline" onClick={() => setShowAttachmentWarning(false)}>
+                {t('forgot_attachment.back')}
+              </Button>
+              <Button onClick={() => { setShowAttachmentWarning(false); handleSend(true); }}>
+                {t('forgot_attachment.send_anyway')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCloseDialog && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-[1px] flex items-center justify-center z-[60] p-4 animate-in fade-in duration-150"
+          onClick={() => setShowCloseDialog(false)}
+        >
+          <div
+            ref={closeDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-background border border-border rounded-lg shadow-xl w-full max-w-md animate-in zoom-in-95 duration-200"
+          >
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-foreground">{t('close_draft_title')}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">{t('close_draft_message')}</p>
+            </div>
+            <div className="flex items-center justify-end gap-3 px-6 pb-6">
+              <Button variant="outline" onClick={() => setShowCloseDialog(false)}>
+                {t('cancel')}
+              </Button>
+              <Button variant="destructive" onClick={handleDiscardAndClose}>
+                {t('discard')}
+              </Button>
+              <Button onClick={handleSaveDraftAndClose}>
+                <Save className="w-4 h-4 mr-2" />
+                {t('save_draft')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+      <PluginSlot
+        name="composer-sidebar-right"
+        className="hidden md:flex shrink-0 h-full overflow-hidden border-l border-border"
+      />
+    </div>
+  );
+}
+
+const AutocompleteDropdown = React.forwardRef<HTMLDivElement, {
+  id: string;
+  results: Array<{ name: string; email: string }>;
+  selectedIndex: number;
+  onSelect: (email: string) => void;
+}>(function AutocompleteDropdown({ id, results, selectedIndex, onSelect }, ref) {
+  return (
+    <div ref={ref} id={id} role="listbox" className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+      {results.map((r, i) => (
+        <button
+          key={i}
+          id={`autocomplete-option-${i}`}
+          type="button"
+          role="option"
+          aria-selected={i === selectedIndex}
+          className={cn(
+            "w-full px-3 py-2 text-left text-sm flex items-center gap-2",
+            i === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+          )}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onSelect(r.email);
+          }}
+        >
+          <span className="font-medium truncate">{r.name || r.email}</span>
+          {r.name && (
+            <span className="text-muted-foreground truncate">&lt;{r.email}&gt;</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+});
+
+function RecipientChipInput({
+  value,
+  onChange,
+  inputRef,
+  placeholder,
+  field,
+  onAutocomplete,
+  onAutoKeyDown,
+  onAutoBlur,
+  activeAutoField,
+  autocompleteResults,
+  autoSelectedIndex,
+  dropdownRef,
+  onInsertAutocomplete,
+  validationError,
+  validationMessage,
+  onTab,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  placeholder: string;
+  field: 'to' | 'cc' | 'bcc';
+  onAutocomplete: (value: string, field: 'to' | 'cc' | 'bcc') => void;
+  onAutoKeyDown: (e: React.KeyboardEvent, field: 'to' | 'cc' | 'bcc') => void;
+  onAutoBlur: (e: React.FocusEvent, field: 'to' | 'cc' | 'bcc') => void;
+  activeAutoField: 'to' | 'cc' | 'bcc' | null;
+  autocompleteResults: Array<{ name: string; email: string }>;
+  autoSelectedIndex: number;
+  dropdownRef: React.RefObject<HTMLDivElement | null>;
+  onInsertAutocomplete: (email: string, field: 'to' | 'cc' | 'bcc') => void;
+  validationError?: boolean;
+  validationMessage?: string;
+  onTab?: () => void;
+}) {
+  const allParts = value.split(',').map(s => s.trim()).filter(Boolean);
+  const hasTrailingComma = value.trimEnd().endsWith(',');
+  const chips = hasTrailingComma ? allParts : allParts.slice(0, -1);
+  const inputText = hasTrailingComma ? '' : (allParts[allParts.length - 1] || '');
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newInputText = e.target.value;
+    const chipPart = chips.length > 0 ? chips.join(', ') + ', ' : '';
+    const newValue = chipPart + newInputText;
+    onChange(newValue);
+    onAutocomplete(newValue, field);
+  };
+
+  const commitCurrentInput = () => {
+    if (inputText.trim()) {
+      const newChips = [...chips, inputText.trim()];
+      onChange(newChips.join(', ') + ', ');
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (activeAutoField === field && autocompleteResults.length > 0) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape' ||
+          (e.key === 'Enter' && autoSelectedIndex >= 0)) {
+        onAutoKeyDown(e, field);
+        return;
+      }
+    }
+
+    if ((e.key === ' ' || e.key === 'Enter' || e.key === 'Tab') && inputText.trim()) {
+      if (e.key !== 'Tab') e.preventDefault();
+      commitCurrentInput();
+      if (e.key === 'Tab' && onTab) {
+        e.preventDefault();
+        setTimeout(() => onTab(), 0);
+      } else {
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
+      return;
+    }
+
+    if (e.key === 'Tab' && !e.shiftKey && onTab) {
+      e.preventDefault();
+      onTab();
+      return;
+    }
+
+    if (e.key === 'Backspace' && !inputText && chips.length > 0) {
+      const lastChip = chips[chips.length - 1];
+      const remainingChips = chips.slice(0, -1);
+      const chipPart = remainingChips.length > 0 ? remainingChips.join(', ') + ', ' : '';
+      onChange(chipPart + lastChip);
+      return;
+    }
+  };
+
+  const handleChipClick = (index: number) => {
+    const chipEmail = chips[index];
+    const remainingChips = chips.filter((_, i) => i !== index);
+    const chipPart = remainingChips.length > 0 ? remainingChips.join(', ') + ', ' : '';
+    onChange(chipPart + chipEmail);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const handleChipRemove = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const remainingChips = chips.filter((_, i) => i !== index);
+    if (remainingChips.length > 0) {
+      onChange(remainingChips.join(', ') + ', ' + inputText);
+    } else {
+      onChange(inputText);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent) => {
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (relatedTarget && dropdownRef.current?.contains(relatedTarget)) {
+      return;
+    }
+    if (inputText.trim()) {
+      const newChips = [...chips, inputText.trim()];
+      onChange(newChips.join(', ') + ', ');
+    }
+    onAutoBlur(e, field);
+  };
+
+  return (
+    <div className="flex-1 relative min-w-0">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-1 min-h-[32px] cursor-text",
+          validationError && "ring-2 ring-red-500 dark:ring-red-400 rounded"
+        )}
+        onClick={() => inputRef.current?.focus()}
+      >
+        {chips.map((chip, i) => (
+          <span
+            key={`${chip}-${i}`}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-sm border border-border cursor-pointer hover:bg-accent transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleChipClick(i);
+            }}
+          >
+            <span className="truncate max-w-[200px]">{chip}</span>
+            <button
+              type="button"
+              className="flex items-center justify-center w-4 h-4 rounded-full hover:bg-muted-foreground/20 transition-colors"
+              onClick={(e) => handleChipRemove(i, e)}
+              tabIndex={-1}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder={chips.length === 0 ? placeholder : ''}
+          value={inputText}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
+          className="flex-1 min-w-[120px] border-0 outline-none h-7 text-sm bg-transparent text-foreground placeholder:text-muted-foreground"
+          role="combobox"
+          aria-expanded={activeAutoField === field && autocompleteResults.length > 0}
+          aria-autocomplete="list"
+          aria-controls={activeAutoField === field ? `autocomplete-${field}` : undefined}
+          aria-activedescendant={activeAutoField === field && autoSelectedIndex >= 0 ? `autocomplete-option-${autoSelectedIndex}` : undefined}
+          aria-invalid={validationError || undefined}
+        />
+      </div>
+      {validationError && validationMessage && (
+        <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{validationMessage}</p>
+      )}
+      {activeAutoField === field && autocompleteResults.length > 0 && (
+        <AutocompleteDropdown
+          ref={dropdownRef}
+          id={`autocomplete-${field}`}
+          results={autocompleteResults}
+          selectedIndex={autoSelectedIndex}
+          onSelect={(email) => onInsertAutocomplete(email, field)}
+        />
+      )}
+    </div>
+  );
+}

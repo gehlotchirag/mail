@@ -1,13 +1,18 @@
-/target
+# Root-level ignores
+.DS_Store
+target/
 *.failed
 *_failed
 run.sh
-.*
-!.gitignore
-!.gitattributes
-!.github
 
-# Flux runtime files — contain credentials or are build artifacts
-config.json
-webui-flux.zip
-*.zip
+# Webui build output
+webui/.next/
+webui/node_modules/
+webui/.env.local
+webui/.env.production
+
+# Mail server runtime files (credentials / build artifacts)
+mail/config.json
+mail/webui-flux.zip
+mail/target/
+mail/*.zip

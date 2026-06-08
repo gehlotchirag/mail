@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arham Workspace — Tools Built for Growing Teams</title>
+  <meta name="description" content="Arham Workspace delivers powerful tools for modern teams — from people management to professional email." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:      #1a1a2e;
+      --accent:     #6c63ff;
+      --accent2:    #ff6584;
+      --light:      #f7f7fb;
+      --muted:      #6b7280;
+      --card-bg:    #ffffff;
+      --border:     #e5e7eb;
+      --radius:     16px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--light);
+      color: var(--brand);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(1.5rem, 5vw, 4rem);
+      height: 64px;
+      background: rgba(247,247,251,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-size: 1.2rem; font-weight: 700; letter-spacing: -0.3px;
+      color: var(--brand); text-decoration: none;
+    }
+    .nav-logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a { font-size: 0.875rem; font-weight: 500; color: var(--muted); text-decoration: none; transition: color .2s; }
+    .nav-links a:hover { color: var(--brand); }
+    .nav-cta {
+      font-size: 0.85rem; font-weight: 600;
+      padding: .45rem 1.1rem; border-radius: 8px;
+      background: var(--accent); color: #fff;
+      text-decoration: none; transition: opacity .2s;
+    }
+    .nav-cta:hover { opacity: .85; }
+
+    /* ── HERO ── */
+    .hero {
+      text-align: center;
+      padding: clamp(4rem, 10vw, 8rem) clamp(1.5rem, 5vw, 4rem) clamp(3rem, 6vw, 5rem);
+    }
+    .hero-badge {
+      display: inline-block; margin-bottom: 1.5rem;
+      padding: .35rem 1rem; border-radius: 100px;
+      background: rgba(108,99,255,.1); color: var(--accent);
+      font-size: .8rem; font-weight: 600; letter-spacing: .4px;
+    }
+    .hero h1 {
+      font-size: clamp(2.4rem, 5vw, 4rem);
+      font-weight: 800; letter-spacing: -1.5px;
+      line-height: 1.1; max-width: 700px; margin: 0 auto 1.25rem;
+    }
+    .hero h1 .highlight {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.1rem; color: var(--muted); max-width: 500px;
+      margin: 0 auto 2.5rem; font-weight: 400;
+    }
+    .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: .4rem;
+      padding: .8rem 1.8rem; border-radius: 10px;
+      background: var(--accent); color: #fff;
+      font-size: .95rem; font-weight: 600; text-decoration: none;
+      transition: transform .15s, box-shadow .15s;
+      box-shadow: 0 4px 14px rgba(108,99,255,.35);
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,99,255,.45); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: .4rem;
+      padding: .8rem 1.8rem; border-radius: 10px;
+      background: var(--card-bg); color: var(--brand);
+      font-size: .95rem; font-weight: 600; text-decoration: none;
+      border: 1.5px solid var(--border);
+      transition: border-color .15s, transform .15s;
+    }
+    .btn-secondary:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+    /* ── STATS STRIP ── */
+    .stats {
+      display: flex; justify-content: center; gap: clamp(2rem, 6vw, 5rem);
+      padding: 2.5rem clamp(1.5rem, 5vw, 4rem);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      background: var(--card-bg); flex-wrap: wrap;
+    }
+    .stat { text-align: center; }
+    .stat-num { font-size: 1.8rem; font-weight: 800; color: var(--brand); letter-spacing: -1px; }
+    .stat-label { font-size: .8rem; color: var(--muted); font-weight: 500; margin-top: .15rem; }
+
+    /* ── PRODUCTS ── */
+    .products {
+      max-width: 1100px; margin: 0 auto;
+      padding: clamp(4rem, 8vw, 7rem) clamp(1.5rem, 5vw, 2rem);
+    }
+    .section-label {
+      text-align: center; font-size: .8rem; font-weight: 600;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--accent); margin-bottom: .75rem;
+    }
+    .section-title {
+      text-align: center; font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+      font-weight: 800; letter-spacing: -1px; margin-bottom: .75rem;
+    }
+    .section-sub {
+      text-align: center; color: var(--muted); font-size: 1rem;
+      max-width: 480px; margin: 0 auto 3.5rem;
+    }
+
+    .product-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+      gap: 1.75rem;
+    }
+    @media (max-width: 960px) {
+      .product-grid { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+    }
+
+    .product-card {
+      background: var(--card-bg); border-radius: var(--radius);
+      border: 1.5px solid var(--border); overflow: hidden;
+      transition: transform .2s, box-shadow .2s;
+      display: flex; flex-direction: column;
+    }
+    .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(26,26,46,.1); }
+
+    .card-header {
+      padding: 2rem 2rem 1.5rem;
+      display: flex; align-items: flex-start; gap: 1rem;
+    }
+    .card-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; flex-shrink: 0;
+    }
+    .icon-orbit  { background: linear-gradient(135deg, #6c63ff22, #6c63ff44); }
+    .icon-inbox  { background: linear-gradient(135deg, #ff658422, #ff6584aa); }
+
+    .card-meta { flex: 1; }
+    .card-tag {
+      display: inline-block; font-size: .7rem; font-weight: 600;
+      letter-spacing: .5px; text-transform: uppercase;
+      padding: .2rem .65rem; border-radius: 6px; margin-bottom: .4rem;
+    }
+    .tag-orbit { background: rgba(108,99,255,.1); color: var(--accent); }
+    .tag-inbox { background: rgba(255,101,132,.1); color: var(--accent2); }
+    .card-name { font-size: 1.4rem; font-weight: 700; letter-spacing: -.4px; }
+    .card-desc { font-size: .9rem; color: var(--muted); margin-top: .3rem; }
+
+    .card-body { padding: 0 2rem 1.5rem; flex: 1; }
+    .feature-list { list-style: none; display: flex; flex-direction: column; gap: .65rem; }
+    .feature-list li {
+      display: flex; align-items: center; gap: .6rem;
+      font-size: .875rem; color: #374151;
+    }
+    .feature-list li::before {
+      content: ''; width: 18px; height: 18px; flex-shrink: 0;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      background-size: contain;
+    }
+    .check-orbit li::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%236c63ff22'/%3E%3Cpath d='M6 10l3 3 5-5' stroke='%236c63ff' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center; }
+    .check-inbox li::before  { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%23ff658422'/%3E%3Cpath d='M6 10l3 3 5-5' stroke='%23ff6584' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center; }
+
+    .card-footer {
+      padding: 1.25rem 2rem 2rem;
+      display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
+    }
+    .card-cta {
+      flex: 1; text-align: center;
+      padding: .75rem 1.25rem; border-radius: 10px;
+      font-size: .9rem; font-weight: 600; text-decoration: none;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .cta-orbit {
+      background: var(--accent); color: #fff;
+      box-shadow: 0 4px 12px rgba(108,99,255,.3);
+    }
+    .cta-orbit:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(108,99,255,.4); }
+    .cta-inbox {
+      background: var(--accent2); color: #fff;
+      box-shadow: 0 4px 12px rgba(255,101,132,.3);
+    }
+    .cta-inbox:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(255,101,132,.4); }
+    .cta-ghost {
+      flex: 0; padding: .75rem 1.25rem; border-radius: 10px;
+      border: 1.5px solid var(--border); color: var(--muted);
+      font-size: .9rem; font-weight: 500; text-decoration: none;
+      transition: border-color .15s, color .15s;
+    }
+    .cta-ghost:hover { border-color: var(--brand); color: var(--brand); }
+
+    /* ── WHY SECTION ── */
+    .why {
+      background: var(--brand); color: #fff;
+      padding: clamp(4rem, 8vw, 7rem) clamp(1.5rem, 5vw, 4rem);
+      text-align: center;
+    }
+    .why h2 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 800; letter-spacing: -1px; margin-bottom: .75rem; }
+    .why p { color: rgba(255,255,255,.65); max-width: 480px; margin: 0 auto 3rem; font-size: 1rem; }
+    .pillars {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem; max-width: 900px; margin: 0 auto;
+    }
+    .pillar {
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+      border-radius: 14px; padding: 1.75rem 1.5rem; text-align: left;
+    }
+    .pillar-icon { font-size: 1.6rem; margin-bottom: .75rem; }
+    .pillar h3 { font-size: 1rem; font-weight: 700; margin-bottom: .4rem; }
+    .pillar p { font-size: .85rem; color: rgba(255,255,255,.55); line-height: 1.55; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 2.5rem clamp(1.5rem, 5vw, 4rem);
+      display: flex; align-items: center; justify-content: space-between;
+      border-top: 1px solid var(--border); flex-wrap: wrap; gap: 1rem;
+    }
+    footer .logo { font-size: 1rem; font-weight: 700; color: var(--brand); text-decoration: none; }
+    footer .logo span { color: var(--accent); }
+    footer p { font-size: .8rem; color: var(--muted); }
+    .footer-links { display: flex; gap: 1.5rem; list-style: none; }
+    .footer-links a { font-size: .8rem; color: var(--muted); text-decoration: none; }
+    .footer-links a:hover { color: var(--brand); }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a class="nav-logo" href="/">Arham<span>.</span>Workspace</a>
+    <ul class="nav-links">
+      <li><a href="#products">Products</a></li>
+      <li><a href="#why">Why Us</a></li>
+    </ul>
+    <a class="nav-cta" href="https://peopleorbit.com" target="_blank">Get Started →</a>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-badge">Building Tools for Growing Teams</div>
+    <h1>Simple software for<br/><span class="highlight">ambitious businesses</span></h1>
+    <p>Two focused products. Zero complexity. Built to help your team move faster from day one.</p>
+    <div class="hero-actions">
+      <a class="btn-primary" href="https://peopleorbit.com" target="_blank">
+        Explore People Orbit →
+      </a>
+      <a class="btn-secondary" href="https://app.arhamworkspace.tech">
+        Try Inbox →
+      </a>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat"><div class="stat-num">2</div><div class="stat-label">Products</div></div>
+    <div class="stat"><div class="stat-num">99.9%</div><div class="stat-label">Uptime SLA</div></div>
+    <div class="stat"><div class="stat-num">India</div><div class="stat-label">Hosted &amp; Operated</div></div>
+    <div class="stat"><div class="stat-num">0</div><div class="stat-label">Hidden Fees</div></div>
+  </div>
+
+  <!-- PRODUCTS -->
+  <section class="products" id="products">
+    <div class="section-label">Our Products</div>
+    <h2 class="section-title">Everything your team needs</h2>
+    <p class="section-sub">Two tools, each built to solve one problem — and solve it well.</p>
+
+    <div class="product-grid">
+
+      <!-- People Orbit -->
+      <div class="product-card">
+        <div class="card-header">
+          <div class="card-icon icon-orbit">🪐</div>
+          <div class="card-meta">
+            <span class="card-tag tag-orbit">People Management</span>
+            <div class="card-name">People Orbit</div>
+            <div class="card-desc">HR &amp; people ops, simplified for modern teams.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <ul class="feature-list check-orbit">
+            <li>Employee directory &amp; onboarding workflows</li>
+            <li>Leave &amp; attendance management</li>
+            <li>Performance reviews &amp; goal tracking</li>
+            <li>Team announcements &amp; org chart</li>
+            <li>Payroll-ready reports in one click</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <a class="card-cta cta-orbit" href="https://peopleorbit.com" target="_blank">Sign Up Free →</a>
+          <a class="cta-ghost" href="https://peopleorbit.com" target="_blank">Learn more</a>
+        </div>
+      </div>
+
+      <!-- Inbox -->
+      <div class="product-card">
+        <div class="card-header">
+          <div class="card-icon icon-inbox">✉️</div>
+          <div class="card-meta">
+            <span class="card-tag tag-inbox">Business Email</span>
+            <div class="card-name">Inbox</div>
+            <div class="card-desc">Professional email hosting on your own domain.</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <ul class="feature-list check-inbox">
+            <li>Custom domain email (you@yourbusiness.com)</li>
+            <li>Fast, clean webmail — no ads, no tracking</li>
+            <li>SPF, DKIM &amp; DMARC fully configured</li>
+            <li>IMAP / SMTP access with any email client</li>
+            <li>Sieve rules &amp; filters built in</li>
+          </ul>
+        </div>
+        <div class="card-footer">
+          <a class="card-cta cta-inbox" href="https://app.arhamworkspace.tech">Access Inbox →</a>
+          <a class="cta-ghost" href="https://app.arhamworkspace.tech">Learn more</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- WHY -->
+  <section class="why" id="why">
+    <h2>Why Arham Workspace?</h2>
+    <p>We build lean, focused tools — not bloated suites. Your data stays in India, your team stays productive.</p>
+    <div class="pillars">
+      <div class="pillar">
+        <div class="pillar-icon">🔒</div>
+        <h3>Data Stays in India</h3>
+        <p>All servers are hosted in Bangalore. Your business data never leaves the country.</p>
+      </div>
+      <div class="pillar">
+        <div class="pillar-icon">⚡</div>
+        <h3>Lightweight &amp; Fast</h3>
+        <p>No bloat. Pages load fast, APIs respond fast, your team stays unblocked.</p>
+      </div>
+      <div class="pillar">
+        <div class="pillar-icon">💸</div>
+        <h3>Honest Pricing</h3>
+        <p>Pay for what you use. No hidden fees, no surprise overages at month end.</p>
+      </div>
+      <div class="pillar">
+        <div class="pillar-icon">🤝</div>
+        <h3>Real Support</h3>
+        <p>Talk to the people who built the product. No ticket queues, no bots.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <a class="logo" href="/">Arham<span>.</span>Workspace</a>
+    <ul class="footer-links">
+      <li><a href="https://peopleorbit.com" target="_blank">People Orbit</a></li>
+      <li><a href="https://app.arhamworkspace.tech">Inbox</a></li>
+      <li><a href="mailto:hello@arhamworkspace.tech">Contact</a></li>
+    </ul>
+    <p>© 2026 Arham Workspace. Made in India 🇮🇳</p>
+  </footer>
+
+</body>
+</html>
