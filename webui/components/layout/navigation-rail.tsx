@@ -438,7 +438,7 @@ export function NavigationRail({
               className={cn(
                 "relative flex items-center gap-2.5 rounded-md transition-colors duration-150",
                 collapsed
-                  ? "justify-center w-10 h-10"
+                  ? "flex-col justify-center items-center w-full py-1.5 gap-0.5"
                   : "px-2.5 text-sm",
                 "max-lg:min-h-[44px]",
                 isActive
@@ -446,11 +446,13 @@ export function NavigationRail({
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
               aria-current={isActive ? "page" : undefined}
-              title={collapsed ? t(item.labelKey) : undefined}
               style={collapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
             >
               <Icon className={cn("w-[18px] h-[18px] flex-shrink-0", isActive && "text-primary")} />
-              {!collapsed && <span className="truncate">{t(item.labelKey)}</span>}
+              {collapsed
+                ? <span className="text-[9px] font-medium leading-tight truncate max-w-full text-center">{t(item.labelKey)}</span>
+                : <span className="truncate">{t(item.labelKey)}</span>
+              }
               {item.badge != null && item.badge > 0 && (
                 <span className={cn(
                   "absolute flex items-center justify-center min-w-[16px] h-4 text-[10px] font-bold rounded-full bg-red-500 text-white px-1",
@@ -491,18 +493,20 @@ export function NavigationRail({
               className={cn(
                 "relative flex items-center gap-2.5 rounded-md transition-colors duration-150",
                 collapsed
-                  ? "justify-center w-10 h-10"
+                  ? "flex-col justify-center items-center w-full py-1.5 gap-0.5"
                   : "px-2.5 text-sm",
                 "max-lg:min-h-[44px]",
                 isActive
                   ? "bg-primary/10 text-primary font-medium"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
-              title={collapsed ? app.name : undefined}
               style={collapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
             >
               {AppIcon ? <AppIcon className={cn("w-[18px] h-[18px] flex-shrink-0", isActive && "text-primary")} /> : null}
-              {!collapsed && <span className="truncate">{app.name}</span>}
+              {collapsed
+                ? <span className="text-[9px] font-medium leading-tight truncate max-w-full text-center">{app.name}</span>
+                : <span className="truncate">{app.name}</span>
+              }
             </button>
           );
         })}
@@ -514,16 +518,18 @@ export function NavigationRail({
             className={cn(
               "relative flex items-center gap-2.5 rounded-md transition-colors duration-150",
               collapsed
-                ? "justify-center w-10 h-10"
+                ? "flex-col justify-center items-center w-full py-1.5 gap-0.5"
                 : "px-2.5 text-sm",
               "max-lg:min-h-[44px]",
               "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
-            title={collapsed ? t("add_app") : undefined}
             style={collapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
           >
             <Plus className="w-[18px] h-[18px] flex-shrink-0" />
-            {!collapsed && <span className="truncate">{t("add_app")}</span>}
+            {collapsed
+              ? <span className="text-[9px] font-medium leading-tight truncate max-w-full text-center">{t("add_app")}</span>
+              : <span className="truncate">{t("add_app")}</span>
+            }
           </button>
         )}
       </nav>

@@ -1,6 +1,6 @@
 {
   "login": {
-    "title": "Webmail",
+    "title": "Inbox Mail",
     "username_label": "Email",
     "username_placeholder": "user@example.com",
     "password_label": "Password",

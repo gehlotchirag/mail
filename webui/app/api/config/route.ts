@@ -21,7 +21,7 @@ export async function GET() {
   logger.debug('Config requested');
   await configManager.ensureLoaded();
 
-  const appName = configManager.get<string>('appName') || process.env.NEXT_PUBLIC_APP_NAME || 'Webmail';
+  const appName = configManager.get<string>('appName') || process.env.NEXT_PUBLIC_APP_NAME || 'Inbox Mail';
   const jmapServerUrl = configManager.get<string>('jmapServerUrl') || process.env.NEXT_PUBLIC_JMAP_SERVER_URL || '';
   const oauthEnabled = configManager.get<boolean>('oauthEnabled', false);
   const oauthOnly = oauthEnabled && configManager.get<boolean>('oauthOnly', false);

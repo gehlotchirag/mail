@@ -153,7 +153,7 @@ export function DashboardTab() {
         <SettingItem label="OAuth" description="OAuth authentication provider">
           <ToggleSwitch checked={!!config?.oauthEnabled} onChange={() => {}} disabled />
         </SettingItem>
-        <SettingItem label="Stalwart Integration" description="Stalwart mail server features">
+        <SettingItem label="Mail Server Integration" description="Mail server-specific features">
           <ToggleSwitch checked={config?.stalwartFeaturesEnabled !== false} onChange={() => {}} disabled />
         </SettingItem>
       </SettingsSection>

@@ -24,6 +24,7 @@ import {
   Store,
   Menu,
   X,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useConfig } from '@/hooks/use-config';
@@ -62,6 +63,12 @@ const NAV_GROUPS: ReadonlyArray<{
       { tab: 'plugins', label: 'Plugins', icon: Puzzle },
       { tab: 'themes', label: 'Themes', icon: SwatchBook },
       { tab: 'marketplace', label: 'Marketplace', icon: Store },
+    ],
+  },
+  {
+    label: 'Migration',
+    items: [
+      { tab: 'import', label: 'Email Import', icon: Download },
     ],
   },
   {

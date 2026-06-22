@@ -17,7 +17,7 @@ export default function manifest(): MetadataRoute.Manifest {
   const shortName = process.env.APP_SHORT_NAME || appName;
   const description =
     process.env.APP_DESCRIPTION ||
-    "A modern webmail client built for Stalwart Mail Server";
+    "Business email by Arham Workspace";
   const themeColor = process.env.PWA_THEME_COLOR || "#ffffff";
   const backgroundColor = process.env.PWA_BACKGROUND_COLOR || "#ffffff";
 

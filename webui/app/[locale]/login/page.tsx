@@ -655,8 +655,8 @@ export default function LoginPage() {
                   className="max-w-20 max-h-20 object-contain"
                 />
               </div>
-              <h1 className="text-3xl font-bold text-foreground tracking-tight">
-                {appName}
+              <h1 className="text-3xl font-bold tracking-tight">
+                <span className="text-green-600 dark:text-green-400">{appName}</span>
               </h1>
               <p className="text-base text-muted-foreground mt-2 max-w-xs mx-auto leading-relaxed">
                 {t("demo_tagline")}
@@ -805,11 +805,15 @@ export default function LoginPage() {
                 className="max-w-16 max-h-16 object-contain"
               />
             </div>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-              {isAddAccountMode ? t("add_account_title") : appName}
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {isAddAccountMode ? (
+                <span className="text-foreground">{t("add_account_title")}</span>
+              ) : (
+                <span className="text-green-600 dark:text-green-400">{appName}</span>
+              )}
             </h1>
             <p className="text-sm text-muted-foreground mt-1.5">
-              {isAddAccountMode ? t("add_account_subtitle") : (t("title") !== appName ? t("title") : "Sign in to your account")}
+              {isAddAccountMode ? t("add_account_subtitle") : "Sign in to your account"}
             </p>
           </div>
 
