@@ -1,9 +1,8 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? 'arham-console-jwt-secret-2026-change-in-prod'
-);
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable must be set');
+const secret = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export interface SessionPayload {
   orgId: string;

@@ -35,6 +35,13 @@ export async function queryOne<T = Record<string, unknown>>(
   return rows[0] ?? null;
 }
 
+// Runs schema migrations once per process lifecycle — call at app startup only
+let _initialized: Promise<void> | null = null;
+export function ensureDb(): Promise<void> {
+  if (!_initialized) _initialized = initDb().catch(e => { _initialized = null; throw e; });
+  return _initialized;
+}
+
 export async function initDb(): Promise<void> {
   await query(`
     CREATE TABLE IF NOT EXISTS organizations (

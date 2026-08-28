@@ -4,18 +4,17 @@ import { query } from '@/lib/db';
 import { PLANS } from '@/lib/plans';
 
 export async function POST(req: Request) {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error('RAZORPAY_WEBHOOK_SECRET is not set — rejecting all webhook requests');
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+  }
+
   const body = await req.text();
   const signature = req.headers.get('x-razorpay-signature') ?? '';
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
-  if (secret) {
-    const expected = crypto
-      .createHmac('sha256', secret)
-      .update(body)
-      .digest('hex');
-    if (expected !== signature) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
-    }
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
+  if (expected !== signature) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
   let event: { event: string; payload: Record<string, unknown> };
@@ -25,38 +24,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  if (event.event === 'payment.captured') {
-    const payment = (event.payload.payment as { entity?: Record<string, unknown> })?.entity ?? {};
-    const notes = payment.notes as Record<string, string> ?? {};
-    const orgId = notes.org_id;
-    const plan = notes.plan as keyof typeof PLANS;
-    const razorpayPaymentId = payment.id as string;
+  try {
+    if (event.event === 'payment.captured') {
+      const payment = (event.payload.payment as { entity?: Record<string, unknown> })?.entity ?? {};
+      const notes = payment.notes as Record<string, string> ?? {};
+      const orgId = notes.org_id;
+      const plan = notes.plan as keyof typeof PLANS;
+      const razorpayPaymentId = payment.id as string;
 
-    if (orgId && plan && PLANS[plan]) {
-      await query(
-        `UPDATE subscriptions
-         SET plan = $1, max_users = $2, status = 'active',
-             razorpay_payment_id = $3, current_period_end = NOW() + INTERVAL '30 days'
-         WHERE org_id = $4`,
-        [plan, PLANS[plan].maxUsers, razorpayPaymentId, orgId]
-      );
+      if (orgId && plan && PLANS[plan]) {
+        await query(
+          `UPDATE subscriptions
+           SET plan = $1, max_users = $2, status = 'active',
+               razorpay_payment_id = $3, current_period_end = NOW() + INTERVAL '30 days'
+           WHERE org_id = $4`,
+          [plan, PLANS[plan].maxUsers, razorpayPaymentId, orgId]
+        );
+      }
     }
-  }
 
-  if (event.event === 'subscription.charged') {
-    const sub = (event.payload.subscription as { entity?: Record<string, unknown> })?.entity ?? {};
-    const notes = sub.notes as Record<string, string> ?? {};
-    const orgId = notes.org_id;
-    const plan = notes.plan as keyof typeof PLANS;
-
-    if (orgId && plan && PLANS[plan]) {
-      await query(
-        `UPDATE subscriptions
-         SET status = 'active', current_period_end = NOW() + INTERVAL '30 days'
-         WHERE org_id = $1`,
-        [orgId]
-      );
+    if (event.event === 'payment.failed') {
+      // Payment failed — restore subscription to trial so user isn't left in limbo
+      const payment = (event.payload.payment as { entity?: Record<string, unknown> })?.entity ?? {};
+      const notes = payment.notes as Record<string, string> ?? {};
+      const orgId = notes.org_id;
+      if (orgId) {
+        await query(
+          `UPDATE subscriptions
+           SET status = 'trial', plan = 'trial', max_users = 3
+           WHERE org_id = $1 AND status = 'pending'`,
+          [orgId]
+        );
+      }
     }
+
+    if (event.event === 'subscription.charged') {
+      const sub = (event.payload.subscription as { entity?: Record<string, unknown> })?.entity ?? {};
+      const notes = sub.notes as Record<string, string> ?? {};
+      const orgId = notes.org_id;
+      if (orgId) {
+        await query(
+          `UPDATE subscriptions
+           SET status = 'active', current_period_end = NOW() + INTERVAL '30 days'
+           WHERE org_id = $1`,
+          [orgId]
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Webhook handler error:', e);
+    // Return 200 so Razorpay doesn't retry — log the error for manual investigation
   }
 
   return NextResponse.json({ received: true });

@@ -1,9 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? 'arham-console-jwt-secret-2026-change-in-prod'
-);
+if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET environment variable must be set');
+const secret = new TextEncoder().encode(process.env.JWT_SECRET);
 
 const PUBLIC = ['/login', '/signup', '/api/auth/login', '/api/auth/signup', '/api/billing/webhook', '/api/health'];
 

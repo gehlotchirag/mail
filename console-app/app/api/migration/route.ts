@@ -112,54 +112,76 @@ function testConnection(sourceType: string, credentials: Record<string, string>)
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  await ensureTables();
-  const { rows } = await getPool().query(
-    'SELECT * FROM migration_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 20',
-    [session.orgId]
-  );
-  return NextResponse.json(rows);
+  try {
+    await ensureTables();
+    const { rows } = await getPool().query(
+      'SELECT * FROM migration_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 20',
+      [session.orgId]
+    );
+    return NextResponse.json(rows);
+  } catch {
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json() as {
-    action: string;
-    sourceType: string;
-    credentials: Record<string, string>;
-    jobId?: string;
-  };
-  const { action, sourceType, credentials, jobId } = body;
+  try {
+    const body = await request.json() as {
+      action: string;
+      sourceType: string;
+      credentials: Record<string, string>;
+      jobId?: string;
+    };
+    const { action, sourceType, credentials, jobId } = body;
 
-  if (action === 'test') {
-    return NextResponse.json(testConnection(sourceType, credentials));
+    if (action === 'test') {
+      return NextResponse.json(testConnection(sourceType, credentials));
+    }
+
+    if (action === 'cancel' && jobId) {
+      await getPool().query(
+        `UPDATE migration_jobs SET status = 'cancelled' WHERE id = $1 AND workspace_id = $2`,
+        [jobId, session.orgId]
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'start') {
+      await ensureTables();
+
+      // Prevent concurrent migrations per org — max 1 active job at a time
+      const { rows: [active] } = await getPool().query(
+        `SELECT COUNT(*)::int AS count FROM migration_jobs
+         WHERE workspace_id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')`,
+        [session.orgId]
+      );
+      if (active.count > 0) {
+        return NextResponse.json(
+          { error: 'A migration is already in progress. Cancel or wait for it to complete.' },
+          { status: 409 }
+        );
+      }
+
+      const credEnc = encryptCredentials(credentials);
+      const { rows: [job] } = await getPool().query(
+        `INSERT INTO migration_jobs (workspace_id, initiated_by, source_type, source_host, credentials_enc)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [session.orgId, session.email, sourceType, credentials.host ?? credentials.domain ?? '', credEnc]
+      );
+      await getQueue().add('orchestrate', { jobId: job.id, workspaceId: session.orgId, sourceType }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 10000 },
+        removeOnComplete: false,
+        removeOnFail: false,
+      });
+      return NextResponse.json({ jobId: job.id });
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  } catch {
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
-
-  if (action === 'cancel' && jobId) {
-    await getPool().query(
-      `UPDATE migration_jobs SET status = 'cancelled' WHERE id = $1 AND workspace_id = $2`,
-      [jobId, session.orgId]
-    );
-    return NextResponse.json({ ok: true });
-  }
-
-  if (action === 'start') {
-    await ensureTables();
-    const credEnc = encryptCredentials(credentials);
-    const { rows: [job] } = await getPool().query(
-      `INSERT INTO migration_jobs (workspace_id, initiated_by, source_type, source_host, credentials_enc)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [session.orgId, session.email, sourceType, credentials.host ?? credentials.domain ?? '', credEnc]
-    );
-    await getQueue().add('orchestrate', { jobId: job.id, workspaceId: session.orgId, sourceType }, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 10000 },
-      removeOnComplete: false,
-      removeOnFail: false,
-    });
-    return NextResponse.json({ jobId: job.id });
-  }
-
-  return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
 }

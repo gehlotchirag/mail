@@ -46,11 +46,8 @@ export async function POST(req: Request) {
 
   const order = await orderRes.json() as { id: string };
 
-  // Update subscription plan (payment will be verified via webhook or manual confirm)
-  await query(
-    `UPDATE subscriptions SET plan = $1, max_users = $2, status = 'pending' WHERE org_id = $3`,
-    [plan, planInfo.maxUsers, session.orgId]
-  );
+  // Do NOT update subscription here — status is set to 'active' only on
+  // confirmed payment.captured webhook. This prevents stuck 'pending' subscriptions.
 
   return NextResponse.json({
     orderId: order.id,

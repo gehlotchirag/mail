@@ -1,0 +1,5 @@
+name: arham-infra
+runtime: nodejs
+description: Arham Workspace Email SaaS — AWS + Hetzner Infrastructure
+config:
+  aws:region: ap-south-1

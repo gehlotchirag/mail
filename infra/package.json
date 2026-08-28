@@ -1,0 +1,16 @@
+{
+  "name": "arham-infra",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@pulumi/pulumi": "^3",
+    "@pulumi/aws": "^6",
+    "@pulumi/awsx": "^2"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20"
+  }
+}

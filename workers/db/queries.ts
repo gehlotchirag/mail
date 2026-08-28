@@ -87,7 +87,7 @@ export async function incrementJobUserCounts(jobId: string, completed: number, f
 
 export async function appendMigrationEvent(jobId: string, userId: string | null, eventType: string, payload: Record<string, unknown>) {
   await pool.query(
-    'INSERT INTO migration_events (migration_job_id, user_id, event_type, payload) VALUES ($1, $2, $3, $4)',
+    'INSERT INTO migration_events (migration_job_id, migration_user_id, event_type, payload) VALUES ($1, $2, $3, $4)',
     [jobId, userId, eventType, JSON.stringify(payload)]
   );
   // Prune events older than last 1000 per job
