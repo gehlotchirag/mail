@@ -1,386 +1,1406 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arham Workspace — Tools Built for Growing Teams</title>
-  <meta name="description" content="Arham Workspace delivers powerful tools for modern teams — from people management to professional email." />
+  <title>Arham Workspace — Business Software Built for India</title>
+  <meta name="description" content="HR management, business email, AI video sales agents, and credit improvement — four focused tools for Indian businesses." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      background: #fff; color: #0F172A; line-height: 1.6;
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
 
     :root {
-      --brand:      #1a1a2e;
-      --accent:     #6c63ff;
-      --accent2:    #ff6584;
-      --light:      #f7f7fb;
-      --muted:      #6b7280;
-      --card-bg:    #ffffff;
-      --border:     #e5e7eb;
-      --radius:     16px;
+      --ink: #0F172A; --ink2: #334155; --muted: #64748B; --faint: #94A3B8;
+      --border: #E2E8F0; --bg: #F8FAFC;
+      --blue: #2563EB; --blue-d: #1D4ED8; --blue-lt: #EFF6FF;
+      --teal: #0891B2; --teal-lt: #ECFEFF;
+      --purple: #7C3AED; --purple-d: #6D28D9; --purple-lt: #F5F3FF;
+      --green: #16A34A; --green-lt: #F0FDF4;
+      --amber: #D97706; --amber-lt: #FFFBEB;
+      --emerald: #059669; --emerald-lt: #ECFDF5;
     }
 
-    html { scroll-behavior: smooth; }
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUp   { from { opacity:0; transform:translateY(28px) } to { opacity:1; transform:none } }
+    @keyframes fadeIn   { from { opacity:0 } to { opacity:1 } }
+    @keyframes float1   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+    @keyframes float2   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+    @keyframes float3   { 0%,100%{transform:translateY(-4px)} 50%{transform:translateY(6px)} }
+    @keyframes ticker   { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+    @keyframes pulse-bg { 0%,100%{opacity:.6} 50%{opacity:1} }
+    @keyframes orb1     { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.1)} }
+    @keyframes orb2     { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-30px,40px) scale(1.08)} }
+    @keyframes typewrite{ from{width:0} to{width:100%} }
+    @keyframes blink    { 50%{border-color:transparent} }
+    @keyframes chat1    { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:none} }
+    @keyframes scoreup  { from{width:0} to{width:72%} }
+    @keyframes slidein  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+    @keyframes shimmer  { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+    @keyframes spin     { to { transform: rotate(360deg); } }
+    @keyframes bounce   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--light);
-      color: var(--brand);
-      line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
+    /* scroll reveal */
+    .reveal { opacity:0; transform:translateY(32px); transition: opacity .65s ease, transform .65s ease; }
+    .reveal.on { opacity:1; transform:none; }
+    .d1{transition-delay:.08s} .d2{transition-delay:.16s} .d3{transition-delay:.24s} .d4{transition-delay:.32s}
+
+    /* ── LAYOUT ── */
+    .wrap { max-width:1120px; margin:0 auto; padding:0 clamp(1.25rem,5vw,3rem); }
+    .eyebrow {
+      font-size:.67rem; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+      color:var(--blue); display:inline-block; margin-bottom:.55rem;
     }
+    .sec-h { font-size:clamp(1.8rem,3.2vw,2.6rem); font-weight:800; letter-spacing:-1.4px; line-height:1.08; text-wrap:balance; }
+    .sec-sub { font-size:.95rem; color:var(--muted); line-height:1.8; max-width:520px; }
+    .center { text-align:center; } .center .sec-sub { margin:0 auto; }
 
     /* ── NAV ── */
     nav {
-      position: sticky; top: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 clamp(1.5rem, 5vw, 4rem);
-      height: 64px;
-      background: rgba(247,247,251,0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
+      position:sticky; top:0; z-index:300;
+      background:rgba(255,255,255,.92); backdrop-filter:blur(20px);
+      border-bottom:1px solid var(--border); height:62px;
+      transition:box-shadow .2s;
     }
-    .nav-logo {
-      font-size: 1.2rem; font-weight: 700; letter-spacing: -0.3px;
-      color: var(--brand); text-decoration: none;
+    nav.scrolled { box-shadow:0 4px 24px rgba(0,0,0,.06); }
+    .nav-in {
+      max-width:1120px; margin:0 auto; padding:0 clamp(1.25rem,5vw,3rem);
+      height:100%; display:flex; align-items:center; justify-content:space-between;
     }
-    .nav-logo span { color: var(--accent); }
-    .nav-links { display: flex; gap: 2rem; list-style: none; }
-    .nav-links a { font-size: 0.875rem; font-weight: 500; color: var(--muted); text-decoration: none; transition: color .2s; }
-    .nav-links a:hover { color: var(--brand); }
-    .nav-cta {
-      font-size: 0.85rem; font-weight: 600;
-      padding: .45rem 1.1rem; border-radius: 8px;
-      background: var(--accent); color: #fff;
-      text-decoration: none; transition: opacity .2s;
+    .nav-logo { display:flex; align-items:center; gap:.55rem; font-size:.95rem; font-weight:800; flex-shrink:0; }
+    .logo-sq {
+      width:32px; height:32px; border-radius:8px; background:var(--ink); color:#fff;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:900; letter-spacing:-.5px; transition:transform .2s;
     }
-    .nav-cta:hover { opacity: .85; }
+    .nav-logo:hover .logo-sq { transform:rotate(-6deg) scale(1.05); }
+    .nav-links { display:flex; gap:1.75rem; list-style:none; }
+    .nav-links a { font-size:.84rem; font-weight:500; color:var(--muted); transition:color .15s; }
+    .nav-links a:hover { color:var(--ink); }
+    .nav-right { display:flex; gap:.6rem; align-items:center; }
+    .btn-ghost { font-size:.82rem; font-weight:600; color:var(--muted); padding:.45rem .9rem; border-radius:8px; border:1.5px solid var(--border); transition:all .15s; }
+    .btn-ghost:hover { border-color:#94A3B8; color:var(--ink); }
+    .btn-dark { font-size:.82rem; font-weight:700; color:#fff; padding:.48rem 1.15rem; border-radius:8px; background:var(--ink); transition:all .15s; }
+    .btn-dark:hover { background:#1E293B; transform:translateY(-1px); }
 
     /* ── HERO ── */
     .hero {
-      text-align: center;
-      padding: clamp(4rem, 10vw, 8rem) clamp(1.5rem, 5vw, 4rem) clamp(3rem, 6vw, 5rem);
+      position:relative; overflow:hidden;
+      padding:clamp(5rem,10vw,8rem) clamp(1.25rem,5vw,3rem) clamp(3.5rem,7vw,6rem);
+      background:#fff;
     }
-    .hero-badge {
-      display: inline-block; margin-bottom: 1.5rem;
-      padding: .35rem 1rem; border-radius: 100px;
-      background: rgba(108,99,255,.1); color: var(--accent);
-      font-size: .8rem; font-weight: 600; letter-spacing: .4px;
+    /* animated gradient orbs */
+    .orb-layer {
+      position:absolute; inset:0; pointer-events:none; z-index:0;
+      will-change:transform; transition:transform 0.08s ease-out;
+    }
+    .orb {
+      position:absolute; border-radius:50%; filter:blur(80px); pointer-events:none;
+    }
+    .orb1 { width:500px; height:500px; background:rgba(37,99,235,.08); top:-120px; right:-80px; animation:orb1 8s ease-in-out infinite; }
+    .orb2 { width:400px; height:400px; background:rgba(124,58,237,.07); bottom:-60px; left:-100px; animation:orb2 10s ease-in-out infinite; }
+    .orb3 { width:300px; height:300px; background:rgba(8,145,178,.06); top:50%; left:40%; animation:orb1 12s ease-in-out infinite reverse; }
+    /* dot grid */
+    .hero::before {
+      content:''; position:absolute; inset:0;
+      background-image:radial-gradient(circle, #CBD5E1 1px, transparent 1px);
+      background-size:28px 28px; opacity:.3; z-index:0;
+    }
+    .hero-layout {
+      max-width:1120px; margin:0 auto; position:relative; z-index:1;
+      display:grid; grid-template-columns:1fr 1fr; gap:4rem; align-items:center;
+    }
+    .hero-tag {
+      display:inline-flex; align-items:center; gap:.45rem;
+      padding:.3rem .9rem; border-radius:100px;
+      background:var(--blue-lt); border:1px solid #BFDBFE;
+      color:var(--blue); font-size:.7rem; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+      margin-bottom:1.4rem; animation:fadeIn .6s ease both;
     }
     .hero h1 {
-      font-size: clamp(2.4rem, 5vw, 4rem);
-      font-weight: 800; letter-spacing: -1.5px;
-      line-height: 1.1; max-width: 700px; margin: 0 auto 1.25rem;
+      font-size:clamp(2.8rem,4.8vw,4rem); font-weight:800; letter-spacing:-2.5px;
+      line-height:1.05; color:var(--ink); margin-bottom:1.25rem;
+      animation:fadeUp .7s .1s ease both;
     }
-    .hero h1 .highlight {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    .hero h1 .hi { color:var(--blue); }
+    .hero-desc {
+      font-size:1rem; color:var(--muted); line-height:1.8; max-width:420px;
+      margin-bottom:2rem; animation:fadeUp .7s .2s ease both;
     }
-    .hero p {
-      font-size: 1.1rem; color: var(--muted); max-width: 500px;
-      margin: 0 auto 2.5rem; font-weight: 400;
-    }
-    .hero-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .hero-actions { display:flex; gap:.75rem; flex-wrap:wrap; animation:fadeUp .7s .3s ease both; }
     .btn-primary {
-      display: inline-flex; align-items: center; gap: .4rem;
-      padding: .8rem 1.8rem; border-radius: 10px;
-      background: var(--accent); color: #fff;
-      font-size: .95rem; font-weight: 600; text-decoration: none;
-      transition: transform .15s, box-shadow .15s;
-      box-shadow: 0 4px 14px rgba(108,99,255,.35);
+      display:inline-flex; align-items:center; gap:.4rem;
+      padding:.85rem 1.85rem; border-radius:11px; background:var(--blue); color:#fff;
+      font-family:inherit; font-size:.92rem; font-weight:700;
+      box-shadow:0 4px 14px rgba(37,99,235,.35); transition:all .2s;
     }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,99,255,.45); }
-    .btn-secondary {
-      display: inline-flex; align-items: center; gap: .4rem;
-      padding: .8rem 1.8rem; border-radius: 10px;
-      background: var(--card-bg); color: var(--brand);
-      font-size: .95rem; font-weight: 600; text-decoration: none;
-      border: 1.5px solid var(--border);
-      transition: border-color .15s, transform .15s;
+    .btn-primary:hover { background:var(--blue-d); transform:translateY(-2px); box-shadow:0 8px 24px rgba(37,99,235,.4); }
+    .btn-outline-dark {
+      display:inline-flex; align-items:center; gap:.4rem;
+      padding:.85rem 1.5rem; border-radius:11px; background:transparent; color:var(--ink);
+      font-family:inherit; font-size:.92rem; font-weight:600; border:1.5px solid var(--border);
+      transition:all .2s;
     }
-    .btn-secondary:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .btn-outline-dark:hover { border-color:#94A3B8; background:var(--bg); }
+    .hero-meta { margin-top:1rem; font-size:.75rem; color:var(--faint); animation:fadeIn .7s .5s ease both; }
+    .hero-meta span { margin-right:1rem; }
 
-    /* ── STATS STRIP ── */
-    .stats {
-      display: flex; justify-content: center; gap: clamp(2rem, 6vw, 5rem);
-      padding: 2.5rem clamp(1.5rem, 5vw, 4rem);
-      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-      background: var(--card-bg); flex-wrap: wrap;
+    /* hero tiles */
+    .hero-tiles { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    .h-tile {
+      background:#fff; border:1.5px solid var(--border); border-radius:18px;
+      padding:1.4rem; transition:transform .25s, box-shadow .25s;
+      cursor:default;
     }
-    .stat { text-align: center; }
-    .stat-num { font-size: 1.8rem; font-weight: 800; color: var(--brand); letter-spacing: -1px; }
-    .stat-label { font-size: .8rem; color: var(--muted); font-weight: 500; margin-top: .15rem; }
+    .h-tile:hover { box-shadow:0 16px 40px rgba(0,0,0,.1); }
+    .h-tile:nth-child(1) { animation:float1 5s ease-in-out infinite; }
+    .h-tile:nth-child(2) { animation:float2 6s ease-in-out infinite .5s; }
+    .h-tile:nth-child(3) { animation:float3 5.5s ease-in-out infinite 1s; }
+    .h-tile:nth-child(4) { animation:float1 6.5s ease-in-out infinite 1.5s; }
+    .tile-accent { height:3px; border-radius:100px; margin-bottom:1rem; }
+    .h-tile-icon { font-size:1.6rem; margin-bottom:.65rem; }
+    .h-tile h3 { font-size:.9rem; font-weight:700; color:var(--ink); margin-bottom:.25rem; }
+    .h-tile p  { font-size:.75rem; color:var(--muted); line-height:1.5; }
+    .h-tile .tag {
+      display:inline-block; font-size:.6rem; font-weight:700; letter-spacing:.4px;
+      text-transform:uppercase; padding:.18rem .5rem; border-radius:4px; margin-bottom:.5rem;
+    }
+
+    /* ── STATS ── */
+    .stats-band { background:var(--ink); padding:2.25rem clamp(1.25rem,5vw,3rem); }
+    .stats-in { max-width:1120px; margin:0 auto; display:flex; justify-content:space-around; flex-wrap:wrap; gap:1.5rem; }
+    .stat { text-align:center; }
+    .stat-n { font-size:2.1rem; font-weight:800; color:#fff; letter-spacing:-1.5px; line-height:1; }
+    .stat-l { font-size:.68rem; color:#64748B; font-weight:500; margin-top:.3rem; text-transform:uppercase; letter-spacing:.6px; }
+
+    /* ── TICKER ── */
+    .ticker-wrap {
+      background:#F1F5F9; border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+      padding:.9rem 0; overflow:hidden;
+    }
+    .ticker-track { display:flex; gap:0; width:max-content; animation:ticker 30s linear infinite; }
+    .ticker-track:hover { animation-play-state:paused; }
+    .ticker-item {
+      display:flex; align-items:center; gap:.5rem; padding:0 2.5rem;
+      font-size:.78rem; font-weight:600; color:var(--muted); white-space:nowrap;
+      border-right:1px solid var(--border);
+    }
+    .ticker-item .ti { font-size:1rem; }
+
+    /* ── SECTION DIVIDER ── */
+    .sec-pad { padding:clamp(4rem,8vw,6.5rem) clamp(1.25rem,5vw,3rem); }
 
     /* ── PRODUCTS ── */
-    .products {
-      max-width: 1100px; margin: 0 auto;
-      padding: clamp(4rem, 8vw, 7rem) clamp(1.5rem, 5vw, 2rem);
+    .products-bg { background:var(--bg); }
+    .prod-intro { margin-bottom:3.5rem; }
+    .prod-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:1.5rem; }
+    .prod-card {
+      background:#fff; border-radius:20px; border:1.5px solid var(--border);
+      overflow:hidden; display:flex; flex-direction:column;
+      transition:transform .25s, box-shadow .25s;
     }
-    .section-label {
-      text-align: center; font-size: .8rem; font-weight: 600;
-      letter-spacing: 1.5px; text-transform: uppercase;
-      color: var(--accent); margin-bottom: .75rem;
+    .prod-card:hover { transform:translateY(-5px); box-shadow:0 20px 50px rgba(0,0,0,.1); }
+    /* mini mockup at top */
+    .prod-mock {
+      padding:1.25rem 1.25rem .5rem; position:relative; overflow:hidden;
     }
-    .section-title {
-      text-align: center; font-size: clamp(1.8rem, 3.5vw, 2.6rem);
-      font-weight: 800; letter-spacing: -1px; margin-bottom: .75rem;
+    .mock-bar {
+      display:flex; align-items:center; gap:.4rem; margin-bottom:.65rem;
     }
-    .section-sub {
-      text-align: center; color: var(--muted); font-size: 1rem;
-      max-width: 480px; margin: 0 auto 3.5rem;
+    .mock-dot { width:8px; height:8px; border-radius:50%; }
+    .mock-title { font-size:.62rem; color:var(--muted); font-weight:600; margin-left:.3rem; }
+    .mock-win {
+      border-radius:10px; overflow:hidden; border:1px solid var(--border);
+      box-shadow:0 4px 14px rgba(0,0,0,.07);
     }
+    /* people orbit mockup */
+    .po-mock-header {
+      background:var(--ink); padding:.5rem .75rem;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .po-mock-header span { color:#94A3B8; font-size:.6rem; }
+    .po-mock-header strong { color:#fff; font-size:.65rem; }
+    .po-stats-row { display:flex; background:var(--bg); border-bottom:1px solid var(--border); }
+    .po-stat { flex:1; padding:.5rem .6rem; border-right:1px solid var(--border); }
+    .po-stat:last-child { border-right:none; }
+    .po-stat .n { font-size:.9rem; font-weight:800; color:var(--blue); }
+    .po-stat .l { font-size:.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+    .po-rows { background:#fff; }
+    .po-row {
+      display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem;
+      border-bottom:1px solid #F8FAFC; font-size:.62rem;
+    }
+    .po-row:last-child { border-bottom:none; }
+    .po-av {
+      width:20px; height:20px; border-radius:50%; display:flex; align-items:center;
+      justify-content:center; font-size:.55rem; font-weight:700; color:#fff; flex-shrink:0;
+    }
+    .po-name { font-weight:600; color:var(--ink); flex:1; }
+    .po-dept { color:var(--muted); width:45px; }
+    .po-badge { font-size:.52rem; font-weight:700; padding:.12rem .35rem; border-radius:4px; }
+    /* inbox mockup */
+    .inbox-mock { display:flex; height:120px; }
+    .inbox-sidebar { width:28%; background:#F8FAFC; border-right:1px solid var(--border); padding:.4rem; }
+    .inbox-folder {
+      display:flex; align-items:center; gap:.3rem; padding:.25rem .3rem; border-radius:5px;
+      font-size:.57rem; color:var(--muted); margin-bottom:.1rem; cursor:default;
+    }
+    .inbox-folder.active { background:var(--blue-lt); color:var(--blue); font-weight:700; }
+    .inbox-folder .cnt { margin-left:auto; background:var(--blue); color:#fff; border-radius:50%; width:14px; height:14px; display:flex; align-items:center; justify-content:center; font-size:.48rem; font-weight:800; }
+    .inbox-main { flex:1; padding:.5rem .6rem; overflow:hidden; }
+    .inbox-email { margin-bottom:.4rem; padding-bottom:.4rem; border-bottom:1px solid var(--border); }
+    .inbox-email:last-child { border-bottom:none; margin-bottom:0; }
+    .inbox-from { font-size:.6rem; font-weight:700; color:var(--ink); }
+    .inbox-subj { font-size:.57rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    /* ai agent mockup */
+    .ai-mock-header {
+      background:linear-gradient(135deg, #6D28D9, #7C3AED); padding:.55rem .75rem;
+      display:flex; align-items:center; gap:.5rem;
+    }
+    .ai-av { width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.2); display:flex; align-items:center; justify-content:center; font-size:.7rem; }
+    .ai-mock-header .ai-name { color:#fff; font-size:.62rem; font-weight:700; }
+    .ai-mock-header .live-dot { margin-left:auto; }
+    .live-dot { width:7px; height:7px; border-radius:50%; background:#22C55E; position:relative; }
+    .live-dot::before { content:''; position:absolute; inset:-2px; border-radius:50%; background:#22C55E; animation:pulse-bg 1.5s ease-in-out infinite; opacity:.4; }
+    .ai-chat { padding:.55rem .65rem; background:#fff; }
+    .ai-bubble { font-size:.6rem; line-height:1.4; padding:.4rem .55rem; border-radius:8px; margin-bottom:.3rem; max-width:85%; }
+    .ai-bubble.bot { background:#F5F3FF; color:var(--ink); }
+    .ai-bubble.usr { background:var(--purple); color:#fff; margin-left:auto; }
+    /* credit mockup */
+    .cr-mock { padding:.75rem; background:#fff; }
+    .cr-score-row { display:flex; align-items:baseline; gap:.4rem; margin-bottom:.4rem; }
+    .cr-score-n { font-size:1.8rem; font-weight:800; color:var(--green); letter-spacing:-2px; line-height:1; }
+    .cr-score-l { font-size:.58rem; color:var(--muted); font-weight:600; }
+    .cr-bar-bg { background:#DCFCE7; border-radius:100px; height:6px; margin-bottom:.4rem; overflow:hidden; }
+    .cr-bar-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,#22C55E,#16A34A); width:72%; animation:scoreup 2s 1s ease both; }
+    .cr-rows { display:flex; flex-direction:column; gap:.25rem; }
+    .cr-row { display:flex; align-items:center; gap:.4rem; font-size:.58rem; color:var(--ink2); }
+    .cr-row .cr-ic { font-size:.7rem; }
 
-    .product-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
-      gap: 1.75rem;
-    }
-    @media (max-width: 960px) {
-      .product-grid { grid-template-columns: 1fr; }
-      .nav-links { display: none; }
-    }
+    /* prod card body */
+    .prod-body-pad { padding:1rem 1.5rem; flex:1; }
+    .prod-name { font-size:1.2rem; font-weight:800; letter-spacing:-.4px; color:var(--ink); }
+    .prod-tag2 { font-size:.65rem; font-weight:700; letter-spacing:.5px; text-transform:uppercase; padding:.2rem .55rem; border-radius:5px; margin-left:.5rem; }
+    .prod-tagline { font-size:.83rem; color:var(--muted); margin-top:.25rem; margin-bottom:.9rem; line-height:1.55; }
+    .feat-list { list-style:none; display:flex; flex-direction:column; gap:.5rem; }
+    .feat-list li { display:flex; align-items:flex-start; gap:.5rem; font-size:.82rem; color:var(--ink2); }
+    .ck { width:17px; height:17px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.52rem; font-weight:900; flex-shrink:0; margin-top:.12rem; }
+    .prod-foot { padding:.9rem 1.5rem 1.5rem; display:flex; gap:.6rem; }
+    .btn-p { flex:1; text-align:center; padding:.7rem 1rem; border-radius:10px; font-family:inherit; font-size:.85rem; font-weight:700; border:none; cursor:pointer; transition:all .18s; color:#fff; }
+    .btn-g { flex-shrink:0; padding:.7rem .95rem; border-radius:10px; font-family:inherit; font-size:.8rem; font-weight:600; background:transparent; border:1.5px solid var(--border); color:var(--muted); cursor:pointer; transition:all .18s; }
+    .btn-g:hover { border-color:#94A3B8; color:var(--ink); }
 
-    .product-card {
-      background: var(--card-bg); border-radius: var(--radius);
-      border: 1.5px solid var(--border); overflow: hidden;
-      transition: transform .2s, box-shadow .2s;
-      display: flex; flex-direction: column;
+    /* ── SPOTLIGHT ── */
+    .spotlight-grid {
+      max-width:1120px; margin:0 auto;
+      display:grid; grid-template-columns:1fr 1fr; gap:5rem; align-items:center;
     }
-    .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(26,26,46,.1); }
+    .spot-visual {
+      border-radius:22px; border:1.5px solid var(--border); overflow:hidden;
+      box-shadow:0 20px 60px rgba(0,0,0,.1); position:relative;
+    }
+    .spot-copy .eyebrow { display:block; }
+    .spot-copy .sec-h { margin-bottom:.7rem; margin-top:.2rem; }
+    .spot-copy .sec-sub { margin-bottom:1.6rem; }
+    .bullet-list { list-style:none; display:flex; flex-direction:column; gap:.75rem; margin-bottom:1.75rem; }
+    .bullet-list li { display:flex; align-items:flex-start; gap:.7rem; font-size:.9rem; color:var(--ink2); line-height:1.55; }
+    .bl-ic { width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:.8rem; flex-shrink:0; margin-top:.05rem; }
+    .btn-accent {
+      display:inline-flex; align-items:center; gap:.4rem;
+      padding:.82rem 1.85rem; border-radius:11px; color:#fff;
+      font-family:inherit; font-size:.92rem; font-weight:700; transition:all .2s;
+    }
+    .btn-accent:hover { transform:translateY(-2px); }
 
-    .card-header {
-      padding: 2rem 2rem 1.5rem;
-      display: flex; align-items: flex-start; gap: 1rem;
-    }
-    .card-icon {
-      width: 52px; height: 52px; border-radius: 14px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.5rem; flex-shrink: 0;
-    }
-    .icon-orbit  { background: linear-gradient(135deg, #6c63ff22, #6c63ff44); }
-    .icon-inbox  { background: linear-gradient(135deg, #ff658422, #ff6584aa); }
+    /* CHAT ANIMATION */
+    .live-chat { background:#fff; }
+    .chat-header2 { padding:.9rem 1.1rem; display:flex; align-items:center; gap:.65rem; }
+    .c-av { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+    .c-name { font-size:.85rem; font-weight:700; color:var(--ink); }
+    .c-sub  { font-size:.7rem; color:var(--muted); }
+    .c-badge { margin-left:auto; font-size:.62rem; font-weight:700; padding:.2rem .55rem; border-radius:5px; background:#DCFCE7; color:#16A34A; }
+    .chat-msgs { padding:.5rem 1rem 1rem; display:flex; flex-direction:column; gap:.6rem; min-height:220px; }
+    .cmsg { max-width:82%; padding:.65rem .9rem; border-radius:12px; font-size:.82rem; line-height:1.5; }
+    .cmsg.bot { background:#F5F3FF; color:var(--ink); border-bottom-left-radius:3px; opacity:0; }
+    .cmsg.usr { background:var(--purple); color:#fff; align-self:flex-end; border-bottom-right-radius:3px; opacity:0; }
+    .cmsg.v   { animation:slidein .4s ease forwards; }
+    .chat-ibar { border-top:1px solid var(--border); padding:.65rem 1rem; display:flex; gap:.5rem; align-items:center; }
+    .chat-ibar input { flex:1; border:1px solid var(--border); border-radius:8px; padding:.4rem .7rem; font-size:.78rem; color:var(--muted); outline:none; background:var(--bg); }
+    .chat-ibar button { background:var(--purple); color:#fff; border:none; border-radius:8px; padding:.4rem .75rem; font-size:.78rem; font-weight:700; cursor:pointer; }
 
-    .card-meta { flex: 1; }
-    .card-tag {
-      display: inline-block; font-size: .7rem; font-weight: 600;
-      letter-spacing: .5px; text-transform: uppercase;
-      padding: .2rem .65rem; border-radius: 6px; margin-bottom: .4rem;
-    }
-    .tag-orbit { background: rgba(108,99,255,.1); color: var(--accent); }
-    .tag-inbox { background: rgba(255,101,132,.1); color: var(--accent2); }
-    .card-name { font-size: 1.4rem; font-weight: 700; letter-spacing: -.4px; }
-    .card-desc { font-size: .9rem; color: var(--muted); margin-top: .3rem; }
+    /* credit spotlight */
+    .credit-bg { background:var(--bg); }
+    .cr-big { padding:2rem; background:#fff; }
+    .cr-big-score { font-size:4rem; font-weight:800; color:var(--green); letter-spacing:-4px; line-height:1; margin-bottom:.25rem; }
+    .cr-big-label { font-size:.75rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+    .cr-big-bar-bg { background:#DCFCE7; border-radius:100px; height:10px; margin:1rem 0 .35rem; overflow:hidden; }
+    .cr-big-bar { height:100%; width:0; border-radius:100px; background:linear-gradient(90deg,#22C55E,#16A34A); transition:width 1.8s ease; }
+    .cr-big-bar.animated { width:72%; }
+    .cr-range { display:flex; justify-content:space-between; font-size:.68rem; color:var(--muted); margin-bottom:1.25rem; }
+    .cr-tips { display:flex; flex-direction:column; gap:.5rem; }
+    .cr-tip { display:flex; align-items:flex-start; gap:.65rem; padding:.7rem .8rem; border-radius:10px; font-size:.8rem; line-height:1.5; }
+    .cr-tip.good    { background:#F0FDF4; color:#15803D; }
+    .cr-tip.warn    { background:#FFFBEB; color:#92400E; }
+    .cr-tip.info    { background:#EFF6FF; color:#1D4ED8; }
+    .cr-tip .ct-ic  { font-size:1rem; flex-shrink:0; }
 
-    .card-body { padding: 0 2rem 1.5rem; flex: 1; }
-    .feature-list { list-style: none; display: flex; flex-direction: column; gap: .65rem; }
-    .feature-list li {
-      display: flex; align-items: center; gap: .6rem;
-      font-size: .875rem; color: #374151;
+    /* ── INDIA FEATURES ── */
+    .india-sec { background:#fff; }
+    .india-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-top:3rem; }
+    .india-card {
+      border:1.5px solid var(--border); border-radius:16px; padding:1.5rem;
+      transition:transform .2s, box-shadow .2s;
     }
-    .feature-list li::before {
-      content: ''; width: 18px; height: 18px; flex-shrink: 0;
-      border-radius: 50%; display: flex; align-items: center; justify-content: center;
-      background-size: contain;
-    }
-    .check-orbit li::before { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%236c63ff22'/%3E%3Cpath d='M6 10l3 3 5-5' stroke='%236c63ff' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center; }
-    .check-inbox li::before  { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='10' fill='%23ff658422'/%3E%3Cpath d='M6 10l3 3 5-5' stroke='%23ff6584' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center; }
+    .india-card:hover { transform:translateY(-3px); box-shadow:0 12px 30px rgba(0,0,0,.07); }
+    .india-ic { font-size:1.8rem; margin-bottom:.75rem; }
+    .india-card h3 { font-size:.95rem; font-weight:700; color:var(--ink); margin-bottom:.4rem; }
+    .india-card p  { font-size:.82rem; color:var(--muted); line-height:1.65; }
 
-    .card-footer {
-      padding: 1.25rem 2rem 2rem;
-      display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
+    /* ── HOW IT WORKS ── */
+    .how-bg { background:var(--ink); }
+    .how-bg .eyebrow { color:#93C5FD; }
+    .how-bg .sec-h { color:#fff; }
+    .how-bg .sec-sub { color:#64748B; }
+    .steps { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; margin-top:3.5rem; position:relative; }
+    .steps::before {
+      content:''; position:absolute; top:28px; left:calc(16.66% + 1.5rem); right:calc(16.66% + 1.5rem);
+      height:2px; background:rgba(255,255,255,.1); z-index:0;
     }
-    .card-cta {
-      flex: 1; text-align: center;
-      padding: .75rem 1.25rem; border-radius: 10px;
-      font-size: .9rem; font-weight: 600; text-decoration: none;
-      transition: transform .15s, box-shadow .15s;
+    .step { text-align:center; position:relative; z-index:1; }
+    .step-n {
+      width:56px; height:56px; border-radius:16px;
+      background:rgba(255,255,255,.08); border:2px solid rgba(255,255,255,.15);
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.1rem; font-weight:800; color:#fff; margin:0 auto 1.1rem;
+      transition:all .2s;
     }
-    .cta-orbit {
-      background: var(--accent); color: #fff;
-      box-shadow: 0 4px 12px rgba(108,99,255,.3);
-    }
-    .cta-orbit:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(108,99,255,.4); }
-    .cta-inbox {
-      background: var(--accent2); color: #fff;
-      box-shadow: 0 4px 12px rgba(255,101,132,.3);
-    }
-    .cta-inbox:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(255,101,132,.4); }
-    .cta-ghost {
-      flex: 0; padding: .75rem 1.25rem; border-radius: 10px;
-      border: 1.5px solid var(--border); color: var(--muted);
-      font-size: .9rem; font-weight: 500; text-decoration: none;
-      transition: border-color .15s, color .15s;
-    }
-    .cta-ghost:hover { border-color: var(--brand); color: var(--brand); }
+    .step:hover .step-n { background:var(--blue); border-color:var(--blue); transform:scale(1.1); }
+    .step h3 { font-size:1rem; font-weight:700; color:#E2E8F0; margin-bottom:.4rem; }
+    .step p  { font-size:.83rem; color:#64748B; line-height:1.65; }
 
-    /* ── WHY SECTION ── */
-    .why {
-      background: var(--brand); color: #fff;
-      padding: clamp(4rem, 8vw, 7rem) clamp(1.5rem, 5vw, 4rem);
-      text-align: center;
-    }
-    .why h2 { font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 800; letter-spacing: -1px; margin-bottom: .75rem; }
-    .why p { color: rgba(255,255,255,.65); max-width: 480px; margin: 0 auto 3rem; font-size: 1rem; }
-    .pillars {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1.5rem; max-width: 900px; margin: 0 auto;
-    }
+    /* ── WHY ── */
+    .why-bg { background:var(--bg); }
+    .pillars { display:grid; grid-template-columns:repeat(4,1fr); gap:1.25rem; margin-top:3rem; }
     .pillar {
-      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
-      border-radius: 14px; padding: 1.75rem 1.5rem; text-align: left;
+      background:#fff; border:1.5px solid var(--border); border-radius:16px; padding:1.5rem;
+      transition:transform .2s, box-shadow .2s;
     }
-    .pillar-icon { font-size: 1.6rem; margin-bottom: .75rem; }
-    .pillar h3 { font-size: 1rem; font-weight: 700; margin-bottom: .4rem; }
-    .pillar p { font-size: .85rem; color: rgba(255,255,255,.55); line-height: 1.55; }
+    .pillar:hover { transform:translateY(-3px); box-shadow:0 10px 28px rgba(0,0,0,.07); }
+    .p-ic { width:44px; height:44px; border-radius:12px; background:var(--blue-lt); display:flex; align-items:center; justify-content:center; font-size:1.2rem; margin-bottom:.9rem; }
+    .pillar h3 { font-size:.92rem; font-weight:700; color:var(--ink); margin-bottom:.4rem; }
+    .pillar p  { font-size:.81rem; color:var(--muted); line-height:1.65; }
+
+    /* ── PRICING ── */
+    .pricing-bg { background:#fff; }
+    .pricing-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1.1rem; margin-top:3rem; }
+    .price-card {
+      background:#fff; border:1.5px solid var(--border); border-radius:18px; padding:1.6rem 1.4rem;
+      display:flex; flex-direction:column; transition:transform .2s, box-shadow .2s; position:relative; overflow:hidden;
+    }
+    .price-card:hover { transform:translateY(-4px); box-shadow:0 16px 40px rgba(0,0,0,.1); }
+    .price-card.popular { border-color:var(--blue); }
+    .popular-badge { position:absolute; top:1rem; right:1rem; background:var(--blue); color:#fff; font-size:.6rem; font-weight:800; padding:.18rem .5rem; border-radius:4px; letter-spacing:.3px; }
+    .price-ic { font-size:1.6rem; margin-bottom:.65rem; }
+    .price-prod { font-size:.72rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:.3rem; }
+    .price-amt { font-size:2.1rem; font-weight:800; letter-spacing:-1.8px; color:var(--ink); line-height:1; }
+    .price-amt sub { font-size:.85rem; font-weight:500; color:var(--muted); letter-spacing:0; }
+    .price-desc { font-size:.78rem; color:var(--muted); margin:.5rem 0 1rem; line-height:1.55; }
+    .p-feats { list-style:none; display:flex; flex-direction:column; gap:.4rem; flex:1; margin-bottom:1.25rem; }
+    .p-feats li { font-size:.78rem; color:var(--ink2); display:flex; gap:.4rem; align-items:flex-start; }
+    .p-feats li::before { content:'✓'; color:var(--green); font-weight:800; flex-shrink:0; }
+    .price-cta {
+      display:block; text-align:center; padding:.7rem 1rem; border-radius:10px;
+      font-family:inherit; font-size:.86rem; font-weight:700;
+      border:1.5px solid var(--border); color:var(--ink); background:transparent;
+      cursor:pointer; transition:all .18s;
+    }
+    .price-cta:hover { background:var(--ink); color:#fff; border-color:var(--ink); }
+    .price-card.popular .price-cta { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .price-card.popular .price-cta:hover { background:var(--blue-d); }
+
+    /* ── TESTIMONIALS ── */
+    .testi-bg { background:var(--bg); }
+    .testi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; margin-top:3rem; }
+    .testi {
+      background:#fff; border:1.5px solid var(--border); border-radius:18px; padding:1.75rem;
+      display:flex; flex-direction:column; transition:transform .2s, box-shadow .2s;
+    }
+    .testi:hover { transform:translateY(-3px); box-shadow:0 12px 32px rgba(0,0,0,.08); }
+    .testi-stars { color:#F59E0B; font-size:1rem; letter-spacing:2px; margin-bottom:.85rem; }
+    .testi-q { font-size:.88rem; color:var(--ink2); line-height:1.75; font-style:italic; flex:1; margin-bottom:1.25rem; }
+    .testi-auth { display:flex; align-items:center; gap:.7rem; }
+    .t-av { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.95rem; font-weight:800; color:#fff; flex-shrink:0; }
+    .t-name { font-size:.82rem; font-weight:700; color:var(--ink); }
+    .t-role { font-size:.72rem; color:var(--muted); }
+
+    /* ── FINAL CTA ── */
+    .fcta {
+      background:linear-gradient(150deg,#0F172A 0%,#1E293B 60%,#0F172A 100%);
+      padding:clamp(4.5rem,9vw,7rem) clamp(1.25rem,5vw,3rem);
+      text-align:center; position:relative; overflow:hidden;
+    }
+    .fcta::before {
+      content:''; position:absolute; inset:0;
+      background:
+        radial-gradient(circle at 25% 50%, rgba(37,99,235,.18) 0%, transparent 50%),
+        radial-gradient(circle at 75% 50%, rgba(124,58,237,.14) 0%, transparent 50%);
+      pointer-events:none;
+    }
+    .fcta-in { max-width:640px; margin:0 auto; position:relative; }
+    .fcta h2 { font-size:clamp(2.2rem,4vw,3.2rem); font-weight:800; letter-spacing:-2px; color:#fff; text-wrap:balance; margin-bottom:.9rem; }
+    .fcta p  { color:#94A3B8; font-size:.97rem; line-height:1.75; margin-bottom:2.25rem; }
+    .fcta-acts { display:flex; gap:.8rem; justify-content:center; flex-wrap:wrap; }
+    .btn-wht {
+      display:inline-flex; align-items:center; gap:.4rem;
+      padding:.9rem 2.1rem; border-radius:12px; background:#fff; color:var(--ink);
+      font-family:inherit; font-size:.95rem; font-weight:800;
+      box-shadow:0 4px 20px rgba(0,0,0,.2); transition:all .2s;
+    }
+    .btn-wht:hover { transform:translateY(-2px); box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    .btn-ghost-wht {
+      display:inline-flex; align-items:center; gap:.4rem;
+      padding:.9rem 1.75rem; border-radius:12px; background:transparent; color:#94A3B8;
+      font-family:inherit; font-size:.95rem; font-weight:600; border:1.5px solid rgba(255,255,255,.2);
+      transition:all .2s;
+    }
+    .btn-ghost-wht:hover { color:#fff; border-color:rgba(255,255,255,.45); }
 
     /* ── FOOTER ── */
-    footer {
-      padding: 2.5rem clamp(1.5rem, 5vw, 4rem);
-      display: flex; align-items: center; justify-content: space-between;
-      border-top: 1px solid var(--border); flex-wrap: wrap; gap: 1rem;
+    footer { background:var(--ink); border-top:1px solid rgba(255,255,255,.07); padding:3.5rem clamp(1.25rem,5vw,3rem) 1.5rem; }
+    .foot-grid { max-width:1120px; margin:0 auto; display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:3rem; margin-bottom:2.5rem; }
+    .foot-brand p { font-size:.8rem; color:#64748B; line-height:1.75; max-width:230px; margin-top:.7rem; }
+    .foot-logo { display:flex; align-items:center; gap:.55rem; font-size:.95rem; font-weight:800; color:#fff; }
+    .foot-logo .logo-sq { background:#fff; color:var(--ink); }
+    .foot-col h4 { font-size:.72rem; font-weight:700; color:#CBD5E1; text-transform:uppercase; letter-spacing:.8px; margin-bottom:.9rem; }
+    .foot-col ul { list-style:none; display:flex; flex-direction:column; gap:.5rem; }
+    .foot-col ul a { font-size:.8rem; color:#64748B; transition:color .15s; }
+    .foot-col ul a:hover { color:#fff; }
+    .foot-bottom { max-width:1120px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; padding-top:1.5rem; border-top:1px solid rgba(255,255,255,.07); }
+    .foot-bottom p { font-size:.75rem; color:#475569; }
+    .foot-badges { display:flex; gap:.5rem; }
+    .fbadge { font-size:.63rem; font-weight:600; color:#64748B; border:1px solid rgba(255,255,255,.1); border-radius:5px; padding:.2rem .55rem; }
+
+    /* ── TRUST BAR ── */
+    .trust-bar {
+      background:#fff; border-bottom:1px solid var(--border);
+      padding:.85rem clamp(1.25rem,5vw,3rem);
     }
-    footer .logo { font-size: 1rem; font-weight: 700; color: var(--brand); text-decoration: none; }
-    footer .logo span { color: var(--accent); }
-    footer p { font-size: .8rem; color: var(--muted); }
-    .footer-links { display: flex; gap: 1.5rem; list-style: none; }
-    .footer-links a { font-size: .8rem; color: var(--muted); text-decoration: none; }
-    .footer-links a:hover { color: var(--brand); }
+    .trust-bar-in {
+      max-width:1120px; margin:0 auto;
+      display:flex; justify-content:center; align-items:center;
+      flex-wrap:wrap; gap:.65rem 2.5rem;
+    }
+    .trust-item {
+      display:flex; align-items:center; gap:.4rem;
+      font-size:.76rem; font-weight:600; color:var(--muted); white-space:nowrap;
+    }
+    .trust-item .ti-ic { font-size:.9rem; }
+
+    /* ── HAMBURGER / MOBILE NAV ── */
+    .burger {
+      display:none; flex-direction:column; justify-content:center; gap:5px;
+      background:none; border:none; cursor:pointer; padding:.4rem; border-radius:8px;
+    }
+    .burger span { display:block; width:22px; height:2px; background:var(--ink); border-radius:2px; transition:all .25s; }
+    .burger.open span:nth-child(1) { transform:translateY(7px) rotate(45deg); }
+    .burger.open span:nth-child(2) { opacity:0; transform:scaleX(0); }
+    .burger.open span:nth-child(3) { transform:translateY(-7px) rotate(-45deg); }
+    .mobile-nav {
+      display:none; position:fixed; top:62px; left:0; right:0; bottom:0;
+      background:#fff; z-index:299; padding:1.5rem clamp(1.25rem,5vw,3rem);
+      flex-direction:column; overflow-y:auto;
+      border-top:1px solid var(--border);
+    }
+    .mobile-nav.open { display:flex; }
+    .mobile-nav a {
+      font-size:.98rem; font-weight:600; color:var(--ink2);
+      padding:.85rem 0; border-bottom:1px solid var(--border); display:block; transition:color .15s;
+    }
+    .mobile-nav a:hover { color:var(--blue); }
+    .mob-actions { display:flex; flex-direction:column; gap:.65rem; margin-top:1.5rem; }
+    .mob-actions .mob-login {
+      display:block; text-align:center; border-radius:10px; padding:.85rem; font-weight:700;
+      border:1.5px solid var(--border); color:var(--ink); font-size:.9rem; font-family:inherit;
+    }
+    .mob-actions .mob-start {
+      display:block; text-align:center; border-radius:10px; padding:.85rem; font-weight:700;
+      background:var(--ink); color:#fff; font-size:.9rem; font-family:inherit;
+    }
+
+    /* ── NAV ACTIVE ── */
+    .nav-links a.nav-active { color:var(--ink); font-weight:700; }
+
+    /* ── RESPONSIVE ── */
+    @media(max-width:900px){
+      .hero-layout,.spotlight-grid{grid-template-columns:1fr;gap:2.5rem;}
+      .prod-grid,.pricing-grid{grid-template-columns:1fr;}
+      .pillars,.india-grid,.testi-grid{grid-template-columns:1fr 1fr;}
+      .steps{grid-template-columns:1fr;} .steps::before{display:none;}
+      .foot-grid{grid-template-columns:1fr 1fr!important;gap:2rem;}
+      .nav-links{display:none;} .burger{display:flex;}
+    }
+    @media(max-width:560px){
+      .pillars,.india-grid,.testi-grid,.pricing-grid{grid-template-columns:1fr;}
+      .foot-grid{grid-template-columns:1fr!important;}
+      .trust-bar-in{gap:.6rem 1.5rem;}
+    }
   </style>
 </head>
 <body>
 
-  <!-- NAV -->
-  <nav>
-    <a class="nav-logo" href="/">Arham<span>.</span>Workspace</a>
+<!-- NAV -->
+<nav id="navbar">
+  <div class="nav-in">
+    <a class="nav-logo" href="/">
+      <span class="logo-sq">AW</span>
+      Arham Workspace
+    </a>
     <ul class="nav-links">
       <li><a href="#products">Products</a></li>
-      <li><a href="#why">Why Us</a></li>
+      <li><a href="#india">India-first</a></li>
+      <li><a href="#integrations">Integrations</a></li>
+      <li><a href="https://inbox.arhamworkspace.tech/pricing" target="_blank">Pricing</a></li>
     </ul>
-    <a class="nav-cta" href="https://peopleorbit.com" target="_blank">Get Started →</a>
-  </nav>
-
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-badge">Building Tools for Growing Teams</div>
-    <h1>Simple software for<br/><span class="highlight">ambitious businesses</span></h1>
-    <p>Two focused products. Zero complexity. Built to help your team move faster from day one.</p>
-    <div class="hero-actions">
-      <a class="btn-primary" href="https://peopleorbit.com" target="_blank">
-        Explore People Orbit →
-      </a>
-      <a class="btn-secondary" href="https://app.arhamworkspace.tech">
-        Try Inbox →
-      </a>
+    <div class="nav-right">
+      <a class="btn-ghost" href="https://console.arhamworkspace.tech/login">Log in</a>
+      <a class="btn-dark" href="https://console.arhamworkspace.tech/signup">Get started free →</a>
+      <button class="burger" id="burger" aria-label="Toggle menu" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
     </div>
-  </section>
-
-  <!-- STATS -->
-  <div class="stats">
-    <div class="stat"><div class="stat-num">2</div><div class="stat-label">Products</div></div>
-    <div class="stat"><div class="stat-num">99.9%</div><div class="stat-label">Uptime SLA</div></div>
-    <div class="stat"><div class="stat-num">India</div><div class="stat-label">Hosted &amp; Operated</div></div>
-    <div class="stat"><div class="stat-num">0</div><div class="stat-label">Hidden Fees</div></div>
   </div>
+</nav>
 
-  <!-- PRODUCTS -->
-  <section class="products" id="products">
-    <div class="section-label">Our Products</div>
-    <h2 class="section-title">Everything your team needs</h2>
-    <p class="section-sub">Two tools, each built to solve one problem — and solve it well.</p>
+<!-- MOBILE NAV -->
+<div class="mobile-nav" id="mobile-nav" role="dialog" aria-label="Navigation menu">
+  <a href="#products" class="mob-link">Products</a>
+  <a href="#india" class="mob-link">India-first</a>
+  <a href="#integrations" class="mob-link">Integrations</a>
+  <a href="https://inbox.arhamworkspace.tech/pricing" target="_blank" class="mob-link">Pricing</a>
+  <div class="mob-actions">
+    <a class="mob-login" href="https://console.arhamworkspace.tech/login">Log in</a>
+    <a class="mob-start" href="https://console.arhamworkspace.tech/signup">Get started free →</a>
+  </div>
+</div>
 
-    <div class="product-grid">
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="orb-layer" id="orbLayer">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="orb orb3"></div>
+  </div>
+  <div class="hero-layout">
+    <div class="hero-copy">
+      <div class="hero-tag">🇮🇳 Built for Indian businesses</div>
+      <h1>The <span class="hi">workspace</span><br/>Indian businesses<br/>deserve.</h1>
+      <p class="hero-desc">Business email, HR management, AI video sales agents, and credit improvement — four focused tools built for how India works. ₹ pricing, data in India, zero bloat.</p>
+      <div class="hero-actions">
+        <a class="btn-primary" href="https://console.arhamworkspace.tech/signup">Start free — no card needed →</a>
+        <a class="btn-outline-dark" href="#products">Explore products ↓</a>
+      </div>
+      <p class="hero-meta">
+        <span>✓ Free trial on all products</span>
+        <span>✓ Data hosted in India</span>
+        <span>✓ Setup in minutes</span>
+      </p>
+    </div>
+    <div class="hero-tiles">
+      <div class="h-tile">
+        <div class="tile-accent" style="background:linear-gradient(90deg,#7C3AED,#A78BFA)"></div>
+        <div class="tag" style="background:#F5F3FF;color:#7C3AED;">HR &amp; People</div>
+        <div class="h-tile-icon">🪐</div>
+        <h3>People Orbit</h3>
+        <p>Employee management, leave tracking &amp; payroll reports in one place</p>
+      </div>
+      <div class="h-tile">
+        <div class="tile-accent" style="background:linear-gradient(90deg,#2563EB,#60A5FA)"></div>
+        <div class="tag" style="background:#EFF6FF;color:#2563EB;">Business Email</div>
+        <div class="h-tile-icon">✉️</div>
+        <h3>Inbox</h3>
+        <p>Professional email on your domain — fast, clean, zero ads</p>
+      </div>
+      <div class="h-tile">
+        <div class="tile-accent" style="background:linear-gradient(90deg,#059669,#34D399)"></div>
+        <div class="tag" style="background:#ECFDF5;color:#059669;">AI Sales</div>
+        <div class="h-tile-icon">🎥</div>
+        <h3>AI Video Agent</h3>
+        <p>Talking AI avatar that sells, supports &amp; books meetings 24/7</p>
+      </div>
+      <div class="h-tile">
+        <div class="tile-accent" style="background:linear-gradient(90deg,#D97706,#FBBF24)"></div>
+        <div class="tag" style="background:#FFFBEB;color:#D97706;">Credit</div>
+        <div class="h-tile-icon">📈</div>
+        <h3>Credit Saath</h3>
+        <p>Track CIBIL score, dispute errors &amp; unlock better loans</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST BAR -->
+<div class="trust-bar">
+  <div class="trust-bar-in">
+    <div class="trust-item"><span class="ti-ic">🛡️</span><span>DPDP Compliant</span></div>
+    <div class="trust-item"><span class="ti-ic">🇮🇳</span><span>India-hosted Servers</span></div>
+    <div class="trust-item"><span class="ti-ic">🧾</span><span>GST Billing Included</span></div>
+    <div class="trust-item"><span class="ti-ic">⚡</span><span>99.9% Uptime SLA</span></div>
+    <div class="trust-item"><span class="ti-ic">🔒</span><span>TLS Encrypted</span></div>
+    <div class="trust-item"><span class="ti-ic">📞</span><span>India-based Support</span></div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-band">
+  <div class="stats-in">
+    <div class="stat"><div class="stat-n" data-count="4">0</div><div class="stat-l">Focused Products</div></div>
+    <div class="stat"><div class="stat-n">99.9%</div><div class="stat-l">Uptime SLA</div></div>
+    <div class="stat"><div class="stat-n" data-count="24">0</div><div class="stat-l">Hrs AI Active / Day</div></div>
+    <div class="stat"><div class="stat-n">₹0</div><div class="stat-l">Hidden Fees</div></div>
+    <div class="stat"><div class="stat-n" data-count="500">0</div><div class="stat-l">Companies Onboarded</div></div>
+    <div class="stat"><div class="stat-n">India</div><div class="stat-l">Data Hosted Here</div></div>
+  </div>
+</div>
+
+<!-- INTEGRATION TICKER -->
+<div class="ticker-wrap" id="integrations">
+  <div class="ticker-track" id="ticker">
+    <span class="ticker-item"><span class="ti">💬</span> WhatsApp Business</span>
+    <span class="ticker-item"><span class="ti">💳</span> Razorpay</span>
+    <span class="ticker-item"><span class="ti">📊</span> Tally Prime</span>
+    <span class="ticker-item"><span class="ti">📧</span> Zoho Mail</span>
+    <span class="ticker-item"><span class="ti">🔗</span> HubSpot CRM</span>
+    <span class="ticker-item"><span class="ti">🤖</span> Google Workspace</span>
+    <span class="ticker-item"><span class="ti">📱</span> Slack</span>
+    <span class="ticker-item"><span class="ti">🏦</span> Paytm Business</span>
+    <span class="ticker-item"><span class="ti">📑</span> Zoho CRM</span>
+    <span class="ticker-item"><span class="ti">🔒</span> OkCredit</span>
+    <span class="ticker-item"><span class="ti">📋</span> Freshdesk</span>
+    <span class="ticker-item"><span class="ti">🏢</span> IndiaMART</span>
+    <!-- duplicate for seamless loop -->
+    <span class="ticker-item"><span class="ti">💬</span> WhatsApp Business</span>
+    <span class="ticker-item"><span class="ti">💳</span> Razorpay</span>
+    <span class="ticker-item"><span class="ti">📊</span> Tally Prime</span>
+    <span class="ticker-item"><span class="ti">📧</span> Zoho Mail</span>
+    <span class="ticker-item"><span class="ti">🔗</span> HubSpot CRM</span>
+    <span class="ticker-item"><span class="ti">🤖</span> Google Workspace</span>
+    <span class="ticker-item"><span class="ti">📱</span> Slack</span>
+    <span class="ticker-item"><span class="ti">🏦</span> Paytm Business</span>
+    <span class="ticker-item"><span class="ti">📑</span> Zoho CRM</span>
+    <span class="ticker-item"><span class="ti">🔒</span> OkCredit</span>
+    <span class="ticker-item"><span class="ti">📋</span> Freshdesk</span>
+    <span class="ticker-item"><span class="ti">🏢</span> IndiaMART</span>
+  </div>
+</div>
+
+<!-- PRODUCTS -->
+<section class="sec-pad products-bg reveal" id="products">
+  <div class="wrap">
+    <div class="prod-intro center">
+      <div class="eyebrow">Our Products</div>
+      <h2 class="sec-h" style="margin-bottom:.7rem;">Everything your business needs</h2>
+      <p class="sec-sub">Each tool solves one real problem, built lean and priced fairly for the Indian market.</p>
+    </div>
+    <div class="prod-grid" style="margin-top:3rem;">
 
       <!-- People Orbit -->
-      <div class="product-card">
-        <div class="card-header">
-          <div class="card-icon icon-orbit">🪐</div>
-          <div class="card-meta">
-            <span class="card-tag tag-orbit">People Management</span>
-            <div class="card-name">People Orbit</div>
-            <div class="card-desc">HR &amp; people ops, simplified for modern teams.</div>
+      <div class="prod-card reveal d1">
+        <div class="prod-mock" style="background:linear-gradient(135deg,#F5F3FF,#EDE9FE);">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#FF5F57"></div>
+            <div class="mock-dot" style="background:#FEBC2E"></div>
+            <div class="mock-dot" style="background:#28C840"></div>
+            <span class="mock-title">🪐 People Orbit — Dashboard</span>
+          </div>
+          <div class="mock-win">
+            <div class="po-mock-header">
+              <strong>People Orbit</strong>
+              <span>Aug 2026 · Bangalore HQ</span>
+            </div>
+            <div class="po-stats-row">
+              <div class="po-stat"><div class="n" style="color:#7C3AED;">24</div><div class="l">Employees</div></div>
+              <div class="po-stat"><div class="n" style="color:#D97706;">3</div><div class="l">Leave Req.</div></div>
+              <div class="po-stat"><div class="n" style="color:#16A34A;">98%</div><div class="l">Attendance</div></div>
+            </div>
+            <div class="po-rows">
+              <div class="po-row"><div class="po-av" style="background:#7C3AED;">R</div><span class="po-name">Rahul Mehta</span><span class="po-dept">Eng</span><span class="po-badge" style="background:#DCFCE7;color:#15803D;">Active</span></div>
+              <div class="po-row"><div class="po-av" style="background:#A78BFA;">P</div><span class="po-name">Priya Sharma</span><span class="po-dept">HR</span><span class="po-badge" style="background:#FEF9C3;color:#A16207;">On Leave</span></div>
+              <div class="po-row"><div class="po-av" style="background:#6D28D9;">A</div><span class="po-name">Amit Kumar</span><span class="po-dept">Sales</span><span class="po-badge" style="background:#DCFCE7;color:#15803D;">Active</span></div>
+            </div>
           </div>
         </div>
-        <div class="card-body">
-          <ul class="feature-list check-orbit">
-            <li>Employee directory &amp; onboarding workflows</li>
-            <li>Leave &amp; attendance management</li>
-            <li>Performance reviews &amp; goal tracking</li>
-            <li>Team announcements &amp; org chart</li>
-            <li>Payroll-ready reports in one click</li>
+        <div class="prod-body-pad">
+          <div style="display:flex;align-items:center;margin-bottom:.3rem;">
+            <span class="prod-name">People Orbit</span>
+            <span class="prod-tag2" style="background:#F5F3FF;color:#7C3AED;">HR &amp; People</span>
+          </div>
+          <div class="prod-tagline">Complete HR management for modern Indian teams — onboarding to payroll in one place.</div>
+          <ul class="feat-list">
+            <li><span class="ck" style="background:#F5F3FF;color:#7C3AED;">✓</span>Employee directory, org chart &amp; roles</li>
+            <li><span class="ck" style="background:#F5F3FF;color:#7C3AED;">✓</span>Leave &amp; attendance with auto-approvals</li>
+            <li><span class="ck" style="background:#F5F3FF;color:#7C3AED;">✓</span>Performance reviews &amp; goal tracking</li>
+            <li><span class="ck" style="background:#F5F3FF;color:#7C3AED;">✓</span>GST-ready payroll reports in one click</li>
+            <li><span class="ck" style="background:#F5F3FF;color:#7C3AED;">✓</span>Policy documents &amp; announcements</li>
           </ul>
         </div>
-        <div class="card-footer">
-          <a class="card-cta cta-orbit" href="https://peopleorbit.com" target="_blank">Sign Up Free →</a>
-          <a class="cta-ghost" href="https://peopleorbit.com" target="_blank">Learn more</a>
+        <div class="prod-foot">
+          <a class="btn-p" style="background:#7C3AED;box-shadow:0 3px 12px rgba(124,58,237,.3);" href="https://peopleorbit.in" target="_blank">Sign up free →</a>
+          <a class="btn-g" href="https://peopleorbit.in" target="_blank">Learn more</a>
         </div>
       </div>
 
       <!-- Inbox -->
-      <div class="product-card">
-        <div class="card-header">
-          <div class="card-icon icon-inbox">✉️</div>
-          <div class="card-meta">
-            <span class="card-tag tag-inbox">Business Email</span>
-            <div class="card-name">Inbox</div>
-            <div class="card-desc">Professional email hosting on your own domain.</div>
+      <div class="prod-card reveal d2">
+        <div class="prod-mock" style="background:linear-gradient(135deg,#EFF6FF,#DBEAFE);">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#FF5F57"></div>
+            <div class="mock-dot" style="background:#FEBC2E"></div>
+            <div class="mock-dot" style="background:#28C840"></div>
+            <span class="mock-title">✉️ Inbox — you@yourcompany.com</span>
+          </div>
+          <div class="mock-win">
+            <div class="inbox-mock">
+              <div class="inbox-sidebar">
+                <div class="inbox-folder active">📥 Inbox<span class="cnt">5</span></div>
+                <div class="inbox-folder">📤 Sent</div>
+                <div class="inbox-folder">📝 Drafts</div>
+                <div class="inbox-folder">⭐ Starred</div>
+                <div class="inbox-folder">🗑️ Trash</div>
+              </div>
+              <div class="inbox-main">
+                <div class="inbox-email">
+                  <div class="inbox-from">Rajesh @ Tata Group</div>
+                  <div class="inbox-subj" style="font-weight:600;color:#0F172A;">Q2 Partnership Proposal</div>
+                  <div class="inbox-subj">Hi, please find the updated terms...</div>
+                </div>
+                <div class="inbox-email">
+                  <div class="inbox-from">Accounts Team</div>
+                  <div class="inbox-subj">Invoice #INV-2026-047 — ₹45,000</div>
+                </div>
+                <div class="inbox-email">
+                  <div class="inbox-from">Google Workspace Alert</div>
+                  <div class="inbox-subj">Migration completed successfully ✓</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="card-body">
-          <ul class="feature-list check-inbox">
-            <li>Custom domain email (you@yourbusiness.com)</li>
-            <li>Fast, clean webmail — no ads, no tracking</li>
-            <li>SPF, DKIM &amp; DMARC fully configured</li>
-            <li>IMAP / SMTP access with any email client</li>
-            <li>Sieve rules &amp; filters built in</li>
+        <div class="prod-body-pad">
+          <div style="display:flex;align-items:center;margin-bottom:.3rem;">
+            <span class="prod-name">Inbox</span>
+            <span class="prod-tag2" style="background:#EFF6FF;color:#2563EB;">Business Email</span>
+          </div>
+          <div class="prod-tagline">Professional email hosting on your own domain — clean, fast, zero ads, DMARC-ready.</div>
+          <ul class="feat-list">
+            <li><span class="ck" style="background:#EFF6FF;color:#2563EB;">✓</span>Custom domain — you@yourcompany.com</li>
+            <li><span class="ck" style="background:#EFF6FF;color:#2563EB;">✓</span>Clean webmail + works with Outlook/Apple Mail</li>
+            <li><span class="ck" style="background:#EFF6FF;color:#2563EB;">✓</span>SPF, DKIM &amp; DMARC fully configured</li>
+            <li><span class="ck" style="background:#EFF6FF;color:#2563EB;">✓</span>1-click migration from Zoho / Google</li>
+            <li><span class="ck" style="background:#EFF6FF;color:#2563EB;">✓</span>Shared mailboxes &amp; email aliases</li>
           </ul>
         </div>
-        <div class="card-footer">
-          <a class="card-cta cta-inbox" href="https://app.arhamworkspace.tech">Access Inbox →</a>
-          <a class="cta-ghost" href="https://app.arhamworkspace.tech">Learn more</a>
+        <div class="prod-foot">
+          <a class="btn-p" style="background:#2563EB;box-shadow:0 3px 12px rgba(37,99,235,.3);" href="https://inbox.arhamworkspace.tech">Explore Inbox →</a>
+          <a class="btn-g" href="https://console.arhamworkspace.tech/signup">Start trial</a>
+        </div>
+      </div>
+
+      <!-- AI Video Agent -->
+      <div class="prod-card reveal d3">
+        <div class="prod-mock" style="background:linear-gradient(135deg,#ECFDF5,#D1FAE5);">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#FF5F57"></div>
+            <div class="mock-dot" style="background:#FEBC2E"></div>
+            <div class="mock-dot" style="background:#28C840"></div>
+            <span class="mock-title">🎥 AI Video Agent — Live</span>
+          </div>
+          <div class="mock-win">
+            <div class="ai-mock-header" style="background:linear-gradient(135deg,#047857,#059669);">
+              <div class="ai-av">🤖</div>
+              <div>
+                <div class="ai-name">Priya — Arham AI Sales</div>
+                <div style="font-size:.55rem;color:rgba(255,255,255,.7);">Video call · 01:42</div>
+              </div>
+              <div class="live-dot" style="margin-left:auto;"></div>
+            </div>
+            <div class="ai-chat">
+              <div class="ai-bubble bot">Hi! I'm Priya, your AI sales assistant. How can I help you today?</div>
+              <div class="ai-bubble usr" style="margin-left:auto;background:#059669;">Tell me about email plans</div>
+              <div class="ai-bubble bot">Great choice! Our Business plan gives you 50 mailboxes at ₹1,499/mo. Want me to book a demo? 🎉</div>
+            </div>
+          </div>
+        </div>
+        <div class="prod-body-pad">
+          <div style="display:flex;align-items:center;margin-bottom:.3rem;">
+            <span class="prod-name">AI Video Agent</span>
+            <span class="prod-tag2" style="background:#ECFDF5;color:#059669;">AI Sales</span>
+          </div>
+          <div class="prod-tagline">A talking AI avatar that handles sales calls, qualifies leads, and books meetings — 24/7.</div>
+          <ul class="feat-list">
+            <li><span class="ck" style="background:#ECFDF5;color:#059669;">✓</span>Realistic avatar with lip-sync voice in Hindi &amp; English</li>
+            <li><span class="ck" style="background:#ECFDF5;color:#059669;">✓</span>Qualifies leads &amp; books demos automatically</li>
+            <li><span class="ck" style="background:#ECFDF5;color:#059669;">✓</span>Handles customer support with your knowledge base</li>
+            <li><span class="ck" style="background:#ECFDF5;color:#059669;">✓</span>Syncs with WhatsApp, CRM &amp; your calendar</li>
+            <li><span class="ck" style="background:#ECFDF5;color:#059669;">✓</span>Works on website, app, or WhatsApp Business</li>
+          </ul>
+        </div>
+        <div class="prod-foot">
+          <a class="btn-p" style="background:#059669;box-shadow:0 3px 12px rgba(5,150,105,.3);" href="#ai-agent">See how it works →</a>
+          <a class="btn-g" href="mailto:hello@arhamworkspace.tech">Request demo</a>
+        </div>
+      </div>
+
+      <!-- Credit Saath -->
+      <div class="prod-card reveal d4">
+        <div class="prod-mock" style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#FF5F57"></div>
+            <div class="mock-dot" style="background:#FEBC2E"></div>
+            <div class="mock-dot" style="background:#28C840"></div>
+            <span class="mock-title">📈 Credit Saath — Score Report</span>
+          </div>
+          <div class="mock-win">
+            <div class="cr-mock">
+              <div class="cr-score-row">
+                <div class="cr-score-n" style="color:#D97706;">742</div>
+                <div>
+                  <div class="cr-score-l">CIBIL Score · Updated today</div>
+                  <div style="font-size:.58rem;background:#FEF3C7;color:#D97706;padding:.1rem .35rem;border-radius:4px;display:inline-block;font-weight:700;">↑ +18 this month</div>
+                </div>
+              </div>
+              <div class="cr-bar-bg" style="background:#FEF3C7;"><div class="cr-bar-fill" style="background:linear-gradient(90deg,#FBBF24,#D97706);"></div></div>
+              <div class="cr-rows">
+                <div class="cr-row"><span class="cr-ic">✅</span> Low credit utilisation — excellent!</div>
+                <div class="cr-row"><span class="cr-ic">⚠️</span> 2 late payment entries — dispute now</div>
+                <div class="cr-row"><span class="cr-ic">💡</span> Add secured card — boost +40 pts</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="prod-body-pad">
+          <div style="display:flex;align-items:center;margin-bottom:.3rem;">
+            <span class="prod-name">Credit Saath</span>
+            <span class="prod-tag2" style="background:#FFFBEB;color:#D97706;">Credit</span>
+          </div>
+          <div class="prod-tagline">Your companion to understand, track and improve your CIBIL score. "Saath" means together.</div>
+          <ul class="feat-list">
+            <li><span class="ck" style="background:#FFFBEB;color:#D97706;">✓</span>Free CIBIL &amp; Experian score check monthly</li>
+            <li><span class="ck" style="background:#FFFBEB;color:#D97706;">✓</span>Step-by-step personalised improvement plan</li>
+            <li><span class="ck" style="background:#FFFBEB;color:#D97706;">✓</span>Bureau dispute filing assistance</li>
+            <li><span class="ck" style="background:#FFFBEB;color:#D97706;">✓</span>Loan &amp; credit card eligibility checker</li>
+            <li><span class="ck" style="background:#FFFBEB;color:#D97706;">✓</span>Score change alerts via SMS &amp; WhatsApp</li>
+          </ul>
+        </div>
+        <div class="prod-foot">
+          <a class="btn-p" style="background:#D97706;box-shadow:0 3px 12px rgba(217,119,6,.3);" href="#credit">Learn more →</a>
+          <a class="btn-g" href="mailto:hello@arhamworkspace.tech">Early access</a>
         </div>
       </div>
 
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- WHY -->
-  <section class="why" id="why">
-    <h2>Why Arham Workspace?</h2>
-    <p>We build lean, focused tools — not bloated suites. Your data stays in India, your team stays productive.</p>
-    <div class="pillars">
-      <div class="pillar">
-        <div class="pillar-icon">🔒</div>
-        <h3>Data Stays in India</h3>
-        <p>All servers are hosted in Bangalore. Your business data never leaves the country.</p>
+<!-- AI AGENT SPOTLIGHT -->
+<section class="sec-pad" id="ai-agent">
+  <div class="wrap">
+    <div class="spotlight-grid reveal">
+      <div class="spot-visual" style="border-color:#EDE9FE;">
+        <div class="chat-header2" style="background:#F5F3FF;border-bottom:1px solid #EDE9FE;">
+          <div class="c-av" style="background:var(--purple-lt);font-size:1.2rem;">🤖</div>
+          <div>
+            <div class="c-name">Priya — AI Sales Agent</div>
+            <div class="c-sub">Powered by Arham AI · Available 24/7</div>
+          </div>
+          <span class="c-badge">● Live</span>
+        </div>
+        <div class="chat-msgs live-chat" id="chatbox">
+          <!-- filled by JS -->
+        </div>
+        <div class="chat-ibar">
+          <input type="text" placeholder="Type your question..." readonly />
+          <button>Send →</button>
+        </div>
       </div>
-      <div class="pillar">
-        <div class="pillar-icon">⚡</div>
-        <h3>Lightweight &amp; Fast</h3>
-        <p>No bloat. Pages load fast, APIs respond fast, your team stays unblocked.</p>
-      </div>
-      <div class="pillar">
-        <div class="pillar-icon">💸</div>
-        <h3>Honest Pricing</h3>
-        <p>Pay for what you use. No hidden fees, no surprise overages at month end.</p>
-      </div>
-      <div class="pillar">
-        <div class="pillar-icon">🤝</div>
-        <h3>Real Support</h3>
-        <p>Talk to the people who built the product. No ticket queues, no bots.</p>
+      <div class="spot-copy">
+        <span class="eyebrow" style="color:var(--purple);">AI Video Agent</span>
+        <h2 class="sec-h">Your best salesperson.<br/>Always on. Never tired.</h2>
+        <p class="sec-sub" style="margin-bottom:1.5rem;">Deploy a conversational AI avatar on your website or WhatsApp that qualifies leads, answers product questions, and books meetings while your team sleeps.</p>
+        <ul class="bullet-list">
+          <li><span class="bl-ic" style="background:#F5F3FF;">🎥</span><span>Realistic talking avatar with natural lip-sync voice in <strong>Hindi, English &amp; regional languages</strong></span></li>
+          <li><span class="bl-ic" style="background:#F5F3FF;">⚡</span><span>Qualifies inbound leads instantly and <strong>routes hot prospects</strong> to your sales team via WhatsApp</span></li>
+          <li><span class="bl-ic" style="background:#F5F3FF;">📅</span><span>Books demos, sends <strong>calendar invites and WhatsApp reminders</strong> automatically</span></li>
+          <li><span class="bl-ic" style="background:#F5F3FF;">🧠</span><span>Learns from your product docs, FAQs and past conversations — <strong>no code needed</strong></span></li>
+          <li><span class="bl-ic" style="background:#F5F3FF;">🔗</span><span>Connects to <strong>HubSpot, Zoho, Salesforce</strong> or any custom CRM via webhook</span></li>
+        </ul>
+        <a class="btn-accent" style="background:var(--purple);box-shadow:0 4px 16px rgba(124,58,237,.3);" href="mailto:hello@arhamworkspace.tech">Request a live demo →</a>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- FOOTER -->
-  <footer>
-    <a class="logo" href="/">Arham<span>.</span>Workspace</a>
-    <ul class="footer-links">
-      <li><a href="https://peopleorbit.com" target="_blank">People Orbit</a></li>
-      <li><a href="https://app.arhamworkspace.tech">Inbox</a></li>
-      <li><a href="mailto:hello@arhamworkspace.tech">Contact</a></li>
-    </ul>
-    <p>© 2026 Arham Workspace. Made in India 🇮🇳</p>
-  </footer>
+<!-- CREDIT SAATH SPOTLIGHT -->
+<section class="sec-pad credit-bg" id="credit">
+  <div class="wrap">
+    <div class="spotlight-grid reveal" style="direction:rtl;">
+      <div class="spot-visual" style="direction:ltr;border-color:#BBF7D0;">
+        <div class="chat-header2" style="background:#F0FDF4;border-bottom:1px solid #BBF7D0;">
+          <div class="c-av" style="background:#DCFCE7;font-size:1.2rem;">📈</div>
+          <div>
+            <div class="c-name">Credit Saath — Your Score Report</div>
+            <div class="c-sub">Arham Fintech Pvt Ltd · Updated 28 Jul 2026</div>
+          </div>
+          <span class="c-badge" style="background:#DCFCE7;color:#16A34A;">↑ Improving</span>
+        </div>
+        <div class="cr-big">
+          <div style="margin-bottom:.2rem;font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">CIBIL Score</div>
+          <div class="cr-big-score">742</div>
+          <div style="display:inline-block;background:#DCFCE7;color:#16A34A;font-size:.68rem;font-weight:800;padding:.18rem .5rem;border-radius:5px;margin-top:.3rem;">↑ +18 pts this month · Good range</div>
+          <div class="cr-big-bar-bg" style="margin-top:1rem;"><div class="cr-big-bar" id="scoreBar"></div></div>
+          <div class="cr-range"><span>300 Poor</span><span>550 Fair</span><span>750 Good</span><span>900 Excellent</span></div>
+          <div class="cr-tips">
+            <div class="cr-tip good"><span class="ct-ic">✅</span><span>Low credit utilisation (18%) — keep it under 30%! <strong>Great job.</strong></span></div>
+            <div class="cr-tip warn"><span class="ct-ic">⚠️</span><span>2 old accounts show late payments — <strong>we'll help you file a dispute</strong> to get them removed.</span></div>
+            <div class="cr-tip info"><span class="ct-ic">💡</span><span>Adding a secured credit card could boost your score by <strong>+35–50 pts</strong> in 90 days.</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="spot-copy" style="direction:ltr;">
+        <span class="eyebrow" style="color:var(--green);">Credit Saath</span>
+        <h2 class="sec-h">Better credit.<br/>Better loans. Your साथ.</h2>
+        <p class="sec-sub" style="margin-bottom:1.5rem;">"Saath" means together in Hindi. Credit Saath is your companion on the journey from a low score to a loan-ready profile — built for Indian businesses and individuals.</p>
+        <ul class="bullet-list">
+          <li><span class="bl-ic" style="background:#F0FDF4;">📊</span><span>Free <strong>CIBIL &amp; Experian</strong> score check — updated every month, always free</span></li>
+          <li><span class="bl-ic" style="background:#F0FDF4;">🗺️</span><span>Personalised <strong>step-by-step credit improvement roadmap</strong> based on your actual report</span></li>
+          <li><span class="bl-ic" style="background:#F0FDF4;">📝</span><span>We help you <strong>dispute incorrect bureau entries</strong> and track removal status</span></li>
+          <li><span class="bl-ic" style="background:#F0FDF4;">🏦</span><span>See exactly <strong>which loans and credit cards you qualify for</strong> right now</span></li>
+          <li><span class="bl-ic" style="background:#F0FDF4;">🔔</span><span>Real-time <strong>WhatsApp &amp; SMS alerts</strong> whenever your score changes</span></li>
+        </ul>
+        <a class="btn-accent" style="background:var(--green);box-shadow:0 4px 16px rgba(22,163,74,.3);" href="mailto:hello@arhamworkspace.tech">Join early access →</a>
+      </div>
+    </div>
+  </div>
+</section>
 
+<!-- INDIA-FIRST FEATURES -->
+<section class="sec-pad india-sec" id="india">
+  <div class="wrap center">
+    <div class="eyebrow">India-First by Design</div>
+    <h2 class="sec-h" style="margin-bottom:.65rem;">Infrastructure, compliance &amp; language — built for India from day one</h2>
+    <p class="sec-sub">We didn't localise an American product. Every decision — from server location to billing currency to language support — was made for the Indian market.</p>
+    <div class="india-grid" style="margin-top:3rem;">
+      <div class="india-card reveal d1" style="border-top:3px solid var(--blue);">
+        <div class="india-ic">🇮🇳</div>
+        <h3>Data sovereign — stays in India</h3>
+        <p>All servers in Bangalore. Your business data never crosses a border. DPDP-ready by default — no compliance checkbox required from you.</p>
+      </div>
+      <div class="india-card reveal d2" style="border-top:3px solid var(--purple);">
+        <div class="india-ic">🧾</div>
+        <h3>GST &amp; TDS ready, out of the box</h3>
+        <p>People Orbit separates GST components in every salary slip. Export TDS-ready data directly to Tally Prime or your CA's portal — no manual work.</p>
+      </div>
+      <div class="india-card reveal d3" style="border-top:3px solid var(--emerald);">
+        <div class="india-ic">🗣️</div>
+        <h3>Hindi &amp; regional language AI</h3>
+        <p>Our AI Video Agent speaks Hindi, Gujarati, Marathi and English with natural lip-sync. Reach every customer in the language they trust.</p>
+      </div>
+      <div class="india-card reveal d1" style="border-top:3px solid var(--amber);">
+        <div class="india-ic">💸</div>
+        <h3>₹ pricing, zero forex risk</h3>
+        <p>Pay in Indian Rupees via UPI, net banking or card. No USD exchange rate anxiety. No surprise conversions. GST invoice included every month.</p>
+      </div>
+      <div class="india-card reveal d2" style="border-top:3px solid var(--teal);">
+        <div class="india-ic">📶</div>
+        <h3>Engineered for Indian connectivity</h3>
+        <p>Performs on 4G. Lightweight assets, edge caching from Indian CDN nodes, and progressive loading so even a slow connection feels fast.</p>
+      </div>
+      <div class="india-card reveal d3" style="border-top:3px solid var(--green);">
+        <div class="india-ic">📊</div>
+        <h3>CIBIL &amp; Experian bureau access</h3>
+        <p>Credit Saath connects to India's two largest credit bureaus — the same ones lenders use. Real data, real scores, real improvement plans.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="sec-pad how-bg">
+  <div class="wrap center">
+    <div class="eyebrow">Getting started</div>
+    <h2 class="sec-h" style="color:#fff;margin-bottom:.65rem;">Up and running in minutes</h2>
+    <p class="sec-sub" style="color:#64748B;">No lengthy onboarding. No implementation fees. No sales call required. Just sign up and start.</p>
+    <div class="steps reveal">
+      <div class="step">
+        <div class="step-n">01</div>
+        <h3>Create your account</h3>
+        <p>Sign up at console.arhamworkspace.tech in under 2 minutes. No credit card, no contract.</p>
+      </div>
+      <div class="step">
+        <div class="step-n">02</div>
+        <h3>Add your domain &amp; team</h3>
+        <p>Connect your business domain, invite team members, and activate only the products you need.</p>
+      </div>
+      <div class="step">
+        <div class="step-n">03</div>
+        <h3>You're live</h3>
+        <p>Start sending email, managing HR, deploying your AI agent. Upgrade any time as your team grows.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY ARHAM -->
+<section class="sec-pad why-bg">
+  <div class="wrap center">
+    <div class="eyebrow">Our principles</div>
+    <h2 class="sec-h" style="margin-bottom:.65rem;">Why teams choose Arham</h2>
+    <p class="sec-sub">We don't chase enterprise contracts or bloat our products with unused features. Four focused tools built to last.</p>
+    <div class="pillars">
+      <div class="pillar reveal d1">
+        <div class="p-ic">🔒</div>
+        <h3>Privacy-first</h3>
+        <p>No user data sold. No ads. No tracking across products. Your business data is yours alone.</p>
+      </div>
+      <div class="pillar reveal d2">
+        <div class="p-ic" style="background:#F0FDF4;">⚡</div>
+        <h3>Fast &amp; lightweight</h3>
+        <p>Pages load under 1 second. APIs respond instantly. No JavaScript bloat, no loading spinners everywhere.</p>
+      </div>
+      <div class="pillar reveal d3">
+        <div class="p-ic" style="background:#F5F3FF;">💸</div>
+        <h3>Honest pricing</h3>
+        <p>₹ pricing, no forex surprises, no feature paywalls. The price you see is the price you pay — always.</p>
+      </div>
+      <div class="pillar reveal d4">
+        <div class="p-ic" style="background:#FFF7ED;">🤝</div>
+        <h3>Real human support</h3>
+        <p>Chat with the people who built the product. We reply in hours, not days — and we speak your language.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="sec-pad pricing-bg" id="pricing">
+  <div class="wrap center">
+    <div class="eyebrow">Simple Pricing</div>
+    <h2 class="sec-h" style="margin-bottom:.65rem;">Pick what you need</h2>
+    <p class="sec-sub">Each product priced independently. Use one or all four — pay only for what you activate. Start free, upgrade anytime.</p>
+    <div class="pricing-grid">
+      <div class="price-card reveal d1">
+        <div class="price-ic">🪐</div>
+        <div class="price-prod">People Orbit</div>
+        <div class="price-amt">₹299 <sub>/ mo</sub></div>
+        <div class="price-desc">Per workspace · up to 25 employees</div>
+        <ul class="p-feats">
+          <li>Employee directory &amp; org chart</li>
+          <li>Leave &amp; attendance tracking</li>
+          <li>Performance reviews</li>
+          <li>GST-ready payroll reports</li>
+          <li>Unlimited announcements</li>
+        </ul>
+        <a class="price-cta" href="https://peopleorbit.in">Start free trial</a>
+      </div>
+      <div class="price-card popular reveal d2">
+        <span class="popular-badge">Most Popular</span>
+        <div class="price-ic">✉️</div>
+        <div class="price-prod">Inbox Email</div>
+        <div class="price-amt">₹499 <sub>/ mo</sub></div>
+        <div class="price-desc">Up to 10 mailboxes · 10 GB each</div>
+        <ul class="p-feats">
+          <li>Custom domain email</li>
+          <li>Webmail + IMAP/SMTP</li>
+          <li>SPF, DKIM &amp; DMARC</li>
+          <li>1-click Zoho/Google migration</li>
+          <li>Shared mailboxes &amp; aliases</li>
+        </ul>
+        <a class="price-cta" href="https://console.arhamworkspace.tech/signup">Start free trial</a>
+      </div>
+      <div class="price-card reveal d3">
+        <div class="price-ic">🎥</div>
+        <div class="price-prod">AI Video Agent</div>
+        <div class="price-amt">₹2,999 <sub>/ mo</sub></div>
+        <div class="price-desc">1 AI agent · unlimited conversations</div>
+        <ul class="p-feats">
+          <li>Talking avatar with Hindi/English voice</li>
+          <li>Lead qualification flows</li>
+          <li>Demo booking automation</li>
+          <li>WhatsApp &amp; CRM sync</li>
+          <li>Custom knowledge base</li>
+        </ul>
+        <a class="price-cta" href="mailto:hello@arhamworkspace.tech">Request a demo</a>
+      </div>
+      <div class="price-card reveal d4">
+        <div class="price-ic">📈</div>
+        <div class="price-prod">Credit Saath</div>
+        <div class="price-amt">Free <sub>+ premium</sub></div>
+        <div class="price-desc">Basic score check always free</div>
+        <ul class="p-feats">
+          <li>Monthly CIBIL score check</li>
+          <li>Basic improvement tips</li>
+          <li>Score change alerts</li>
+          <li>Dispute filing (premium)</li>
+          <li>Loan eligibility (premium)</li>
+        </ul>
+        <a class="price-cta" href="mailto:hello@arhamworkspace.tech">Join early access</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="sec-pad testi-bg">
+  <div class="wrap center">
+    <div class="eyebrow">Customer Stories</div>
+    <h2 class="sec-h" style="margin-bottom:.65rem;">Loved by businesses across India</h2>
+    <p class="sec-sub">From Surat to Nashik, from manufacturing to fintech — here's what teams are saying.</p>
+    <div class="testi-grid">
+      <div class="testi reveal d1">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-q">"Switching from Google Workspace to Arham Inbox saved us ₹18,000 a year. The migration was automatic — zero downtime, all emails came across perfectly."</p>
+        <div class="testi-auth">
+          <div class="t-av" style="background:#2563EB;">R</div>
+          <div>
+            <div class="t-name">Rahul Mehta</div>
+            <div class="t-role">Founder · Mehta Textiles, Surat</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi reveal d2">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-q">"The AI Video Agent handles 70% of our inbound WhatsApp queries. Our sales team now only talks to serious, qualified buyers. Conversion rate jumped 3x."</p>
+        <div class="testi-auth">
+          <div class="t-av" style="background:#7C3AED;">P</div>
+          <div>
+            <div class="t-name">Priya Agarwal</div>
+            <div class="t-role">Head of Growth · FinEdge, Pune</div>
+          </div>
+        </div>
+      </div>
+      <div class="testi reveal d3">
+        <div class="testi-stars">★★★★★</div>
+        <p class="testi-q">"Credit Saath found two wrong entries on our CIBIL. They helped us dispute and get them removed in 45 days. We qualified for a ₹30L business loan soon after."</p>
+        <div class="testi-auth">
+          <div class="t-av" style="background:#16A34A;">S</div>
+          <div>
+            <div class="t-name">Suresh Kumar</div>
+            <div class="t-role">Owner · Kumar Agro Exports, Nashik</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="fcta">
+  <div class="fcta-in reveal">
+    <h2>Ready to get started?</h2>
+    <p>Join hundreds of Indian businesses running on Arham Workspace. Start free on any product — no credit card, no commitment. Your data stays in India from day one.</p>
+    <div class="fcta-acts">
+      <a class="btn-wht" href="https://console.arhamworkspace.tech/signup">Start free trial →</a>
+      <a class="btn-ghost-wht" href="https://inbox.arhamworkspace.tech">See Inbox Mail →</a>
+    </div>
+    <p style="margin-top:1.25rem;font-size:.75rem;color:#475569;">✓ Free trial on all products &nbsp;·&nbsp; ✓ No credit card &nbsp;·&nbsp; ✓ Data hosted in India &nbsp;·&nbsp; ✓ Cancel anytime</p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="foot-grid" style="grid-template-columns:1.6fr 1fr 1fr 1fr 1.2fr;">
+    <div class="foot-brand">
+      <a class="foot-logo" href="/">
+        <span class="logo-sq" style="background:#fff;color:#0F172A;">AW</span>
+        Arham Workspace
+      </a>
+      <p>Focused software for India's growing businesses. Four products. One login. All data in India.</p>
+      <div style="display:flex;gap:.5rem;margin-top:1rem;">
+        <span class="fbadge">DPDP Compliant</span>
+        <span class="fbadge">SSL Secured</span>
+      </div>
+    </div>
+    <div class="foot-col">
+      <h4>Company</h4>
+      <ul>
+        <li><a href="mailto:hello@arhamworkspace.tech">About us</a></li>
+        <li><a href="mailto:hello@arhamworkspace.tech">Careers</a></li>
+        <li><a href="mailto:hello@arhamworkspace.tech">Blog</a></li>
+        <li><a href="mailto:hello@arhamworkspace.tech">Press</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Products</h4>
+      <ul>
+        <li><a href="https://inbox.arhamworkspace.tech">Inbox Mail</a></li>
+        <li><a href="https://peopleorbit.in" target="_blank">People Orbit</a></li>
+        <li><a href="#ai-agent">AI Video Agent</a></li>
+        <li><a href="#credit">Credit Saath</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Legal</h4>
+      <ul>
+        <li><a href="mailto:hello@arhamworkspace.tech">Privacy Policy</a></li>
+        <li><a href="mailto:hello@arhamworkspace.tech">Terms of Service</a></li>
+        <li><a href="mailto:hello@arhamworkspace.tech">DPDP Notice</a></li>
+        <li><a href="mailto:hello@arhamworkspace.tech">Refund Policy</a></li>
+      </ul>
+    </div>
+    <div class="foot-col">
+      <h4>Contact</h4>
+      <ul>
+        <li><a href="mailto:support@arhamworkspace.tech">support@arhamworkspace.tech</a></li>
+        <li><a href="https://console.arhamworkspace.tech/login">Console Login</a></li>
+        <li><a href="https://linkedin.com/company/arhamworkspace" target="_blank">LinkedIn</a></li>
+        <li><a href="https://twitter.com/arhamworkspace" target="_blank">Twitter / X</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot-bottom">
+    <p>© 2026 Arham Workspace Pvt. Ltd. · Made in India 🇮🇳</p>
+    <div class="foot-badges">
+      <span class="fbadge">Data in India</span>
+      <span class="fbadge">DMARC Ready</span>
+      <span class="fbadge">GST Invoicing</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ── NAV SCROLL SHADOW ──
+  window.addEventListener('scroll', () => {
+    document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 10);
+  });
+
+  // ── HAMBURGER MENU ──
+  const burger = document.getElementById('burger');
+  const mobileNav = document.getElementById('mobile-nav');
+  if (burger && mobileNav) {
+    burger.addEventListener('click', () => {
+      const open = !mobileNav.classList.contains('open');
+      mobileNav.classList.toggle('open', open);
+      burger.classList.toggle('open', open);
+      burger.setAttribute('aria-expanded', open);
+      document.body.style.overflow = open ? 'hidden' : '';
+    });
+    // Close on link click
+    mobileNav.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', () => {
+        mobileNav.classList.remove('open');
+        burger.classList.remove('open');
+        burger.setAttribute('aria-expanded', 'false');
+        document.body.style.overflow = '';
+      });
+    });
+  }
+
+  // ── SCROLL REVEAL ──
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); observer.unobserve(e.target); } });
+  }, { threshold: 0.10 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // ── NAV ACTIVE LINK ON SCROLL ──
+  const navLinks = document.querySelectorAll('.nav-links a');
+  const sections = document.querySelectorAll('section[id]');
+  const sectionObs = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        navLinks.forEach(a => {
+          a.classList.toggle('nav-active', a.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  }, { threshold: 0.25, rootMargin: '0px 0px -55% 0px' });
+  sections.forEach(s => sectionObs.observe(s));
+
+  // ── HERO ORB PARALLAX ──
+  const orbLayer = document.getElementById('orbLayer');
+  if (orbLayer) {
+    let lastX = 0, lastY = 0, rafId;
+    document.addEventListener('mousemove', e => {
+      lastX = (e.clientX / window.innerWidth - 0.5) * 22;
+      lastY = (e.clientY / window.innerHeight - 0.5) * 14;
+      if (!rafId) rafId = requestAnimationFrame(() => {
+        orbLayer.style.transform = `translate(${lastX}px, ${lastY}px)`;
+        rafId = null;
+      });
+    });
+    // Scroll parallax: orbs drift upward as user scrolls
+    window.addEventListener('scroll', () => {
+      const sy = window.scrollY * 0.12;
+      orbLayer.style.transform = `translate(${lastX}px, calc(${lastY}px + ${sy}px))`;
+    }, { passive: true });
+  }
+
+  // ── ANIMATED STAT COUNTERS ──
+  function animateCount(el, target, suffix = '') {
+    const dur = 1800, start = performance.now();
+    const easeOut = t => 1 - Math.pow(1 - t, 3);
+    const tick = now => {
+      const progress = Math.min((now - start) / dur, 1);
+      el.textContent = Math.floor(easeOut(progress) * target) + suffix;
+      if (progress < 1) requestAnimationFrame(tick);
+      else el.textContent = target + suffix;
+    };
+    requestAnimationFrame(tick);
+  }
+  const statsObs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.querySelectorAll('[data-count]').forEach(el => animateCount(el, +el.dataset.count, el.dataset.suffix || ''));
+        statsObs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('.stats-band').forEach(el => statsObs.observe(el));
+
+  // ── ANIMATED SCORE BAR ──
+  const scoreObs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { document.getElementById('scoreBar')?.classList.add('animated'); scoreObs.unobserve(e.target); } });
+  }, { threshold: 0.4 });
+  const scoreEl = document.getElementById('scoreBar');
+  if (scoreEl) scoreObs.observe(scoreEl.closest('.credit-bg'));
+
+  // ── AI CHAT ANIMATION ──
+  const CHAT_MSGS = [
+    { type: 'bot', text: 'Hi! I\'m Priya, your AI sales assistant. 👋 How can I help you today?' },
+    { type: 'usr', text: 'Tell me about your email plans' },
+    { type: 'bot', text: 'Great choice! Our Business plan gives you 50 mailboxes at ₹1,499/mo with 25 GB per user and full DMARC setup. Want me to walk you through it?' },
+    { type: 'usr', text: 'Yes, and can I migrate from Zoho?' },
+    { type: 'bot', text: 'Absolutely! Migration from Zoho is 1-click and takes under 1 hour — all emails, contacts and folders come across. Shall I book a setup call? 📅' },
+    { type: 'usr', text: 'Book it for tomorrow 11 AM' },
+    { type: 'bot', text: 'Done! ✅ I\'ve booked you for tomorrow at 11 AM IST. You\'ll get a WhatsApp confirmation in the next 2 minutes.' },
+  ];
+  let ci = 0;
+  const chatbox = document.getElementById('chatbox');
+  function addChatMsg() {
+    if (!chatbox || ci >= CHAT_MSGS.length) {
+      if (chatbox) setTimeout(() => { chatbox.innerHTML = ''; ci = 0; addChatMsg(); }, 3000);
+      return;
+    }
+    const m = CHAT_MSGS[ci++];
+    const div = document.createElement('div');
+    div.className = 'cmsg ' + m.type + ' v';
+    div.textContent = m.text;
+    chatbox.appendChild(div);
+    chatbox.scrollTop = chatbox.scrollHeight;
+    setTimeout(addChatMsg, ci % 2 === 0 ? 1400 : 1900);
+  }
+  const chatObs = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { setTimeout(addChatMsg, 600); chatObs.unobserve(e.target); } });
+  }, { threshold: 0.3 });
+  if (chatbox) chatObs.observe(chatbox.closest('section'));
+</script>
 </body>
 </html>

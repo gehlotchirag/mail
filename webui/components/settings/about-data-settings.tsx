@@ -14,6 +14,8 @@ import { SpamSiegeGame } from './spam-siege-game';
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || "0.0.0";
 const GIT_COMMIT = process.env.NEXT_PUBLIC_GIT_COMMIT || "unknown";
+// AGPL-3.0 §13: source offer — set NEXT_PUBLIC_SOURCE_URL in .env to your public fork URL
+const SOURCE_URL = process.env.NEXT_PUBLIC_SOURCE_URL || "https://github.com/bulwarkmail/webmail";
 
 function VersionUpdateTag() {
   const status = useUpdateStore((s) => s.status);
@@ -144,12 +146,13 @@ export function AboutDataSettings() {
             </div>
           </button>
           <a
-            href="https://github.com/bulwarkmail/webmail"
+            href={SOURCE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            title="Source code available under AGPL-3.0"
           >
-            GitHub <ExternalLink className="w-3 h-3" />
+            Source code <ExternalLink className="w-3 h-3" />
           </a>
         </div>
       </div>

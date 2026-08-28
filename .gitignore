@@ -16,3 +16,4 @@ mail/config.json
 mail/webui-flux.zip
 mail/target/
 mail/*.zip
+console-app/.env.production.secrets
