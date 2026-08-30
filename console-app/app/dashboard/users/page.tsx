@@ -5,10 +5,10 @@ interface User { id: string; name: string; emailAddress: string; description?: s
 interface DomainGroup { domainId: string; domain: string; users: User[]; }
 
 const S = {
-  card: { background: '#161b27', border: '1px solid #1e2535', borderRadius: 12, padding: '1.5rem' } as React.CSSProperties,
-  inp: { width: '100%', padding: '.65rem .9rem', background: '#1e2535', border: '1px solid #2d3448', borderRadius: 8, color: '#f1f5f9', outline: 'none' } as React.CSSProperties,
-  btn: (c = '#6366f1') => ({ padding: '.55rem 1.1rem', background: c, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }) as React.CSSProperties,
-  label: { display: 'block', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.5px', marginBottom: '.3rem' },
+  card: { background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 12, padding: '1.5rem' } as React.CSSProperties,
+  inp: { width: '100%', padding: '.65rem .9rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', outline: 'none' } as React.CSSProperties,
+  btn: (c = '#2563eb') => ({ padding: '.55rem 1.1rem', background: c, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }) as React.CSSProperties,
+  label: { display: 'block', color: '#7fa8d0', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.5px', marginBottom: '.3rem' },
 };
 
 export default function UsersPage() {
@@ -65,18 +65,18 @@ export default function UsersPage() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.5px' }}>Email Users</h1>
-          <p style={{ color: '#64748b', marginTop: '.25rem', fontSize: '0.875rem' }}>{totalUsers} user{totalUsers !== 1 ? 's' : ''} across {groups.length} domain{groups.length !== 1 ? 's' : ''}</p>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f2040',  letterSpacing: '-0.5px' }}>Email Users</h1>
+          <p style={{ color: '#3b5f8a', marginTop: '.25rem', fontSize: '0.875rem' }}>{totalUsers} user{totalUsers !== 1 ? 's' : ''} across {groups.length} domain{groups.length !== 1 ? 's' : ''}</p>
         </div>
         {allDomains.length > 0 && <button style={S.btn()} onClick={() => setShowAdd(!showAdd)}>+ Add user</button>}
       </div>
 
-      {msg && <div style={{ background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#4ade80', marginBottom: '1rem', fontSize: '0.85rem' }}>{msg}</div>}
-      {error && <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#f87171', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
+      {msg && <div style={{ background: 'rgba(22,163,74,.1)', border: '1px solid rgba(22,163,74,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#16a34a', marginBottom: '1rem', fontSize: '0.85rem' }}>{msg}</div>}
+      {error && <div style={{ background: 'rgba(220,38,38,.1)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#dc2626', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
 
       {showAdd && (
         <div style={{ ...S.card, marginBottom: '1.5rem' }}>
-          <h2 style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: '1.25rem' }}>Create email user</h2>
+          <h2 style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: '1.25rem' }}>Create email user</h2>
           <form onSubmit={addUser}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
               <div>
@@ -100,8 +100,8 @@ export default function UsersPage() {
               </div>
             </div>
             {form.username && form.domainId && (
-              <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1rem' }}>
-                Email address: <strong style={{ color: '#a5b4fc' }}>{form.username}@{allDomains.find(d => d.id === form.domainId)?.domain ?? '…'}</strong>
+              <p style={{ color: '#3b5f8a', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                Email address: <strong style={{ color: '#2563eb' }}>{form.username}@{allDomains.find(d => d.id === form.domainId)?.domain ?? '…'}</strong>
               </p>
             )}
             <div style={{ display: 'flex', gap: '.75rem' }}>
@@ -113,29 +113,29 @@ export default function UsersPage() {
       )}
 
       {loading ? (
-        <div style={{ ...S.card, textAlign: 'center', color: '#64748b' }}>Loading users…</div>
+        <div style={{ ...S.card, textAlign: 'center', color: '#3b5f8a' }}>Loading users…</div>
       ) : allDomains.length === 0 ? (
-        <div style={{ ...S.card, textAlign: 'center', padding: '3rem', color: '#475569' }}>
+        <div style={{ ...S.card, textAlign: 'center', padding: '3rem', color: '#3b5f8a' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>👥</div>
-          <div style={{ fontWeight: 600, color: '#94a3b8', marginBottom: '.5rem' }}>No domains configured</div>
-          <a href="/dashboard/domains" style={{ color: '#818cf8', fontSize: '0.875rem' }}>Add a domain first →</a>
+          <div style={{ fontWeight: 600, color: '#7fa8d0', marginBottom: '.5rem' }}>No domains configured</div>
+          <a href="/dashboard/domains" style={{ color: '#2563eb', fontSize: '0.875rem' }}>Add a domain first →</a>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {groups.map(g => (
             <div key={g.domainId} style={S.card}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <div style={{ fontWeight: 700, color: '#e2e8f0' }}>@{g.domain}</div>
-                <span style={{ color: '#64748b', fontSize: '0.8rem' }}>{g.users.length} user{g.users.length !== 1 ? 's' : ''}</span>
+                <div style={{ fontWeight: 700, color: '#1e3a5f' }}>@{g.domain}</div>
+                <span style={{ color: '#3b5f8a', fontSize: '0.8rem' }}>{g.users.length} user{g.users.length !== 1 ? 's' : ''}</span>
               </div>
               {g.users.length === 0 ? (
-                <p style={{ color: '#475569', fontSize: '0.875rem' }}>No users yet for this domain.</p>
+                <p style={{ color: '#3b5f8a', fontSize: '0.875rem' }}>No users yet for this domain.</p>
               ) : (
                 g.users.map(u => (
-                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.75rem 0', borderBottom: '1px solid #1e2535', flexWrap: 'wrap', gap: '.75rem' }}>
+                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.75rem 0', borderBottom: '1px solid #dbeafe', flexWrap: 'wrap', gap: '.75rem' }}>
                     <div>
-                      <div style={{ color: '#e2e8f0', fontWeight: 500 }}>{u.emailAddress}</div>
-                      {u.description && <div style={{ color: '#64748b', fontSize: '0.78rem' }}>{u.description}</div>}
+                      <div style={{ color: '#1e3a5f', fontWeight: 500 }}>{u.emailAddress}</div>
+                      {u.description && <div style={{ color: '#3b5f8a', fontSize: '0.78rem' }}>{u.description}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: '.5rem' }}>
                       <button onClick={() => { setResetModal({ id: u.id, email: u.emailAddress }); setNewPw(''); }} style={{ ...S.btn('#334155'), fontSize: '0.75rem' }}>🔑 Reset password</button>
@@ -151,9 +151,9 @@ export default function UsersPage() {
 
       {resetModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '1rem' }}>
-          <div style={{ background: '#161b27', border: '1px solid #2d3448', borderRadius: 14, padding: '2rem', width: '100%', maxWidth: 400 }}>
-            <h3 style={{ color: '#f1f5f9', fontWeight: 700, marginBottom: '.5rem' }}>Reset password</h3>
-            <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1.25rem' }}>{resetModal.email}</p>
+          <div style={{ background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 14, padding: '2rem', width: '100%', maxWidth: 400 }}>
+            <h3 style={{ color: '#0f2040', fontWeight: 700, marginBottom: '.5rem' }}>Reset password</h3>
+            <p style={{ color: '#3b5f8a', fontSize: '0.85rem', marginBottom: '1.25rem' }}>{resetModal.email}</p>
             <label style={S.label}>New password</label>
             <input style={{ ...S.inp, marginBottom: '1.25rem' }} type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="New secure password" autoFocus minLength={8} />
             <div style={{ display: 'flex', gap: '.75rem' }}>

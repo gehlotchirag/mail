@@ -45,7 +45,7 @@ export default async function DashboardPage() {
       {/* Trial expiry banner */}
       {sub?.status === 'trial' && trialDays <= 7 && (
         <div style={{ background: 'var(--warn-bg,rgba(251,191,36,.08))', border: '1px solid var(--warn-border,rgba(251,191,36,.25))', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', color: '#fbbf24', fontSize: '0.875rem', fontWeight: 500 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', color: '#d97706', fontSize: '0.875rem', fontWeight: 500 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
@@ -67,10 +67,10 @@ export default async function DashboardPage() {
           { value: sub?.max_users ?? 3,                   label: 'Max email users',  cap: false },
         ].map((s, i) => (
           <div key={i} className="card">
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#f1f5f9', letterSpacing: '-1px', textTransform: s.cap ? ('capitalize' as const) : undefined }}>
+            <div style={{ fontSize: '2rem', fontWeight: 800, color: '#0f2040', letterSpacing: '-1px', textTransform: s.cap ? ('capitalize' as const) : undefined }}>
               {s.value}
             </div>
-            <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '.25rem' }}>{s.label}</div>
+            <div style={{ color: '#3b5f8a', fontSize: '0.8rem', marginTop: '.25rem' }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -80,8 +80,8 @@ export default async function DashboardPage() {
         {/* Getting started checklist */}
         {!allDone && (
           <div className="card">
-            <h2 style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: '1rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <h2 style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: '1rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="9 11 12 14 22 4"/>
                 <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
               </svg>
@@ -94,7 +94,7 @@ export default async function DashboardPage() {
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: '.75rem',
                   padding: '.65rem 0',
-                  borderBottom: i < steps.length - 1 ? '1px solid #1e2535' : 'none',
+                  borderBottom: i < steps.length - 1 ? '1px solid #dbeafe' : 'none',
                   cursor: step.done ? 'default' : 'pointer',
                   textDecoration: 'none',
                 }}
@@ -102,12 +102,12 @@ export default async function DashboardPage() {
                 {/* Check circle */}
                 <div style={{ marginTop: '1px', flexShrink: 0 }}>
                   {step.done ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                       <polyline points="22 4 12 14.01 9 11.01"/>
                     </svg>
                   ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2d3448" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dbeafe" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10"/>
                     </svg>
                   )}
@@ -117,7 +117,7 @@ export default async function DashboardPage() {
                     {step.label}
                   </div>
                   {!step.done && (
-                    <div style={{ color: '#475569', fontSize: '0.78rem', marginTop: '.1rem' }}>{step.hint}</div>
+                    <div style={{ color: '#3b5f8a', fontSize: '0.78rem', marginTop: '.1rem' }}>{step.hint}</div>
                   )}
                 </div>
               </a>
@@ -127,16 +127,16 @@ export default async function DashboardPage() {
 
         {/* Domains overview */}
         <div className="card">
-          <h2 style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: '1rem', fontSize: '0.95rem' }}>Your domains</h2>
+          <h2 style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: '1rem', fontSize: '0.95rem' }}>Your domains</h2>
           {domains.length === 0 ? (
-            <div style={{ color: '#475569', fontSize: '0.875rem' }}>
+            <div style={{ color: '#3b5f8a', fontSize: '0.875rem' }}>
               No domains yet.{' '}
-              <a href="/dashboard/domains" style={{ color: '#818cf8' }}>Add your first domain →</a>
+              <a href="/dashboard/domains" style={{ color: '#2563eb' }}>Add your first domain →</a>
             </div>
           ) : (
             domains.map(d => (
-              <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.6rem 0', borderBottom: '1px solid #1e2535' }}>
-                <span style={{ color: '#e2e8f0', fontSize: '0.875rem' }}>{d.domain}</span>
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.6rem 0', borderBottom: '1px solid #dbeafe' }}>
+                <span style={{ color: '#1e3a5f', fontSize: '0.875rem' }}>{d.domain}</span>
                 <span className={`badge ${d.verified ? 'badge-success' : 'badge-warn'}`}>
                   {d.verified ? '✓ Verified' : 'Pending'}
                 </span>
@@ -144,7 +144,7 @@ export default async function DashboardPage() {
             ))
           )}
           {domains.length > 0 && (
-            <a href="/dashboard/domains" style={{ display: 'inline-block', marginTop: '.75rem', color: '#818cf8', fontSize: '0.8rem' }}>
+            <a href="/dashboard/domains" style={{ display: 'inline-block', marginTop: '.75rem', color: '#2563eb', fontSize: '0.8rem' }}>
               Manage domains →
             </a>
           )}
@@ -152,16 +152,16 @@ export default async function DashboardPage() {
 
         {/* Quick actions */}
         <div className="card">
-          <h2 style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: '1rem', fontSize: '0.95rem' }}>Quick actions</h2>
+          <h2 style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: '1rem', fontSize: '0.95rem' }}>Quick actions</h2>
           {[
             { href: '/dashboard/domains',   label: 'Add a domain',       desc: 'Connect your custom domain' },
             { href: '/dashboard/users',     label: 'Add email user',     desc: 'Create mailboxes for your team' },
             { href: '/dashboard/migration', label: 'Import emails',      desc: 'Migrate from Zoho, Google or cPanel' },
             { href: '/dashboard/billing',   label: 'View plans',         desc: 'Upgrade for more users & storage' },
           ].map(a => (
-            <a key={a.href} href={a.href} style={{ display: 'block', padding: '.65rem .85rem', borderRadius: 8, background: 'rgba(255,255,255,.03)', border: '1px solid #2d3448', marginBottom: '.5rem', transition: 'border-color .15s' }}>
-              <div style={{ color: '#e2e8f0', fontWeight: 500, fontSize: '0.875rem' }}>{a.label}</div>
-              <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '.1rem' }}>{a.desc}</div>
+            <a key={a.href} href={a.href} style={{ display: 'block', padding: '.65rem .85rem', borderRadius: 8, background: 'rgba(255,255,255,.03)', border: '1px solid #dbeafe', marginBottom: '.5rem', transition: 'border-color .15s' }}>
+              <div style={{ color: '#1e3a5f', fontWeight: 500, fontSize: '0.875rem' }}>{a.label}</div>
+              <div style={{ color: '#3b5f8a', fontSize: '0.78rem', marginTop: '.1rem' }}>{a.desc}</div>
             </a>
           ))}
         </div>

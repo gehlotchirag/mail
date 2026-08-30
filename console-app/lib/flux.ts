@@ -21,23 +21,106 @@ export interface FluxUser {
   domainId?: string;
 }
 
+/**
+ * A JMAP SetError exactly as Stalwart's registry serialises it
+ * (crates/jmap-proto/src/error/set.rs). `description`, `properties` and
+ * `validationErrors` are all `skip_serializing_if` — only `type` is guaranteed
+ * to be present, so never pattern-match on the prose.
+ */
+export interface JmapSetError {
+  type?: string;
+  description?: string;
+  /** JSON-pointer paths of the properties the server objected to. */
+  properties?: string[];
+  validationErrors?: Array<{ type?: string; property?: string; value?: string; required?: number }>;
+  existingId?: string;
+  objectId?: string;
+}
+
+/** Method-level errors come back as ['error', { type, description }]. */
+type JmapMethodError = { type?: string; description?: string };
+
+/**
+ * SetError/method-error types that Stalwart emits when it does not understand a
+ * property or a JSON-pointer path:
+ *  - `invalidPatch` — every PatchError from the registry maps to this
+ *    (`impl From<PatchError> for SetError`), e.g. "Invalid key for object",
+ *    "Invalid key for object property", "Invalid JSON Pointer path".
+ *  - `invalidProperties` — SetError::invalid_properties(), often with neither a
+ *    description nor a `properties` list.
+ *  - `invalidArguments` — the method-level equivalent when the whole call is
+ *    rejected before it reaches the object.
+ */
+const PROPERTY_REJECTION_TYPES = new Set(['invalidPatch', 'invalidProperties', 'invalidArguments']);
+
+/** Turns a SetError into something worth showing a human, without inventing prose. */
+export function describeSetError(err: JmapSetError | undefined, fallback: string): string {
+  if (!err) return fallback;
+  const bits: string[] = [];
+  if (err.description) bits.push(err.description);
+  else if (err.validationErrors?.length) {
+    bits.push(err.validationErrors
+      .map(v => [v.property, v.type].filter(Boolean).join(' ') || 'invalid')
+      .join(', '));
+  }
+  if (err.properties?.length) bits.push(`(${err.properties.join(', ')})`);
+  const detail = bits.join(' ').trim();
+  if (err.type && detail) return `${err.type}: ${detail}`;
+  return detail || err.type || fallback;
+}
+
+/** True when `path` is `property` itself or a JSON pointer beneath it. */
+function pathTargets(path: string | undefined, property: string): boolean {
+  if (!path) return false;
+  const clean = path.replace(/^\//, '');
+  return clean === property || clean.startsWith(`${property}/`);
+}
+
+/**
+ * Decides whether a SetError means "the server does not accept this property",
+ * as opposed to a real business failure (duplicate name, bad domain, forbidden).
+ *
+ * Stalwart names the offending property whenever it can — `properties` for a
+ * patch/property error, `validationErrors[].property` for a validation failure.
+ * When it names anything at all we only treat the rejection as ours if our
+ * property is among them. When it names nothing (SetError::invalid_properties()
+ * carries no description and no property list) we fall back to the error type.
+ */
+export function isPropertyRejection(
+  err: JmapSetError | JmapMethodError | undefined, property: string
+): boolean {
+  if (!err) return false;
+  const set = err as JmapSetError;
+  const named = [
+    ...(set.properties ?? []),
+    ...(set.validationErrors ?? []).map(v => v.property),
+  ].filter((p): p is string => !!p);
+
+  if (named.length) return named.some(p => pathTargets(p, property));
+  return PROPERTY_REJECTION_TYPES.has(err.type ?? '');
+}
+
 export async function addDomain(domain: string): Promise<{ id: string } | { error: string }> {
   const responses = await jmap([
     ['x:Domain/set', { create: { new: { name: domain } } }, 'c'],
   ]);
   for (const [method, result] of responses as Array<[string, {
     created?: Record<string, { id: string }>;
-    notCreated?: Record<string, { description?: string }>;
+    notCreated?: Record<string, JmapSetError>;
   }]>) {
     if (method === 'x:Domain/set') {
-      if (result.notCreated?.new) {
-        const desc = result.notCreated.new.description ?? '';
-        // If already exists, query for the ID
-        if (desc.toLowerCase().includes('already') || desc.toLowerCase().includes('exist')) {
+      const failure = result.notCreated?.new;
+      if (failure) {
+        // A duplicate comes back as `primaryKeyViolation` / `alreadyExists`;
+        // the description is optional, so the type is what we key off.
+        const duplicate = failure.type === 'primaryKeyViolation'
+          || failure.type === 'alreadyExists'
+          || /already|exist/i.test(failure.description ?? '');
+        if (duplicate) {
           const existing = await getDomainId(domain);
           if (existing) return { id: existing };
         }
-        return { error: desc || 'Failed to add domain' };
+        return { error: describeSetError(failure, 'Failed to add domain') };
       }
       const id = result.created?.new?.id;
       if (id) return { id };
@@ -51,10 +134,10 @@ export async function removeDomain(fluxDomainId: string): Promise<{ error?: stri
     ['x:Domain/set', { destroy: [fluxDomainId] }, 'd'],
   ]);
   for (const [method, result] of responses as Array<[string, {
-    notDestroyed?: Record<string, { description?: string }>;
+    notDestroyed?: Record<string, JmapSetError>;
   }]>) {
     if (method === 'x:Domain/set' && result.notDestroyed?.[fluxDomainId]) {
-      return { error: result.notDestroyed[fluxDomainId].description ?? 'Delete failed' };
+      return { error: describeSetError(result.notDestroyed[fluxDomainId], 'Delete failed') };
     }
   }
   return {};
@@ -154,15 +237,22 @@ export async function countUsersForDomains(fluxDomainIds: string[]): Promise<num
 }
 
 /**
- * Flux/Stalwart stores per-account limits in the `quotas` map of the UserAccount
- * object; `maxDiskQuota` is the total mailbox+blob size in bytes (0 = unlimited).
- * It can be supplied on create or patched later via `quotas/maxDiskQuota`.
+ * Flux/Stalwart stores per-account limits in the `quotas` map of the account
+ * object (`UserAccount.quotas: VecMap<StorageQuota, u64>`); `maxDiskQuota` is
+ * the total mailbox+blob size in bytes (0 = unlimited). It can be supplied on
+ * create or patched later via the `quotas/maxDiskQuota` JSON pointer.
  */
+const QUOTA_PROPERTY = 'quotas';
 const DISK_QUOTA_PROPERTY = 'quotas/maxDiskQuota';
+
+/** How many account updates to put in a single x:Account/set call. */
+const SET_BATCH_SIZE = 100;
+
+type CreateFailure = { error: string; jmapError?: JmapSetError };
 
 async function createAccount(
   name: string, domainId: string, password: string, description: string, quotaBytes?: number
-): Promise<{ id: string } | { error: string }> {
+): Promise<{ id: string } | CreateFailure> {
   const account: Record<string, unknown> = {
     '@type': 'User', name, domainId,
     description,
@@ -174,16 +264,23 @@ async function createAccount(
   const responses = await jmap([['x:Account/set', { create: { new: account } }, 'c']]);
   for (const [method, result] of responses as Array<[string, {
     created?: Record<string, { id: string }>;
-    notCreated?: Record<string, { description?: string }>;
+    notCreated?: Record<string, JmapSetError>;
     type?: string;
     description?: string;
   }]>) {
-    // A method-level failure (e.g. an unknown property) comes back as 'error'.
+    // A method-level failure (e.g. an unknown argument) comes back as 'error'.
     if (method === 'error') {
-      return { error: result.description ?? result.type ?? 'Request failed' };
+      const methodError = { type: result.type, description: result.description };
+      return {
+        error: describeSetError(methodError, 'Request failed'),
+        jmapError: methodError,
+      };
     }
     if (method === 'x:Account/set') {
-      if (result.notCreated?.new) return { error: result.notCreated.new.description ?? 'Creation failed' };
+      const failure = result.notCreated?.new;
+      if (failure) {
+        return { error: describeSetError(failure, 'Creation failed'), jmapError: failure };
+      }
       const id = result.created?.new?.id;
       if (id) return { id };
     }
@@ -194,10 +291,12 @@ async function createAccount(
 /**
  * Creates a mail account, applying the plan's per-user disk quota.
  *
- * If the server rejects the create because of the quota property (older build
+ * If the server rejects the create *because of* the quota property (a build
  * without `quotas` on the account object), the account is created without it
- * and the quota is applied as a follow-up patch. `quotaApplied` reports whether
- * the quota actually made it onto the account.
+ * and the quota is applied as a follow-up patch. The decision is made from the
+ * SetError `type` and its `properties`/`validationErrors` lists — never from the
+ * description, which Stalwart omits entirely for `invalidProperties`.
+ * `quotaApplied` reports whether the quota actually made it onto the account.
  */
 export async function createUser(
   name: string, domainId: string, password: string, description?: string, quotaBytes?: number
@@ -207,15 +306,16 @@ export async function createUser(
 
   const result = await createAccount(name, domainId, password, desc, quotaBytes);
   if (!('error' in result)) return { id: result.id, quotaApplied: wantsQuota };
-  // Only retry if the failure looks like the server rejecting the property
-  // itself — anything else (duplicate account, bad domain) is a real error.
-  const rejectedProperty = /quota|invalidArgument|invalid propert|unknown propert|unexpected response/i;
-  if (!wantsQuota || !rejectedProperty.test(result.error)) return result;
 
-  // Quota rejected at create time — create the account, then try to patch it.
+  // Only retry if the server rejected the quota property itself — anything else
+  // (duplicate account, bad domain, forbidden) is a real error.
+  if (!wantsQuota || !isPropertyRejection(result.jmapError, QUOTA_PROPERTY)) {
+    return { error: result.error };
+  }
+
   console.warn(`[flux] Account create rejected the quota property (${result.error}); retrying without it`);
   const retry = await createAccount(name, domainId, password, desc);
-  if ('error' in retry) return retry;
+  if ('error' in retry) return { error: retry.error };
 
   const quota = await setAccountQuota(retry.id, quotaBytes!);
   if (quota.error) {
@@ -225,28 +325,116 @@ export async function createUser(
   return { id: retry.id, quotaApplied: true };
 }
 
-/** Sets the account's total disk quota in bytes (0 = unlimited). */
+/**
+ * Sets the total disk quota (bytes, 0 = unlimited) on one or more accounts in a
+ * single x:Account/set call, chunked so a large organisation never exceeds the
+ * server's `setMaxObjects`. Returns a per-account error map: an id absent from
+ * the map was updated successfully.
+ *
+ * Both failure shapes are handled: a method-level ['error', ...] response, which
+ * fails every id in that chunk, and per-id `notUpdated` SetErrors. An id that
+ * comes back in neither `updated` nor `notUpdated` is reported as an error
+ * rather than silently assumed to have worked.
+ */
+export async function setAccountQuotas(
+  quotaByAccountId: Record<string, number>
+): Promise<Record<string, string>> {
+  const errors: Record<string, string> = {};
+  const ids = Object.keys(quotaByAccountId);
+
+  for (let i = 0; i < ids.length; i += SET_BATCH_SIZE) {
+    const chunk = ids.slice(i, i + SET_BATCH_SIZE);
+    const update: Record<string, Record<string, number>> = {};
+    for (const id of chunk) update[id] = { [DISK_QUOTA_PROPERTY]: quotaByAccountId[id] };
+
+    let responses: unknown[][];
+    try {
+      responses = await jmap([['x:Account/set', { update }, 'u']]);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Quota update failed';
+      for (const id of chunk) errors[id] = message;
+      continue;
+    }
+
+    let handled = false;
+    for (const [method, result] of responses as Array<[string, {
+      updated?: Record<string, unknown>;
+      notUpdated?: Record<string, JmapSetError>;
+      type?: string;
+      description?: string;
+    }]>) {
+      // Method-level rejection — the whole chunk failed, nothing was updated.
+      if (method === 'error') {
+        const message = describeSetError(
+          { type: result.type, description: result.description }, 'Quota update failed'
+        );
+        for (const id of chunk) errors[id] = message;
+        handled = true;
+        break;
+      }
+      if (method === 'x:Account/set') {
+        handled = true;
+        for (const id of chunk) {
+          const failure = result.notUpdated?.[id];
+          if (failure) {
+            errors[id] = describeSetError(failure, 'Quota update failed');
+          } else if (result.updated && !Object.prototype.hasOwnProperty.call(result.updated, id)) {
+            // Neither updated nor notUpdated: the server ignored the id.
+            errors[id] = 'Quota update was not acknowledged by the server';
+          }
+        }
+      }
+    }
+    if (!handled) for (const id of chunk) errors[id] = 'Unexpected response';
+  }
+
+  return errors;
+}
+
+/** Sets one account's total disk quota in bytes (0 = unlimited). */
 export async function setAccountQuota(id: string, quotaBytes: number): Promise<{ error?: string }> {
-  const responses = await jmap([
-    ['x:Account/set', { update: { [id]: { [DISK_QUOTA_PROPERTY]: quotaBytes } } }, 'u'],
-  ]);
-  for (const [method, result] of responses as Array<[string, {
-    notUpdated?: Record<string, { description?: string }>;
-  }]>) {
-    if (method === 'x:Account/set' && result.notUpdated?.[id]) {
-      return { error: result.notUpdated[id].description ?? 'Quota update failed' };
+  const errors = await setAccountQuotas({ [id]: quotaBytes });
+  return errors[id] ? { error: errors[id] } : {};
+}
+
+/**
+ * Best-effort read of the current `quotas.maxDiskQuota` for the given accounts.
+ * Returns an empty map if the build does not expose the property, so callers
+ * must treat "no entry" as "unknown", never as "no quota".
+ */
+export async function getAccountDiskQuotas(ids: string[]): Promise<Map<string, number>> {
+  const quotas = new Map<string, number>();
+  if (!ids.length) return quotas;
+
+  for (let i = 0; i < ids.length; i += SET_BATCH_SIZE) {
+    const chunk = ids.slice(i, i + SET_BATCH_SIZE);
+    try {
+      const responses = await jmap([
+        ['x:Account/get', { ids: chunk, properties: ['id', QUOTA_PROPERTY] }, 'g'],
+      ]);
+      for (const [method, result] of responses as Array<[string, {
+        list?: Array<{ id: string; quotas?: Record<string, number> | null }>;
+      }]>) {
+        if (method !== 'x:Account/get' || !result.list) continue;
+        for (const account of result.list) {
+          const value = account.quotas?.maxDiskQuota;
+          if (typeof value === 'number') quotas.set(account.id, value);
+        }
+      }
+    } catch {
+      return new Map();
     }
   }
-  return {};
+  return quotas;
 }
 
 export async function deleteUser(id: string): Promise<{ error?: string }> {
   const responses = await jmap([['x:Account/set', { destroy: [id] }, 'd']]);
   for (const [method, result] of responses as Array<[string, {
-    notDestroyed?: Record<string, { description?: string }>;
+    notDestroyed?: Record<string, JmapSetError>;
   }]>) {
     if (method === 'x:Account/set' && result.notDestroyed?.[id]) {
-      return { error: result.notDestroyed[id].description ?? 'Delete failed' };
+      return { error: describeSetError(result.notDestroyed[id], 'Delete failed') };
     }
   }
   return {};
@@ -257,10 +445,243 @@ export async function resetPassword(id: string, password: string): Promise<{ err
     ['x:Account/set', { update: { [id]: { 'credentials/0/secret': password } } }, 'u'],
   ]);
   for (const [method, result] of responses as Array<[string, {
-    notUpdated?: Record<string, { description?: string }>;
+    notUpdated?: Record<string, JmapSetError>;
   }]>) {
     if (method === 'x:Account/set' && result.notUpdated?.[id]) {
-      return { error: result.notUpdated[id].description ?? 'Reset failed' };
+      return { error: describeSetError(result.notUpdated[id], 'Reset failed') };
+    }
+  }
+  return {};
+}
+
+/* ------------------------------------------------------------------------- *
+ * Aliases and distribution lists
+ *
+ * Both are native to this Flux build, verified against the vendored Stalwart
+ * source in mail/:
+ *  - `UserAccount.aliases` / `GroupAccount.aliases` / `MailingList.aliases` are
+ *    `List<EmailAlias>` (registry/src/schema/structs.rs), and every alias is
+ *    added to the account's deliverable address set alongside the primary
+ *    address (common/src/cache/principals.rs).
+ *  - `List<T>` is `VecMap<u32, T>` on the wire — a JSON *object* keyed by
+ *    stringified indices, NOT an array. Sending an array fails deserialisation.
+ *  - An `EmailAlias` is `{ enabled, name, domainId, description }` where `name`
+ *    is the local part only, so an alias may live on a different domain from
+ *    the account's primary one.
+ *  - A distribution list is a separate registry object, `x:MailingList`, whose
+ *    `recipients` is a `Map<String>` — on the wire a boolean set,
+ *    `{ "a@example.com": true }`. Mail to its address expands to the recipients
+ *    (common/src/network/mta.rs, `RcptResolution::Expand`).
+ * ------------------------------------------------------------------------- */
+
+export interface FluxEmailAlias {
+  enabled: boolean;
+  /** Local part only — the domain comes from `domainId`. */
+  name: string;
+  domainId: string;
+  description?: string | null;
+}
+
+const ALIAS_PROPERTIES = ['id', 'name', 'emailAddress', 'domainId', 'aliases'];
+
+export interface FluxAccountWithAliases extends FluxUser {
+  aliases: FluxEmailAlias[];
+}
+
+/** `List<EmailAlias>` arrives as `{ "0": {...}, "1": {...} }`. */
+function decodeAliasList(raw: unknown): FluxEmailAlias[] {
+  if (!raw || typeof raw !== 'object') return [];
+  return Object.entries(raw as Record<string, FluxEmailAlias>)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, alias]) => ({
+      enabled: alias.enabled !== false,
+      name: alias.name,
+      domainId: alias.domainId,
+      description: alias.description ?? null,
+    }))
+    .filter(a => a.name && a.domainId);
+}
+
+function encodeAliasList(aliases: FluxEmailAlias[]): Record<string, FluxEmailAlias> {
+  const out: Record<string, FluxEmailAlias> = {};
+  aliases.forEach((alias, i) => {
+    out[String(i)] = {
+      enabled: alias.enabled !== false,
+      name: alias.name,
+      domainId: alias.domainId,
+      ...(alias.description ? { description: alias.description } : {}),
+    };
+  });
+  return out;
+}
+
+/** Accounts with their aliases. Fetched in one round-trip per chunk of ids. */
+export async function listAccountsWithAliases(ids: string[]): Promise<FluxAccountWithAliases[]> {
+  const accounts: FluxAccountWithAliases[] = [];
+  for (let i = 0; i < ids.length; i += SET_BATCH_SIZE) {
+    const chunk = ids.slice(i, i + SET_BATCH_SIZE);
+    const responses = await jmap([
+      ['x:Account/get', { ids: chunk, properties: ALIAS_PROPERTIES }, 'g'],
+    ]);
+    for (const [method, result] of responses as Array<[string, {
+      list?: Array<FluxUser & { aliases?: unknown }>;
+    }]>) {
+      if (method !== 'x:Account/get' || !result.list) continue;
+      for (const account of result.list) {
+        accounts.push({ ...account, aliases: decodeAliasList(account.aliases) });
+      }
+    }
+  }
+  return accounts;
+}
+
+/**
+ * Replaces an account's alias list wholesale.
+ *
+ * The whole list is sent rather than an indexed patch (`aliases/2`) because the
+ * server re-sorts and compacts indices, so an index read a moment ago is not a
+ * stable handle. Callers must therefore read-modify-write; concurrent edits to
+ * the same account will last-write-win.
+ */
+export async function setAccountAliases(
+  id: string, aliases: FluxEmailAlias[]
+): Promise<{ error?: string }> {
+  const responses = await jmap([
+    ['x:Account/set', { update: { [id]: { aliases: encodeAliasList(aliases) } } }, 'u'],
+  ]);
+  for (const [method, result] of responses as Array<[string, {
+    updated?: Record<string, unknown>;
+    notUpdated?: Record<string, JmapSetError>;
+    type?: string;
+    description?: string;
+  }]>) {
+    if (method === 'error') {
+      return {
+        error: describeSetError({ type: result.type, description: result.description }, 'Alias update failed'),
+      };
+    }
+    if (method === 'x:Account/set') {
+      const failure = result.notUpdated?.[id];
+      if (failure) return { error: describeSetError(failure, 'Alias update failed') };
+      return {};
+    }
+  }
+  return { error: 'Unexpected response' };
+}
+
+export interface FluxMailingList {
+  id: string;
+  name: string;
+  emailAddress?: string;
+  domainId: string;
+  description?: string | null;
+  recipients: string[];
+}
+
+const MAILING_LIST_PROPERTIES = ['id', 'name', 'emailAddress', 'domainId', 'description', 'recipients'];
+
+/** `Map<String>` arrives as a boolean set: `{ "a@example.com": true }`. */
+function decodeRecipients(raw: unknown): string[] {
+  if (!raw || typeof raw !== 'object') return [];
+  return Object.entries(raw as Record<string, boolean>)
+    .filter(([, on]) => on !== false)
+    .map(([address]) => address);
+}
+
+function encodeRecipients(recipients: string[]): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const address of recipients) out[address] = true;
+  return out;
+}
+
+export async function listMailingLists(): Promise<FluxMailingList[]> {
+  const responses = await jmap([
+    ['x:MailingList/query', {}, 'q'],
+    ['x:MailingList/get', {
+      '#ids': { resultOf: 'q', name: 'x:MailingList/query', path: '/ids' },
+      properties: MAILING_LIST_PROPERTIES,
+    }, 'g'],
+  ]);
+  for (const [method, result] of responses as Array<[string, {
+    list?: Array<Omit<FluxMailingList, 'recipients'> & { recipients?: unknown }>;
+  }]>) {
+    if (method === 'x:MailingList/get' && result.list) {
+      return result.list.map(l => ({ ...l, recipients: decodeRecipients(l.recipients) }));
+    }
+  }
+  return [];
+}
+
+export async function createMailingList(
+  name: string, domainId: string, recipients: string[], description?: string
+): Promise<{ id: string } | { error: string }> {
+  const responses = await jmap([
+    ['x:MailingList/set', {
+      create: {
+        new: {
+          name, domainId,
+          ...(description ? { description } : {}),
+          recipients: encodeRecipients(recipients),
+        },
+      },
+    }, 'c'],
+  ]);
+  for (const [method, result] of responses as Array<[string, {
+    created?: Record<string, { id: string }>;
+    notCreated?: Record<string, JmapSetError>;
+    type?: string;
+    description?: string;
+  }]>) {
+    if (method === 'error') {
+      return {
+        error: describeSetError({ type: result.type, description: result.description }, 'Request failed'),
+      };
+    }
+    if (method === 'x:MailingList/set') {
+      const failure = result.notCreated?.new;
+      if (failure) return { error: describeSetError(failure, 'Could not create the list') };
+      const id = result.created?.new?.id;
+      if (id) return { id };
+    }
+  }
+  return { error: 'Unexpected response' };
+}
+
+export async function updateMailingList(
+  id: string, patch: { recipients?: string[]; description?: string | null }
+): Promise<{ error?: string }> {
+  const update: Record<string, unknown> = {};
+  if (patch.recipients) update.recipients = encodeRecipients(patch.recipients);
+  if (patch.description !== undefined) update.description = patch.description;
+  if (!Object.keys(update).length) return {};
+
+  const responses = await jmap([['x:MailingList/set', { update: { [id]: update } }, 'u']]);
+  for (const [method, result] of responses as Array<[string, {
+    notUpdated?: Record<string, JmapSetError>;
+    type?: string;
+    description?: string;
+  }]>) {
+    if (method === 'error') {
+      return {
+        error: describeSetError({ type: result.type, description: result.description }, 'Update failed'),
+      };
+    }
+    if (method === 'x:MailingList/set') {
+      const failure = result.notUpdated?.[id];
+      if (failure) return { error: describeSetError(failure, 'Update failed') };
+      return {};
+    }
+  }
+  return { error: 'Unexpected response' };
+}
+
+export async function deleteMailingList(id: string): Promise<{ error?: string }> {
+  const responses = await jmap([['x:MailingList/set', { destroy: [id] }, 'd']]);
+  for (const [method, result] of responses as Array<[string, {
+    notDestroyed?: Record<string, JmapSetError>;
+  }]>) {
+    if (method === 'x:MailingList/set' && result.notDestroyed?.[id]) {
+      return { error: describeSetError(result.notDestroyed[id], 'Delete failed') };
     }
   }
   return {};

@@ -4,7 +4,7 @@ export const PLANS = {
   trial:      { name: 'Free Trial',  price: 0,    maxUsers: 3,   maxDomains: 1,   storageGbPerUser: 5,   features: ['3 users', '5 GB storage/user', 'Basic support'] },
   starter:    { name: 'Starter',     price: 499,  maxUsers: 10,  maxDomains: 3,   storageGbPerUser: 15,  features: ['10 users', '15 GB storage/user', 'Email support', 'Custom domain'] },
   business:   { name: 'Business',    price: 1499, maxUsers: 50,  maxDomains: 10,  storageGbPerUser: 50,  features: ['50 users', '50 GB storage/user', 'Priority support', 'Custom domain', 'Team aliases'] },
-  enterprise: { name: 'Enterprise',  price: 3999, maxUsers: 999, maxDomains: 999, storageGbPerUser: 100, features: ['Unlimited users', '100 GB storage/user', 'Dedicated support', 'SLA', 'Custom DKIM'] },
+  enterprise: { name: 'Enterprise',  price: 3999, maxUsers: 999, maxDomains: 999, storageGbPerUser: 100, features: ['Unlimited users', '100 GB storage/user', 'Dedicated support', 'SLA', 'Custom DKIM', 'Team aliases'] },
 } as const;
 
 export type PlanKey = keyof typeof PLANS;
@@ -23,6 +23,33 @@ export const PLAN_STORAGE_BYTES_PER_USER: Record<PlanKey, number> = {
   business:   PLANS.business.storageGbPerUser * GB,
   enterprise: PLANS.enterprise.storageGbPerUser * GB,
 };
+
+/**
+ * Capabilities that are gated per tier, kept beside PLANS so that what the
+ * pricing copy in `features` advertises and what the API actually enforces
+ * cannot drift apart.
+ *
+ * `teamAliases` covers both per-mailbox aliases and shared distribution list
+ * addresses — the two things "Team aliases" is sold as.
+ */
+export const PLAN_CAPABILITIES: Record<PlanKey, { teamAliases: boolean }> = {
+  trial:      { teamAliases: false },
+  starter:    { teamAliases: false },
+  business:   { teamAliases: true },
+  enterprise: { teamAliases: true },
+};
+
+export function planSupportsTeamAliases(plan: PlanKey): boolean {
+  return PLAN_CAPABILITIES[plan].teamAliases;
+}
+
+/**
+ * Ceiling on aliases per mailbox and members per distribution list. Not a sold
+ * limit — just a guard so one organisation cannot fill the mail server's global
+ * address index.
+ */
+export const MAX_ALIASES_PER_ACCOUNT = 25;
+export const MAX_LIST_RECIPIENTS = 200;
 
 export function isPlanKey(value: string): value is PlanKey {
   return Object.prototype.hasOwnProperty.call(PLANS, value);

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { Pool } from 'pg';
 import { Queue } from 'bullmq';
 import { createCipheriv, randomBytes } from 'crypto';
+import { getActiveSub, subErrorResponse } from '@/lib/subscription';
 
 let _pool: Pool | null = null;
 function getPool() {
@@ -150,6 +151,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'start') {
+      // Check subscription is active before starting a migration
+      const sub = await getActiveSub(session.orgId);
+      if (!sub) return subErrorResponse();
+
       await ensureTables();
 
       // Prevent concurrent migrations per org — max 1 active job at a time

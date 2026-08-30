@@ -114,8 +114,8 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
         display: 'flex', alignItems: 'center', gap: '.65rem',
         padding: '.55rem .75rem', borderRadius: 8, marginBottom: '.1rem',
         fontSize: '0.875rem',
-        color: active ? '#a5b4fc' : '#94a3b8',
-        background: active ? 'rgba(99,102,241,0.15)' : 'transparent',
+        color: active ? '#ffffff' : 'rgba(255,255,255,0.55)',
+        background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
         fontWeight: active ? 600 : 400,
         transition: 'all .12s',
       }}>
@@ -135,7 +135,7 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
           {Icon.menu}
         </button>
         <div className="topbar-brand">
-          <span style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:7,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',flexShrink:0 }}>
+          <span style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:7,background:'linear-gradient(135deg,#2563eb,#1d4ed8)',flexShrink:0 }}>
             {Icon.bolt}
           </span>
           <span>{orgName}</span>
@@ -152,24 +152,24 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
       {/* Sidebar ─────────────────────────────────────────── */}
       <aside className={`sidebar${mobileOpen ? ' open' : ''}`} style={{
         width: 240,
-        background: '#161b27',
-        borderRight: '1px solid #1e2535',
+        background: '#0f2d5a',
+        borderRight: '1px solid rgba(255,255,255,0.08)',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
         minHeight: '100vh',
       }}>
         {/* Logo */}
-        <div style={{ padding: '1.25rem 1.25rem 1.1rem', borderBottom: '1px solid #1e2535', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '1.25rem 1.25rem 1.1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', minWidth: 0 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', flexShrink: 0 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', flexShrink: 0 }}>
               {Icon.bolt}
             </span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {orgName}
               </div>
-              <div style={{ color: '#475569', fontSize: '0.7rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.7rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {email}
               </div>
             </div>
@@ -177,7 +177,7 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
           {/* Close button — only visible on mobile via inline style (CSS class handles display) */}
           <button
             onClick={() => setMobileOpen(false)}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'transparent', border: '1px solid #2d3448', borderRadius: 6, cursor: 'pointer', color: '#64748b', flexShrink: 0 }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, cursor: 'pointer', color: 'rgba(255,255,255,0.5)', flexShrink: 0 }}
             className="sidebar-close"
             aria-label="Close navigation"
           >
@@ -187,26 +187,26 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: '1rem .75rem' }}>
-          <div style={{ fontSize: '0.68rem', color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.8px', padding: '.25rem .75rem', marginBottom: '.4rem' }}>
+          <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.8px', padding: '.25rem .75rem', marginBottom: '.4rem' }}>
             Menu
           </div>
           {NAV.map(navLink)}
         </nav>
 
         {/* Footer */}
-        <div style={{ padding: '1rem .75rem', borderTop: '1px solid #1e2535' }}>
+        <div style={{ padding: '1rem .75rem', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <a
             href="https://app.arhamworkspace.tech"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.55rem .75rem', borderRadius: 8, color: '#64748b', fontSize: '0.875rem', marginBottom: '.1rem', transition: 'color .12s' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.55rem .75rem', borderRadius: 8, color: 'rgba(255,255,255,0.55)', fontSize: '0.875rem', marginBottom: '.1rem', transition: 'color .12s' }}
           >
             <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{Icon.inbox}</span>
             Open Inbox
           </a>
           <button
             onClick={logout}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.55rem .75rem', borderRadius: 8, background: 'transparent', border: 'none', color: '#64748b', fontSize: '0.875rem', cursor: 'pointer', textAlign: 'left', transition: 'color .12s' }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '.65rem', padding: '.55rem .75rem', borderRadius: 8, background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: '0.875rem', cursor: 'pointer', textAlign: 'left', transition: 'color .12s' }}
           >
             <span style={{ width: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{Icon.logout}</span>
             Sign out

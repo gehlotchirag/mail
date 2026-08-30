@@ -11,16 +11,16 @@ type Msg = { type: 'success' | 'error'; text: string } | null;
 
 /* ── Password strength helper ─────────────────────────────────────────────── */
 function passwordStrength(pw: string): { score: number; label: string; color: string } {
-  if (!pw) return { score: 0, label: '', color: '#2d3448' };
+  if (!pw) return { score: 0, label: '', color: '#dbeafe' };
   let score = 0;
   if (pw.length >= 8)  score++;
   if (pw.length >= 12) score++;
   if (/[A-Z]/.test(pw)) score++;
   if (/[0-9]/.test(pw)) score++;
   if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { score, label: 'Weak',   color: '#f87171' };
-  if (score <= 3) return { score, label: 'Fair',   color: '#fbbf24' };
-  return              { score, label: 'Strong', color: '#4ade80' };
+  if (score <= 1) return { score, label: 'Weak',   color: '#dc2626' };
+  if (score <= 3) return { score, label: 'Fair',   color: '#d97706' };
+  return              { score, label: 'Strong', color: '#16a34a' };
 }
 
 function StrengthBar({ pw }: { pw: string }) {
@@ -30,7 +30,7 @@ function StrengthBar({ pw }: { pw: string }) {
     <div style={{ marginTop: '.5rem' }}>
       <div style={{ display: 'flex', gap: 4, marginBottom: '.3rem' }}>
         {[1,2,3,4,5].map(i => (
-          <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= score ? color : '#2d3448', transition: 'background .2s' }} />
+          <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= score ? color : '#dbeafe', transition: 'background .2s' }} />
         ))}
       </div>
       <div style={{ fontSize: '0.75rem', color }}>{label}</div>
@@ -138,7 +138,7 @@ export default function SettingsPage() {
 
       {/* ── Organization Profile ─────────────────────────────── */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '1.25rem' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e3a5f', marginBottom: '1.25rem' }}>
           Organization profile
         </h2>
 
@@ -149,7 +149,7 @@ export default function SettingsPage() {
         <div className="field">
           <label className="label">Email address</label>
           <input className="inp" value={profile?.email ?? '—'} disabled />
-          <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '.3rem' }}>
+          <div style={{ fontSize: '0.75rem', color: '#3b5f8a', marginTop: '.3rem' }}>
             Contact support to change your login email.
           </div>
         </div>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
 
       {/* ── Security ─────────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: '1.25rem' }}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '1.25rem' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e3a5f', marginBottom: '1.25rem' }}>
           Change password
         </h2>
 
@@ -224,10 +224,10 @@ export default function SettingsPage() {
               required
               minLength={8}
               autoComplete="new-password"
-              style={passwords.confirm && passwords.next !== passwords.confirm ? { borderColor: '#f87171' } : {}}
+              style={passwords.confirm && passwords.next !== passwords.confirm ? { borderColor: '#dc2626' } : {}}
             />
             {passwords.confirm && passwords.next !== passwords.confirm && (
-              <div style={{ fontSize: '0.75rem', color: '#f87171', marginTop: '.3rem' }}>Passwords do not match</div>
+              <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '.3rem' }}>Passwords do not match</div>
             )}
           </div>
 
@@ -235,7 +235,7 @@ export default function SettingsPage() {
             <button type="submit" className="btn" disabled={passLoading}>
               {passLoading ? 'Updating…' : 'Change password'}
             </button>
-            <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+            <div style={{ fontSize: '0.78rem', color: '#3b5f8a' }}>
               Use 8+ chars, a mix of letters, numbers &amp; symbols for a strong password.
             </div>
           </div>
@@ -243,13 +243,13 @@ export default function SettingsPage() {
       </div>
 
       {/* ── Danger Zone ──────────────────────────────────────── */}
-      <div className="card" style={{ borderColor: 'rgba(239,68,68,0.25)' }}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#f87171', marginBottom: '.5rem' }}>
+      <div className="card" style={{ borderColor: 'rgba(220,38,38,0.25)' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#dc2626', marginBottom: '.5rem' }}>
           Danger zone
         </h2>
-        <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+        <p style={{ color: '#3b5f8a', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
           Permanently delete your organization and all associated domains, users, and data.
-          This action <strong style={{ color: '#94a3b8' }}>cannot be undone</strong>.
+          This action <strong style={{ color: '#7fa8d0' }}>cannot be undone</strong>.
         </p>
         <button className="btn-danger" onClick={() => setShowDelete(true)}>
           Delete account
@@ -262,7 +262,7 @@ export default function SettingsPage() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2>Delete your account?</h2>
             <p>
-              This will permanently delete <strong style={{ color: '#e2e8f0' }}>{profile?.name}</strong>,
+              This will permanently delete <strong style={{ color: '#1e3a5f' }}>{profile?.name}</strong>,
               all domains, email users, and settings. Type your email to confirm:
             </p>
             <div className="field">

@@ -66,6 +66,37 @@ export async function initDb(): Promise<void> {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS email_suppressions (
+      email TEXT PRIMARY KEY,
+      reason TEXT NOT NULL,
+      sub_type TEXT,
+      suppressed BOOLEAN NOT NULL DEFAULT TRUE,
+      diagnostic TEXT,
+      feedback_id TEXT,
+      source TEXT,
+      ses_message_id TEXT,
+      occurrences INTEGER NOT NULL DEFAULT 1,
+      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(
+    `CREATE INDEX IF NOT EXISTS idx_email_suppressions_suppressed
+     ON email_suppressions (suppressed, last_seen_at DESC)`
+  );
+
+  // SNS delivers at least once; the message id makes replays a no-op.
+  await query(`
+    CREATE TABLE IF NOT EXISTS ses_notifications (
+      sns_message_id TEXT PRIMARY KEY,
+      topic_arn TEXT,
+      event_type TEXT,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS subscriptions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       org_id UUID UNIQUE NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
