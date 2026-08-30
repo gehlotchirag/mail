@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { listUsersForDomain, createUser } from '@/lib/flux';
+import { listAllUsers, countUsersForDomains, createUser } from '@/lib/flux';
+import { getActiveSub, subErrorResponse, limitErrorResponse } from '@/lib/subscription';
+import { resolvePlanLimits } from '@/lib/plans';
 
 export async function GET() {
   const session = await getSession();
@@ -11,12 +13,16 @@ export async function GET() {
     'SELECT id, domain, flux_domain_id, verified FROM domains WHERE org_id = $1', [session.orgId]
   );
 
-  const allUsers: Array<{ domainId: string; domain: string; users: unknown[] }> = [];
-  for (const d of domains) {
-    if (!d.flux_domain_id) continue;
-    const users = await listUsersForDomain(d.flux_domain_id);
-    allUsers.push({ domainId: d.id, domain: d.domain, users });
-  }
+  // One JMAP round-trip for the whole org, then group locally.
+  const fluxUsers = await listAllUsers();
+  const allUsers = domains
+    .filter(d => d.flux_domain_id)
+    .map(d => ({
+      domainId: d.id,
+      domain: d.domain,
+      users: fluxUsers.filter(u => u.domainId === d.flux_domain_id),
+    }));
+
   return NextResponse.json({ domains: allUsers });
 }
 
@@ -39,21 +45,38 @@ export async function POST(req: Request) {
   if (!domain) return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
   if (!domain.flux_domain_id) return NextResponse.json({ error: 'Domain not provisioned yet' }, { status: 400 });
 
-  // Check subscription limit
-  const sub = await queryOne<{ max_users: number; status: string }>(
-    'SELECT max_users, status FROM subscriptions WHERE org_id = $1', [session.orgId]
+  // Check subscription is active
+  const sub = await getActiveSub(session.orgId);
+  if (!sub) return subErrorResponse();
+  const limits = resolvePlanLimits(sub);
+
+  // Check the user limit across EVERY domain in the organisation, not just the
+  // one being added to — the plan sells N users per org, not N per domain.
+  const orgDomains = await query<{ flux_domain_id: string | null }>(
+    'SELECT flux_domain_id FROM domains WHERE org_id = $1 AND flux_domain_id IS NOT NULL',
+    [session.orgId]
   );
-  if (sub) {
-    const currentUsers = await listUsersForDomain(domain.flux_domain_id);
-    if (currentUsers.length >= sub.max_users) {
-      return NextResponse.json({
-        error: `User limit reached (${sub.max_users}). Upgrade your plan to add more users.`,
-        limitReached: true,
-      }, { status: 403 });
-    }
+  const orgFluxDomainIds = orgDomains
+    .map(d => d.flux_domain_id)
+    .filter((id): id is string => !!id);
+
+  const currentUsers = await countUsersForDomains(orgFluxDomainIds);
+  if (currentUsers >= limits.maxUsers) {
+    return limitErrorResponse(
+      `User limit reached (${limits.maxUsers}). Upgrade your plan to add more users.`
+    );
   }
 
-  const result = await createUser(username, domain.flux_domain_id, password, displayName);
+  const result = await createUser(
+    username, domain.flux_domain_id, password, displayName, limits.storageBytesPerUser
+  );
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 400 });
-  return NextResponse.json(result, { status: 201 });
+
+  return NextResponse.json({
+    id: result.id,
+    storageQuotaBytes: result.quotaApplied ? limits.storageBytesPerUser : null,
+    ...(result.quotaApplied ? {} : {
+      warning: 'Account created but the storage quota could not be applied on the mail server.',
+    }),
+  }, { status: 201 });
 }
