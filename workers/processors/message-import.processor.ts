@@ -6,8 +6,12 @@ import { decryptField } from '../lib/crypto.js';
 import { buildImapCredentials, resolveImapAuth } from '../imap/master-user.js';
 import { buildImapTlsOptions, parseAllowInsecureTls } from '../lib/imap-tls.js';
 import { withRetry, isImapRateLimit, sleep } from '../lib/retry.js';
+import { ProgressAccumulator } from '../lib/progress.js';
+import { settleBatch, outcomeFor } from '../lib/batch-settlement.js';
 import { refreshZohoToken } from '../imap/providers/zoho.js';
 import type { ZohoMsgSummary } from '../imap/providers/zoho.js';
+
+const PROGRESS_FLUSH_EVERY = Number(process.env.PROGRESS_FLUSH_EVERY ?? 10);
 
 export async function messageImportProcessor(job: Job): Promise<void> {
   const { sourceType } = job.data as { sourceType?: string };
@@ -18,11 +22,42 @@ export async function messageImportProcessor(job: Job): Promise<void> {
   return processImapBatch(job);
 }
 
+/**
+ * Called from the worker's `failed` event once BullMQ has burned every attempt.
+ * This is the moment mail would otherwise go missing: without it the batch row
+ * stays 'pending' forever, the user never completes, and (in the old code, where
+ * the checkpoint had already jumped past these messages) a re-run skipped them.
+ */
+export async function handleBatchFinalFailure(job: Job, err: Error): Promise<void> {
+  const { batchId, jobId, userId, sourceType, sourceEmail, folderName, uids, zohoBatch } =
+    job.data as {
+      batchId?: string; jobId: string; userId: string; sourceType?: string;
+      sourceEmail?: string; folderName?: string; uids?: number[]; zohoBatch?: unknown[];
+    };
+  if (!batchId || !jobId || !userId) return;
+
+  const size = uids?.length ?? zohoBatch?.length ?? 0;
+  console.error(
+    `[message-import] Batch ${job.id} (${folderName ?? '?'}, ${size} message(s)) ` +
+    `permanently failed after ${job.attemptsMade} attempt(s): ${err.message}`,
+  );
+
+  await settleBatch({
+    batchId, jobId, userId, sourceType, sourceEmail,
+    outcome: 'failed', imported: 0, failed: size,
+    error: err.message.slice(0, 500),
+  });
+
+  await appendMigrationEvent(jobId, userId, 'batch_failed', {
+    folder: folderName, messages: size, error: err.message.slice(0, 500),
+  }).catch(() => { /* event logging must not mask the failure */ });
+}
+
 // ── Zoho REST API batch ────────────────────────────────────────────────────────
 
 async function processZohoBatch(job: Job): Promise<void> {
   const {
-    jobId, userId, accountId, mailboxId, folderName,
+    jobId, userId, accountId, mailboxId, folderName, batchId,
     zohoApiBase, zohoOrgId, zohoAccountId, zohoRegion, zohoBatch,
     // Encrypted credential fields (S-2)
     zohoAccessTokenEnc, zohoRefreshTokenEnc, zohoClientIdEnc, zohoClientSecretEnc,
@@ -30,6 +65,7 @@ async function processZohoBatch(job: Job): Promise<void> {
     zohoAccessToken: zohoAccessTokenLegacy,
   } = job.data as {
     jobId: string; userId: string; accountId: string; mailboxId: string; folderName: string;
+    batchId?: string;
     zohoApiBase: string; zohoOrgId: string; zohoAccountId: string; zohoRegion?: string;
     zohoBatch: ZohoMsgSummary[];
     zohoAccessTokenEnc?: string; zohoRefreshTokenEnc?: string;
@@ -37,7 +73,13 @@ async function processZohoBatch(job: Job): Promise<void> {
     zohoAccessToken?: string; // legacy
   };
 
-  if (await isJobCancelled(jobId)) return;
+  if (await isJobCancelled(jobId)) {
+    await settleBatch({
+      batchId, jobId, userId, sourceType: 'zoho', outcome: 'cancelled',
+      imported: 0, failed: 0, error: 'job cancelled',
+    });
+    return;
+  }
 
   // Decrypt access token (Z-1 + S-2): refresh at start of each batch so expired tokens self-heal
   const rawToken = zohoAccessTokenEnc ? decryptField(zohoAccessTokenEnc) : (zohoAccessTokenLegacy ?? '');
@@ -60,63 +102,65 @@ async function processZohoBatch(job: Job): Promise<void> {
   }
 
   const authHeader = `Zoho-oauthtoken ${accessToken}`;
-  let importedMessages = 0;
   let failedMessages = 0;
-  let importedBytes = 0;
-  let progressBatch = 0;
+  // Messages and bytes are flushed together — see lib/progress.ts for the bug
+  // this replaces.
+  const progress = new ProgressAccumulator(
+    PROGRESS_FLUSH_EVERY,
+    (messages, bytes) => incrementUserProgress(userId, messages, bytes),
+  );
 
-  for (const msg of zohoBatch) {
-    if (await isJobCancelled(jobId)) break;
+  try {
+    for (const msg of zohoBatch) {
+      if (await isJobCancelled(jobId)) break;
 
-    try {
-      const raw = await withRetry(async () => {
-        const res = await fetch(
-          `${zohoApiBase}/organization/${zohoOrgId}/accounts/${zohoAccountId}/messages/content/${msg.messageId}?include=raw`,
-          { headers: { Authorization: authHeader } },
+      try {
+        const raw = await withRetry(async () => {
+          const res = await fetch(
+            `${zohoApiBase}/organization/${zohoOrgId}/accounts/${zohoAccountId}/messages/content/${msg.messageId}?include=raw`,
+            { headers: { Authorization: authHeader } },
+          );
+          if (res.status === 429) throw Object.assign(new Error('rate limit'), { code: 'RATE_LIMIT' });
+          if (res.status === 401) throw Object.assign(new Error('token expired'), { code: 'TOKEN_EXPIRED' });
+          if (!res.ok) throw new Error(`Zoho content error: ${res.status} ${res.statusText}`);
+          const data = await res.json() as { data?: { content?: string } };
+          const rawStr = data.data?.content;
+          if (!rawStr) throw new Error(`No raw content for message ${msg.messageId}`);
+          return Buffer.from(rawStr, 'base64');
+        }, { maxAttempts: 3, baseDelayMs: 5000 });
+
+        const { blobId, size } = await withRetry(
+          () => uploadBlob(accountId, raw),
+          { maxAttempts: 3, baseDelayMs: 2000 },
         );
-        if (res.status === 429) throw Object.assign(new Error('rate limit'), { code: 'RATE_LIMIT' });
-        if (res.status === 401) throw Object.assign(new Error('token expired'), { code: 'TOKEN_EXPIRED' });
-        if (!res.ok) throw new Error(`Zoho content error: ${res.status} ${res.statusText}`);
-        const data = await res.json() as { data?: { content?: string } };
-        const rawStr = data.data?.content;
-        if (!rawStr) throw new Error(`No raw content for message ${msg.messageId}`);
-        return Buffer.from(rawStr, 'base64');
-      }, { maxAttempts: 3, baseDelayMs: 5000 });
 
-      const { blobId, size } = await withRetry(
-        () => uploadBlob(accountId, raw),
-        { maxAttempts: 3, baseDelayMs: 2000 },
-      );
+        const flags = new Set<string>();
+        if (msg.isRead) flags.add('\\Seen');
+        if (msg.isFlagged) flags.add('\\Flagged');
 
-      const flags = new Set<string>();
-      if (msg.isRead) flags.add('\\Seen');
-      if (msg.isFlagged) flags.add('\\Flagged');
+        const receivedAt = msg.receivedTime ? new Date(msg.receivedTime) : undefined;
 
-      const receivedAt = msg.receivedTime ? new Date(msg.receivedTime) : undefined;
+        await withRetry(
+          () => importEmail({ accountId, blobId, mailboxId, flags, receivedAt }),
+          { maxAttempts: 3, baseDelayMs: 2000 },
+        );
 
-      await withRetry(
-        () => importEmail({ accountId, blobId, mailboxId, flags, receivedAt }),
-        { maxAttempts: 3, baseDelayMs: 2000 },
-      );
-
-      importedMessages++;
-      importedBytes += size;
-      progressBatch++;
-
-      if (progressBatch >= 10) {
-        await incrementUserProgress(userId, progressBatch, 0);
-        progressBatch = 0;
+        await progress.record(size);
+      } catch (err) {
+        failedMessages++;
+        const isRateLimit =
+          err instanceof Error && (err.message.includes('rate limit') || err.message.includes('429'));
+        if (isRateLimit) await sleep(30_000);
+        console.warn(`[message-import:zoho] ${msg.messageId} failed: ${err instanceof Error ? err.message : err}`);
       }
-    } catch (err) {
-      failedMessages++;
-      const isRateLimit =
-        err instanceof Error && (err.message.includes('rate limit') || err.message.includes('429'));
-      if (isRateLimit) await sleep(30_000);
-      console.warn(`[message-import:zoho] ${msg.messageId} failed: ${err instanceof Error ? err.message : err}`);
     }
+  } finally {
+    // Whatever landed is recorded even if the batch is about to throw.
+    await progress.drain().catch(err =>
+      console.error(`[message-import:zoho] progress flush failed: ${err instanceof Error ? err.message : err}`));
   }
 
-  if (progressBatch > 0) await incrementUserProgress(userId, progressBatch, importedBytes);
+  const { messages: importedMessages, bytes: importedBytes } = progress.totals;
 
   // Always log the event so partial failures are visible (E-1)
   if (importedMessages > 0 || failedMessages > 0) {
@@ -126,29 +170,45 @@ async function processZohoBatch(job: Job): Promise<void> {
     });
   }
 
-  // Fail the job if every message in the batch failed — triggers BullMQ retry (E-1)
+  // Fail the job if every message in the batch failed — triggers BullMQ retry (E-1).
+  // Deliberately settled by the retry-exhausted handler, not here: an unsettled
+  // batch keeps the user open and the folder checkpoint parked behind it.
   if (failedMessages > 0 && importedMessages === 0) {
     throw new Error(`All ${failedMessages} messages in batch failed — will retry`);
   }
+
+  await settleBatch({
+    batchId, jobId, userId, sourceType: 'zoho',
+    outcome: outcomeFor(importedMessages, zohoBatch.length),
+    imported: importedMessages, failed: failedMessages, vanished: 0,
+    error: failedMessages > 0 ? `${failedMessages} message(s) failed` : undefined,
+  });
 }
 
 // ── IMAP batch ────────────────────────────────────────────────────────────────
 
 async function processImapBatch(job: Job): Promise<void> {
   const {
-    jobId, userId, accountId, mailboxId, folderName,
+    jobId, userId, accountId, mailboxId, folderName, batchId,
     uids, imapHost, imapPort, imapSecure,
     sourceType, sourceEmail, imapCredsEnc, allowInsecureTls,
     // Legacy plaintext fields for batches enqueued before credentials were encrypted
     imapUser: imapUserLegacy, imapPass: imapPassLegacy,
   } = job.data as {
     jobId: string; userId: string; accountId: string; mailboxId: string; folderName: string;
+    batchId?: string;
     uids: number[]; imapHost: string; imapPort: number; imapSecure: boolean;
     sourceType?: string; sourceEmail?: string; imapCredsEnc?: string; allowInsecureTls?: boolean;
     imapUser?: string; imapPass?: string; // legacy
   };
 
-  if (await isJobCancelled(jobId)) return;
+  if (await isJobCancelled(jobId)) {
+    await settleBatch({
+      batchId, jobId, userId, sourceType, sourceEmail, outcome: 'cancelled',
+      imported: 0, failed: 0, error: 'job cancelled',
+    });
+    return;
+  }
 
   let host = imapHost;
   let port = imapPort;
@@ -187,10 +247,15 @@ async function processImapBatch(job: Job): Promise<void> {
   await withRetry(() => client.connect(), { maxAttempts: 3, baseDelayMs: 5000 });
 
   const lock = await client.getMailboxLock(folderName);
-  let importedMessages = 0;
   let failedMessages = 0;
-  let importedBytes = 0;
-  let progressBatch = 0;
+  // Messages the source no longer has. They are gone, not lost: retrying cannot
+  // bring them back, so they are allowed to move the checkpoint — but they are
+  // counted and reported rather than silently skipped.
+  let vanishedMessages = 0;
+  const progress = new ProgressAccumulator(
+    PROGRESS_FLUSH_EVERY,
+    (messages, bytes) => incrementUserProgress(userId, messages, bytes),
+  );
 
   try {
     for (const uid of uids) {
@@ -203,7 +268,15 @@ async function processImapBatch(job: Job): Promise<void> {
           { source: true, flags: true, envelope: true },
           { uid: true },
         );
-        if (!msg || !msg.source) continue;
+        // A UID that no longer resolves was deleted at the source between
+        // enumeration and now.
+        if (!msg || !msg.source) {
+          vanishedMessages++;
+          console.warn(
+            `[message-import] UID ${uid} in ${folderName} no longer exists at the source — skipped`,
+          );
+          continue;
+        }
 
         const rawSource = msg.source as Buffer;
         const msgFlags = msg.flags ?? new Set<string>();
@@ -219,14 +292,7 @@ async function processImapBatch(job: Job): Promise<void> {
           { maxAttempts: 3, baseDelayMs: 2000 },
         );
 
-        importedMessages++;
-        importedBytes += size;
-        progressBatch++;
-
-        if (progressBatch >= 10) {
-          await incrementUserProgress(userId, progressBatch, 0);
-          progressBatch = 0;
-        }
+        await progress.record(size);
       } catch (msgErr) {
         failedMessages++;
         if (isImapRateLimit(msgErr)) await sleep(30_000);
@@ -236,18 +302,29 @@ async function processImapBatch(job: Job): Promise<void> {
   } finally {
     lock.release();
     try { await client.logout(); } catch { /* ignore */ }
+    await progress.drain().catch(err =>
+      console.error(`[message-import] progress flush failed: ${err instanceof Error ? err.message : err}`));
   }
 
-  if (progressBatch > 0) await incrementUserProgress(userId, progressBatch, importedBytes);
+  const { messages: importedMessages, bytes: importedBytes } = progress.totals;
 
-  if (importedMessages > 0 || failedMessages > 0) {
+  if (importedMessages > 0 || failedMessages > 0 || vanishedMessages > 0) {
     await appendMigrationEvent(jobId, userId, 'message_batch', {
-      folder: folderName, imported: importedMessages, failed: failedMessages, bytes: importedBytes,
+      folder: folderName, imported: importedMessages, failed: failedMessages,
+      vanished: vanishedMessages, bytes: importedBytes,
     });
   }
 
-  // Fail the batch if nothing landed — triggers the BullMQ retry/backoff (E-1)
+  // Fail the batch if nothing landed — triggers the BullMQ retry/backoff (E-1).
+  // Settlement is left to the retry-exhausted handler for the same reason as above.
   if (failedMessages > 0 && importedMessages === 0) {
     throw new Error(`All ${failedMessages} messages in batch failed — will retry`);
   }
+
+  await settleBatch({
+    batchId, jobId, userId, sourceType, sourceEmail,
+    outcome: outcomeFor(importedMessages + vanishedMessages, uids.length),
+    imported: importedMessages, failed: failedMessages, vanished: vanishedMessages,
+    error: failedMessages > 0 ? `${failedMessages} message(s) failed` : undefined,
+  });
 }

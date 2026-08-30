@@ -4,7 +4,7 @@ import { getRedisConnection } from './queues/connection.js';
 import { runMigrations } from './db/pool.js';
 import { orchestratorProcessor } from './processors/orchestrator.processor.js';
 import { userMigrationProcessor } from './processors/user-migration.processor.js';
-import { messageImportProcessor } from './processors/message-import.processor.js';
+import { messageImportProcessor, handleBatchFinalFailure } from './processors/message-import.processor.js';
 import { startStuckUserReaper } from './lib/reaper.js';
 
 const QUEUE_TYPE = process.env.QUEUE_TYPE ?? process.argv.find(a => a.startsWith('--queue='))?.split('=')[1] ?? 'orchestrator';
@@ -48,6 +48,21 @@ async function main() {
         concurrency: CONCURRENCY,
         stalledInterval: 30_000,
         lockDuration: 600_000, // 10min per batch
+      });
+      // A batch that burns every attempt is the one place mail can go missing.
+      // Record it as unimported so the user's folder checkpoint stays parked
+      // behind those messages and the user is not left waiting on a batch that
+      // will never come back.
+      worker.on('failed', (job, err) => {
+        if (!job) return;
+        // BullMQ sets finishedOn only when it is done retrying (and bumps
+        // attemptsMade before emitting), so both signals mean "no further
+        // attempt" — including an UnrecoverableError thrown before the
+        // attempts are used up.
+        const terminal = Boolean(job.finishedOn) || job.attemptsMade >= (job.opts?.attempts ?? 1);
+        if (!terminal) return;
+        void handleBatchFinalFailure(job, err).catch(e =>
+          console.error(`[message-import] Failed to record batch failure: ${e instanceof Error ? e.message : e}`));
       });
       break;
     default:

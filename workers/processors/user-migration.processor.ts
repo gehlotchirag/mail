@@ -4,16 +4,28 @@ import { ImapFlow } from 'imapflow';
 import { getRedisConnection } from '../queues/connection.js';
 import { decryptCredentials, encryptField } from '../lib/crypto.js';
 import {
-  getMigrationJob, updateUserStatus, updateUserCheckpoint, getUserCheckpoint,
-  appendMigrationEvent, incrementJobUserCounts, isJobCancelled, finalizeJobIfComplete,
+  getMigrationJob, updateUserStatus, getUserCheckpoint,
+  appendMigrationEvent, incrementJobUserCounts, isJobCancelled,
+  registerMessageBatch, attachBatchBullJob, voidMessageBatch,
+  resetUserBatchAccounting, markUserEnqueueComplete, setUserBullJobId,
 } from '../db/queries.js';
 import { buildImapCredentials, resolveImapAuth, FOLDER_ROLE_MAP } from '../imap/master-user.js';
 import { buildImapTlsOptions, parseAllowInsecureTls } from '../lib/imap-tls.js';
+import { startHeartbeat } from '../lib/heartbeat.js';
+import { finishUserIfDone } from '../lib/user-completion.js';
+import { PageGuard } from '../lib/pagination.js';
 import { ensureAccountExists, resolveMailboxId } from '../stalwart/account-manager.js';
 import {
   fetchZohoFolders, fetchZohoMessageIds, refreshZohoToken,
   zohoApiBase, type ZohoCreds,
 } from '../imap/providers/zoho.js';
+
+const BATCH_JOB_OPTS = {
+  attempts: 3,
+  backoff: { type: 'exponential' as const, delay: 60_000 },
+  removeOnComplete: { count: 100 },
+  removeOnFail: false,
+};
 
 export async function userMigrationProcessor(job: Job): Promise<void> {
   const {
@@ -33,41 +45,100 @@ export async function userMigrationProcessor(job: Job): Promise<void> {
   const allowInsecureTls = parseAllowInsecureTls(dbJob.allow_insecure_tls);
 
   await updateUserStatus(userId, 'creating', { started_at: new Date() });
+  if (job.id) await setUserBullJobId(userId, String(job.id));
   await appendMigrationEvent(jobId, userId, 'user_started', { sourceEmail, targetEmail });
 
-  let accountId: string;
+  // Liveness signal for the reaper: while this beats, the user is alive and must
+  // not be re-enqueued no matter how long enumeration takes.
+  const stopHeartbeat = startHeartbeat(userId);
+
   try {
-    accountId = await ensureAccountExists(targetEmail, targetEmail.split('@')[0]);
+    // First thing: this attempt supersedes any batch a previous attempt left
+    // unsettled. Their ranges are about to be re-enumerated from the checkpoint,
+    // which never advanced past them. Done before anything slow, so a straggler
+    // from the old attempt cannot settle into this attempt's accounting and
+    // complete the user while it is still enumerating.
+    const dropped = await resetUserBatchAccounting(userId);
+    if (dropped > 0) {
+      console.warn(
+        `[user-migration] ${sourceEmail}: discarded ${dropped} unsettled batch record(s) ` +
+        'from a previous attempt — their messages will be re-enumerated',
+      );
+    }
+
+    let accountId: string;
+    try {
+      accountId = await ensureAccountExists(targetEmail, targetEmail.split('@')[0]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await updateUserStatus(userId, 'failed', { error_message: `Account creation failed: ${msg}` });
+      await incrementJobUserCounts(jobId, 0, 1);
+      await appendMigrationEvent(jobId, userId, 'user_failed', { sourceEmail, error: msg });
+      throw err;
+    }
+
+    await updateUserStatus(userId, 'migrating', { target_account_id: accountId });
+
+    if (sourceType === 'zoho') {
+      await migrateZohoUser({
+        jobId, userId, sourceEmail, accountId,
+        creds: creds as unknown as ZohoCreds,
+        zohoAccountId: zohoAccountId ?? sourceEmail,
+      });
+    } else {
+      await migrateImapUser({
+        jobId, userId, sourceEmail, accountId, sourceType, creds, allowInsecureTls,
+      });
+    }
+  } finally {
+    stopHeartbeat();
+  }
+
+  // Enumeration is done — the user is NOT. Everything this job produced is still
+  // sitting on the message-import queue; the user stays 'importing' and only the
+  // settling of its last batch completes it (see lib/user-completion.ts). The
+  // one case that completes right here is a mailbox that enqueued nothing.
+  const { pending } = await markUserEnqueueComplete(userId);
+  await appendMigrationEvent(jobId, userId, 'user_enqueued', {
+    sourceEmail, targetEmail, pendingBatches: pending,
+  });
+  console.log(
+    `[user-migration] ${sourceEmail}: enumeration complete — ${pending} batch(es) outstanding`,
+  );
+
+  await finishUserIfDone(jobId, userId, sourceEmail);
+}
+
+/**
+ * Register a batch, then enqueue it. Registration first, so a batch can never be
+ * on the queue without the accounting row that stops the user completing before
+ * it lands. If the enqueue fails the registration is rolled back.
+ */
+async function enqueueBatch(
+  queue: Queue,
+  reg: {
+    jobId: string; userId: string; folderKey: string; folderName: string;
+    seqStart: number; seqEnd: number; messageCount: number;
+  },
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const batchId = await registerMessageBatch(reg);
+  try {
+    const queued = await queue.add('import-batch', { ...payload, batchId }, BATCH_JOB_OPTS);
+    if (queued.id) await attachBatchBullJob(batchId, String(queued.id));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await updateUserStatus(userId, 'failed', { error_message: `Account creation failed: ${msg}` });
-    await incrementJobUserCounts(jobId, 0, 1);
-    await appendMigrationEvent(jobId, userId, 'user_failed', { sourceEmail, error: msg });
+    await voidMessageBatch(batchId, reg.userId).catch(() => { /* best effort */ });
     throw err;
   }
-
-  await updateUserStatus(userId, 'migrating', { target_account_id: accountId });
-
-  if (sourceType === 'zoho') {
-    await migrateZohoUser({
-      jobId, userId, sourceEmail, accountId,
-      creds: creds as unknown as ZohoCreds,
-      zohoAccountId: zohoAccountId ?? sourceEmail,
-    });
-  } else {
-    await migrateImapUser({
-      jobId, userId, sourceEmail, accountId, sourceType, creds, allowInsecureTls,
-    });
-  }
-
-  await updateUserStatus(userId, 'completed', { completed_at: new Date() });
-  await incrementJobUserCounts(jobId, 1, 0);
-  await appendMigrationEvent(jobId, userId, 'user_completed', { sourceEmail, targetEmail });
-
-  await finalizeJobIfComplete(jobId);
 }
 
 // ── Zoho REST API path ─────────────────────────────────────────────────────────
+
+// Hard stop for a provider that never says "no more pages" (C7). 200 messages a
+// page — 5000 pages is a million messages in one folder, far past any real
+// mailbox, so hitting it means the cursor is broken, not that the mailbox is big.
+const ZOHO_MAX_PAGES = Number(process.env.ZOHO_MAX_PAGES ?? 5000);
+const ZOHO_BATCH_SIZE = Number(process.env.ZOHO_BATCH_SIZE ?? 50);
 
 async function migrateZohoUser(params: {
   jobId: string; userId: string; sourceEmail: string;
@@ -108,53 +179,74 @@ async function migrateZohoUser(params: {
   const clientIdEnc     = creds.clientId     ? encryptField(creds.clientId)     : undefined;
   const clientSecretEnc = creds.clientSecret  ? encryptField(creds.clientSecret)  : undefined;
 
-  for (const folder of folders) {
-    if (await isJobCancelled(jobId)) break;
-
-    const mailboxId = await resolveMailboxId(accountId, folder.folderName, FOLDER_ROLE_MAP);
-    let start = checkpoint[folder.folderId] ?? 0;
-
-    while (true) {
+  try {
+    for (const folder of folders) {
       if (await isJobCancelled(jobId)) break;
 
-      const { messages, hasMore } = await fetchZohoMessageIds(
-        { ...creds, accessToken: freshToken }, zohoAccountId, folder.folderId, start,
-      );
-      if (messages.length === 0) break;
+      const mailboxId = await resolveMailboxId(accountId, folder.folderName, FOLDER_ROLE_MAP);
+      // Zoho paginates by offset, so the checkpoint is "next offset to fetch".
+      let start = checkpoint[folder.folderId] ?? 0;
+      const guard = new PageGuard(ZOHO_MAX_PAGES, `zoho ${sourceEmail} folder ${folder.folderName}`);
 
-      for (let i = 0; i < messages.length; i += 50) {
-        const batch = messages.slice(i, i + 50);
-        await messageQueue.add('import-batch', {
-          jobId, userId, accountId, mailboxId,
-          folderName: folder.folderName,
-          sourceType: 'zoho',
-          zohoApiBase: zohoApiBase(creds),
-          zohoOrgId: creds.orgId,
-          zohoAccountId,
-          zohoRegion: creds.region ?? 'com',
-          // Encrypted credentials (S-2)
-          zohoAccessTokenEnc: accessTokenEnc,
-          zohoRefreshTokenEnc: refreshTokenEnc,
-          zohoClientIdEnc: clientIdEnc,
-          zohoClientSecretEnc: clientSecretEnc,
-          zohoBatch: batch,
-        }, {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 60_000 },
-          removeOnComplete: { count: 100 },
-          removeOnFail: false,
-        });
+      while (true) {
+        if (await isJobCancelled(jobId)) break;
+
+        const { messages, hasMore } = await fetchZohoMessageIds(
+          { ...creds, accessToken: freshToken }, zohoAccountId, folder.folderId, start,
+        );
+        if (messages.length === 0) break;
+
+        // Signature over the page's contents: a provider that keeps handing back
+        // the same page while claiming hasMore would otherwise loop forever.
+        const verdict = guard.next(
+          `${start}:${messages[0].messageId}:${messages[messages.length - 1].messageId}:${messages.length}`,
+        );
+        if (!verdict.ok) {
+          console.error(`[user-migration] ABORTING FOLDER — ${verdict.detail}`);
+          await appendMigrationEvent(jobId, userId, 'pagination_aborted', {
+            sourceEmail, folder: folder.folderName, reason: verdict.reason,
+            detail: verdict.detail, pagesFetched: guard.pagesFetched, offset: start,
+          });
+          break;
+        }
+
+        for (let i = 0; i < messages.length; i += ZOHO_BATCH_SIZE) {
+          const batch = messages.slice(i, i + ZOHO_BATCH_SIZE);
+          await enqueueBatch(messageQueue, {
+            jobId, userId,
+            folderKey: folder.folderId,
+            folderName: folder.folderName,
+            seqStart: start + i,
+            seqEnd: start + i + batch.length - 1,
+            messageCount: batch.length,
+          }, {
+            jobId, userId, accountId, mailboxId,
+            folderName: folder.folderName,
+            folderKey: folder.folderId,
+            sourceType: 'zoho',
+            zohoApiBase: zohoApiBase(creds),
+            zohoOrgId: creds.orgId,
+            zohoAccountId,
+            zohoRegion: creds.region ?? 'com',
+            // Encrypted credentials (S-2)
+            zohoAccessTokenEnc: accessTokenEnc,
+            zohoRefreshTokenEnc: refreshTokenEnc,
+            zohoClientIdEnc: clientIdEnc,
+            zohoClientSecretEnc: clientSecretEnc,
+            zohoBatch: batch,
+          });
+        }
+
+        start += messages.length;
+        // NOTE: the checkpoint is deliberately NOT advanced here. It moves only as
+        // batches report messages actually imported (see settleBatchOutcome).
+
+        if (!hasMore) break;
       }
-
-      start += messages.length;
-      checkpoint[folder.folderId] = start;
-      await updateUserCheckpoint(userId, checkpoint);
-
-      if (!hasMore) break;
     }
+  } finally {
+    await messageQueue.close();
   }
-
-  await messageQueue.close();
 }
 
 // ── IMAP path — enumerate UIDs here, fan the messages out to message-import ───
@@ -235,29 +327,34 @@ async function migrateImapUser(params: {
 
       let batches = 0;
       for (let i = 0; i < uids.length; i += IMAP_BATCH_SIZE) {
-        await messageQueue.add('import-batch', {
+        const slice = uids.slice(i, i + IMAP_BATCH_SIZE);
+        await enqueueBatch(messageQueue, {
+          jobId, userId,
+          folderKey: folderName,
+          folderName,
+          seqStart: slice[0],
+          seqEnd: slice[slice.length - 1],
+          messageCount: slice.length,
+        }, {
           jobId, userId, accountId, mailboxId, folderName,
+          folderKey: folderName,
           sourceType,
           sourceEmail,
-          uids: uids.slice(i, i + IMAP_BATCH_SIZE),
+          uids: slice,
           imapHost: imapCreds.host,
           imapPort: imapCreds.port,
           imapSecure: imapCreds.secure,
           // Encrypted source credentials (S-2) — never plaintext in Redis
           imapCredsEnc,
           allowInsecureTls,
-        }, {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 60_000 },
-          removeOnComplete: { count: 100 },
-          removeOnFail: false,
         });
         batches++;
       }
 
-      checkpoint[folderName] = uids[uids.length - 1];
-      await updateUserCheckpoint(userId, checkpoint);
-
+      // NOTE: no checkpoint write here. Enqueuing is not importing — the folder's
+      // checkpoint advances only over batches that reported every message
+      // imported, so a batch that exhausts its retries is re-enumerated on the
+      // next run instead of being silently skipped.
       await appendMigrationEvent(jobId, userId, 'folder_enqueued', {
         folder: folderName, messages: uids.length, batches, fromUid: lastUid + 1,
       });
