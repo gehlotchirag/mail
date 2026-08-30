@@ -18,3 +18,10 @@ export const sesSmtpUser     = infra.sesSmtpUser;
 export const sesSmtpPassword = infra.sesSmtpPassword;
 export const sesDkimTokens   = infra.sesDkimTokens;
 export const alertsTopicArn  = infra.alertsTopicArn;
+/** SNS topic (arham-ses-events) carrying SES bounce + complaint feedback. */
+export const sesEventsTopicArn        = infra.sesEventsTopicArn;
+/** SES configuration set name — for anything that stamps X-SES-CONFIGURATION-SET. */
+export const sesConfigurationSet      = infra.sesConfigurationSet;
+/** Where SNS POSTs those events. Subscription is Pending until this URL answers. */
+export const sesEventsEndpoint        = infra.sesEventsEndpoint;
+export const sesEventsSubscriptionArn = infra.sesEventsSubscriptionArn;

@@ -5,6 +5,8 @@
 #
 # Target stack: one EC2 (Stalwart + nginx + local redis6 sidecar), one RDS
 # PostgreSQL db.t4g.micro, S3 for blobs, SES for outbound.
+# Step 3 hands the application deploy to deploy-apps.sh (console + webui + workers),
+# so the secrets that script requires must be in place before you start.
 # No Aurora, no ElastiCache, no ALB — do not look for those outputs.
 set -e
 set -o pipefail
@@ -20,7 +22,8 @@ DO_SSH_KEY="${DO_SSH_KEY/#\~/$HOME}"
 AWS_SSH_KEY="${AWS_SSH_KEY/#\~/$HOME}"
 
 # DO PostgreSQL (direct port, not PgBouncer, for pg_dump)
-DO_PG_URL="postgresql://USER:PASSWORD@DO-HOST:25060"
+# Overridable so the rotated DO password can be supplied without editing this file.
+DO_PG_URL="${DO_PG_URL:-postgresql://USER:PASSWORD@DO-HOST:25060}"
 # AWS RDS PostgreSQL. dbAddress is the BARE hostname; dbEndpoint is host:port and
 # breaks every -h flag and connection URL below.
 AWS_PG_HOST="${AWS_PG_HOST:?Set AWS_PG_HOST from pulumi stack output dbAddress}"
@@ -31,6 +34,7 @@ AWS_PG_USER="arhamapp"
 # Redis is the local redis6 sidecar on the mail EC2 — there is no ElastiCache and no
 # Pulumi output for it. The console app runs on that same box, so it uses loopback.
 REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
+DOMAIN="${DOMAIN:-arhamworkspace.tech}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 if [[ "$AWS_PG_HOST" == *:* ]]; then
@@ -53,7 +57,9 @@ esac
 # AWS side uses PGPASSWORD + flags rather than a URL, so the password is never parsed.
 export PGPASSWORD="${AWS_PG_PASS}"
 export PGSSLMODE="require"
-aws_psql() { local db="$1"; shift; psql -h "$AWS_PG_HOST" -p "$AWS_PG_PORT" -U "$AWS_PG_USER" -d "$db" "$@"; }
+# ON_ERROR_STOP=1 or psql exits 0 after every statement in the dump has failed,
+# and the script cheerfully reports a migration that moved nothing.
+aws_psql() { local db="$1"; shift; psql -v ON_ERROR_STOP=1 -h "$AWS_PG_HOST" -p "$AWS_PG_PORT" -U "$AWS_PG_USER" -d "$db" "$@"; }
 
 echo "================================================"
 echo "  Arham Workspace — DO → AWS Migration"
@@ -67,17 +73,21 @@ echo ""
 echo "=== Step 1/4: PostgreSQL migration (DO managed PG → RDS) ==="
 echo "Dumping from DO PostgreSQL..."
 
-pg_dump "${DO_PG_URL}/arham-console?sslmode=require"    > /tmp/arham_console.sql
-pg_dump "${DO_PG_URL}/arham-migration?sslmode=require"  > /tmp/arham_migration.sql
+# --no-owner --no-acl: DO's roles do not exist on RDS, and those OWNER TO / GRANT
+# lines would abort the restore now that ON_ERROR_STOP is on.
+pg_dump --no-owner --no-acl "${DO_PG_URL}/arham-console?sslmode=require"    > /tmp/arham_console.sql
+pg_dump --no-owner --no-acl "${DO_PG_URL}/arham-migration?sslmode=require"  > /tmp/arham_migration.sql
 echo "Dumps complete: $(wc -l < /tmp/arham_console.sql) lines (console), $(wc -l < /tmp/arham_migration.sql) lines (migration)"
 
 echo "Importing into RDS..."
 aws_psql arham -c "CREATE DATABASE \"arham-console\";"   2>/dev/null || true
 aws_psql arham -c "CREATE DATABASE \"arham-migration\";" 2>/dev/null || true
-aws_psql arham-console    < /tmp/arham_console.sql
-aws_psql arham-migration  < /tmp/arham_migration.sql
+# --single-transaction: a failed restore rolls back rather than leaving half a
+# schema behind for the next run to trip over.
+aws_psql arham-console   --single-transaction < /tmp/arham_console.sql
+aws_psql arham-migration --single-transaction < /tmp/arham_migration.sql
 rm -f /tmp/arham_console.sql /tmp/arham_migration.sql
-echo "PostgreSQL migrated ✅"
+echo "PostgreSQL migrated ✅ (both restores completed without error)"
 
 # Step 2: Initial mail data sync (while DO still running — no downtime yet)
 echo ""
@@ -97,60 +107,20 @@ echo "Initial sync complete ✅"
 # Step 3: Deploy apps to AWS
 echo ""
 echo "=== Step 3/4: Deploy apps on AWS ==="
-echo "Deploying console-app..."
+# This used to inline a console-only deploy, which left the webui and the
+# migration workers on the DO box — i.e. cutover moved DNS to a host that served
+# a console and nothing else. deploy-apps.sh owns all three now; keeping one copy
+# of that logic is the only way it stays correct.
+DEPLOY_APPS="$(dirname "$0")/deploy-apps.sh"
+[ -f "$DEPLOY_APPS" ] || { echo "ERROR: $DEPLOY_APPS not found"; exit 1; }
 
-SECRETS_FILE="$(dirname "$0")/../../console-app/.env.production.secrets"
-if [ ! -f "$SECRETS_FILE" ]; then
-  echo "ERROR: $SECRETS_FILE not found"
-  exit 1
-fi
-set -a; source "$SECRETS_FILE"; set +a
+AWS_EC2_IP="$AWS_EC2_IP" AWS_SSH_KEY="$AWS_SSH_KEY" \
+AWS_PG_HOST="$AWS_PG_HOST" AWS_PG_PASS="$AWS_PG_PASS" \
+AWS_PG_PORT="$AWS_PG_PORT" AWS_PG_USER="$AWS_PG_USER" \
+REDIS_HOST="$REDIS_HOST" DOMAIN="$DOMAIN" \
+bash "$DEPLOY_APPS"
 
-for v in JMAP_ADMIN_AUTH JWT_SECRET RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET \
-         RAZORPAY_WEBHOOK_SECRET MIGRATION_ENCRYPTION_KEY; do
-  if [ -z "${!v:-}" ]; then echo "ERROR: $v is not set in $SECRETS_FILE"; exit 1; fi
-done
-
-tar --exclude='console-app/node_modules' \
-    --exclude='console-app/.next' \
-    --exclude='console-app/.env.production.secrets' \
-    -czf /tmp/console-app.tar.gz \
-    -C "$(dirname "$0")/../.." console-app/
-
-scp -i "${AWS_SSH_KEY}" /tmp/console-app.tar.gz ec2-user@${AWS_EC2_IP}:/tmp/
-
-ssh -i "${AWS_SSH_KEY}" ec2-user@${AWS_EC2_IP} bash -s << REMOTE
-set -e
-mkdir -p /home/ec2-user/arham-console
-cd /home/ec2-user/arham-console
-tar -xzf /tmp/console-app.tar.gz --strip-components=1
-
-cat > .env.local << ENV
-DATABASE_URL=postgresql://${AWS_PG_USER}:${AWS_PG_PASS}@${AWS_PG_HOST}:${AWS_PG_PORT}/arham-console?sslmode=require
-# Stalwart's HTTP listener is loopback-only on this box; nginx fronts it on 443.
-JMAP_URL=http://127.0.0.1:8080
-JMAP_ADMIN_AUTH=${JMAP_ADMIN_AUTH}
-JWT_SECRET=${JWT_SECRET}
-RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
-RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET}
-RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET}
-MIGRATION_PG_URL=postgresql://${AWS_PG_USER}:${AWS_PG_PASS}@${AWS_PG_HOST}:${AWS_PG_PORT}/arham-migration?sslmode=require
-# Local redis6 sidecar on this instance — not ElastiCache.
-REDIS_URL=redis://${REDIS_HOST}:6379
-MIGRATION_ENCRYPTION_KEY=${MIGRATION_ENCRYPTION_KEY}
-NODE_ENV=production
-ENV
-chmod 600 .env.local
-
-npm install --production=false
-npm run build
-pm2 describe arham-console &>/dev/null && pm2 restart arham-console || \
-  pm2 start npm --name arham-console -- start
-pm2 save
-REMOTE
-
-rm -f /tmp/console-app.tar.gz
-echo "Console deployed on AWS ✅"
+echo "Console, webui and migration workers deployed on AWS ✅"
 
 echo ""
 echo "================================================"

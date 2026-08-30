@@ -12,6 +12,43 @@ const keyPairName = cfg.get("keyPairName") ?? "arham-key";
 // but no email subscription is made — set it and re-run to start getting pages.
 const alertEmail  = cfg.get("alertEmail");
 
+// Operator CIDR(s) allowed to reach SSH on the mail instance. Comma-separated,
+// e.g. "203.0.113.4/32,198.51.100.0/28". Set with:
+//   pulumi config set arham-infra:sshAllowedCidr 203.0.113.4/32
+//
+// If it is UNSET, port 22 is not opened at all. The stack still deploys and mail
+// still works; you simply cannot SSH in until you set the key and re-run
+// `pulumi up`. That is deliberate — 22 open to 0.0.0.0/0 on a public mail server
+// is found by scanners within minutes, so "closed" is the safe default and
+// "world-open" is never one. Recover a lost CIDR with EC2 Instance Connect or by
+// setting the key and re-running; it is a 30-second fix.
+const sshAllowedCidrs = (cfg.get("sshAllowedCidr") ?? "")
+  .split(",")
+  .map((c) => c.trim())
+  .filter((c) => c.length > 0);
+
+for (const c of sshAllowedCidrs) {
+  if (c === "0.0.0.0/0" || c === "::/0") {
+    throw new Error(
+      `arham-infra:sshAllowedCidr contains "${c}" — world-open SSH is exactly the ` +
+      "bug this config key exists to prevent. Use your office/VPN egress address " +
+      "as a /32 (curl ifconfig.me).",
+    );
+  }
+  if (!/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(c)) {
+    throw new Error(
+      `arham-infra:sshAllowedCidr entry "${c}" is not an IPv4 CIDR. ` +
+      'Expected something like "203.0.113.4/32".',
+    );
+  }
+}
+
+// Where SES bounce/complaint notifications are POSTed. The console app serves
+// this route; another moving part owns its implementation, this stack only has
+// to point SNS at it. Override if the console ever moves off console.<domain>.
+const sesEventsEndpoint = cfg.get("sesEventsEndpoint")
+  ?? `https://console.${domain}/api/ses/notifications`;
+
 // Suffix for the RDS final-snapshot name. Regenerated per `pulumi up`, which
 // guarantees uniqueness across destroy/recreate cycles. It is never sent to the
 // RDS API (it is only used at delete time), so the diff it shows is a no-op.
@@ -27,6 +64,12 @@ export class ArhamAwsIndiaStack extends pulumi.ComponentResource {
   public readonly sesSmtpPassword: pulumi.Output<string>;
   public readonly sesDkimTokens:   pulumi.Output<string[]>;
   public readonly alertsTopicArn:  pulumi.Output<string>;
+  /** SNS topic SES publishes bounces + complaints to. Consumer: console /api/ses/notifications. */
+  public readonly sesEventsTopicArn:      pulumi.Output<string>;
+  public readonly sesConfigurationSet:    pulumi.Output<string>;
+  /** HTTPS endpoint SNS delivers those events to (subscription starts Pending). */
+  public readonly sesEventsEndpoint:      pulumi.Output<string>;
+  public readonly sesEventsSubscriptionArn: pulumi.Output<string>;
 
   constructor(name: string) {
     super("arham:stack:AwsIndia", name);
@@ -47,18 +90,47 @@ export class ArhamAwsIndiaStack extends pulumi.ComponentResource {
       vpcId: vpc.vpcId,
       description: "Stalwart mail server - all mail ports + web",
       ingress: [
-        { protocol: "tcp", fromPort: 22,  toPort: 22,  cidrBlocks: ["0.0.0.0/0"], description: "SSH" },
+        // SSH — operator CIDRs only. Absent entirely when arham-infra:sshAllowedCidr
+        // is unset (see the warning logged below).
+        ...(sshAllowedCidrs.length > 0
+          ? [{
+              protocol: "tcp", fromPort: 22, toPort: 22,
+              cidrBlocks: sshAllowedCidrs,
+              description: "SSH (operator CIDRs only - arham-infra:sshAllowedCidr)",
+            }]
+          : []),
+        // Public mail + web. These MUST stay open to the world: 25 is inbound
+        // internet mail, 465/587 are client submission, 993 is IMAP over TLS,
+        // 80 is the ACME HTTP-01 challenge, 443 is JMAP/webmail/console.
         { protocol: "tcp", fromPort: 25,  toPort: 25,  cidrBlocks: ["0.0.0.0/0"], description: "SMTP" },
         { protocol: "tcp", fromPort: 465, toPort: 465, cidrBlocks: ["0.0.0.0/0"], description: "SMTPS" },
-        { protocol: "tcp", fromPort: 587, toPort: 587, cidrBlocks: ["0.0.0.0/0"], description: "Submission" },
-        { protocol: "tcp", fromPort: 143, toPort: 143, cidrBlocks: ["0.0.0.0/0"], description: "IMAP" },
-        { protocol: "tcp", fromPort: 993, toPort: 993, cidrBlocks: ["0.0.0.0/0"], description: "IMAPS" },
+        { protocol: "tcp", fromPort: 587, toPort: 587, cidrBlocks: ["0.0.0.0/0"], description: "Submission (STARTTLS)" },
+        { protocol: "tcp", fromPort: 993, toPort: 993, cidrBlocks: ["0.0.0.0/0"], description: "IMAPS (implicit TLS)" },
         { protocol: "tcp", fromPort: 80,  toPort: 80,  cidrBlocks: ["0.0.0.0/0"], description: "HTTP / ACME" },
         { protocol: "tcp", fromPort: 443, toPort: 443, cidrBlocks: ["0.0.0.0/0"], description: "HTTPS" },
+
+        // NO port 143. Cleartext IMAP is deliberately not reachable from the
+        // internet. Every mail client a customer of ours actually uses reaches
+        // IMAP on 993 with implicit TLS — Thunderbird, Outlook, Apple Mail and
+        // both mobile OSes autoconfigure to 993, and the providers we migrate
+        // people off (Google Workspace, Zoho) publish 993 only, so nobody
+        // arrives here with a 143-shaped client. Leaving 143 open buys nothing
+        // and costs a STARTTLS-stripping downgrade path to plaintext logins.
+        // configure-stalwart.sh still binds a 143 listener on 127.0.0.1 for
+        // on-box smoke tests, with plaintext auth refused.
       ],
       egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
       tags: { Name: "arham-mail-sg" },
     }, opts);
+
+    if (sshAllowedCidrs.length === 0) {
+      pulumi.log.warn(
+        "arham-infra:sshAllowedCidr is not set — port 22 is CLOSED on the mail " +
+        "security group and you will not be able to SSH to the instance. Run: " +
+        "pulumi config set arham-infra:sshAllowedCidr \"$(curl -s ifconfig.me)/32\" " +
+        "&& pulumi up",
+      );
+    }
 
     // DB SG — only mail EC2 can connect
     const dbSg = new aws.ec2.SecurityGroup("db-sg", {
@@ -95,12 +167,24 @@ exec > /var/log/arham-setup.log 2>&1
 
 # System
 dnf update -y
-dnf install -y nginx certbot python3-certbot-nginx wget tar curl redis6
+dnf install -y nginx certbot python3-certbot-nginx wget tar curl redis6 \\
+               git rsync jq gcc-c++ make
 
 # Node.js 20
 curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
 dnf install -y nodejs
 npm install -g pm2
+
+# 2 GB swap. \`next build\` for the console and the webui peaks well above what is
+# left of this box's 4 GB once Stalwart and Postgres client buffers are resident,
+# and an OOM kill during a deploy takes stalwart-mail down with it.
+if [ ! -f /swapfile ]; then
+  dd if=/dev/zero of=/swapfile bs=1M count=2048
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo "/swapfile none swap sw 0 0" >> /etc/fstab
+fi
 
 # Redis sidecar (replaces ElastiCache — saves $12/mo, fine at this scale)
 systemctl enable redis6 && systemctl start redis6
@@ -136,8 +220,21 @@ SVCEOF
 systemctl daemon-reload
 systemctl enable stalwart-mail
 
+# PM2 boot integration for the three Node apps (console, webui, migration
+# workers). deploy-apps.sh installs them; this only makes them survive a reboot.
 pm2 startup systemd -u ec2-user --hp /home/ec2-user
-echo "Bootstrap complete. Next: copy config to /etc/stalwart-mail/config.toml then systemctl start stalwart-mail"
+mkdir -p /home/ec2-user/apps /var/log/arham
+chown -R ec2-user:ec2-user /home/ec2-user/apps /var/log/arham
+
+# This box runs the mail server AND the product. Bootstrap installs neither
+# config nor applications — both are pushed from the repo, in this order:
+echo "Bootstrap complete."
+echo "Next, from the repo checkout on your laptop:"
+echo "  1. scp infra/scripts/configure-stalwart.sh up and run it ON this box"
+echo "     (writes /etc/stalwart-mail/config.toml + all nginx vhosts, starts Stalwart)"
+echo "  2. bash infra/scripts/deploy-apps.sh   (runs LOCALLY; installs and starts"
+echo "     arham-console, arham-webui and the migration workers under PM2)"
+echo "See infra/MIGRATION.md - 'Configure Server' and 'Deploy the applications'."
 `;
 
     // IAM role for EC2 → S3 access (Stalwart blob store)
@@ -241,6 +338,40 @@ echo "Bootstrap complete. Next: copy config to /etc/stalwart-mail/config.toml th
       rules: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: "AES256" } }],
     }, opts);
 
+    // Public access block. Account-level BPA has defaulted to on since April 2023,
+    // so this is very probably already closed — but this bucket holds customers'
+    // raw mail, and "probably closed, inherited from a setting anyone with billing
+    // access can flip" is not a control. Pin it on the bucket itself.
+    new aws.s3.BucketPublicAccessBlock("mail-blobs-bpa", {
+      bucket:                mailBlobsBucket.id,
+      blockPublicAcls:       true,
+      blockPublicPolicy:     true,
+      ignorePublicAcls:      true,
+      restrictPublicBuckets: true,
+    }, opts);
+
+    // Lifecycle. Versioning is on (above) as ransomware/oops protection, which
+    // means every overwritten blob and every "deleted" blob is retained and
+    // billed forever: deleting a mailbox currently *increases* the bill for the
+    // rest of time. Expire noncurrent versions after 60 days — long enough to
+    // undo a bad delete or a bad deploy, short enough that storage stops being a
+    // ratchet. Delete markers left behind with no versions under them are swept
+    // too, and half-finished multipart uploads (large attachments over a flaky
+    // link) are aborted after 7 days rather than billing as invisible parts.
+    new aws.s3.BucketLifecycleConfigurationV2("mail-blobs-lifecycle", {
+      bucket: mailBlobsBucket.id,
+      rules: [{
+        id:     "expire-noncurrent-and-abort-mpu",
+        status: "Enabled",
+        filter: {},   // whole bucket
+        noncurrentVersionExpiration:   { noncurrentDays: 60 },
+        abortIncompleteMultipartUpload: { daysAfterInitiation: 7 },
+        // Only removes markers that have no noncurrent versions left under them,
+        // i.e. after the rule above has already expired them.
+        expiration: { expiredObjectDeleteMarker: true },
+      }],
+    }, opts);
+
     // ─── SES — outbound relay + DKIM ─────────────────────────────────────────
     const sesDomain = new aws.ses.DomainIdentity("arham-ses-domain", {
       domain: domain,
@@ -266,6 +397,113 @@ echo "Bootstrap complete. Next: copy config to /etc/stalwart-mail/config.toml th
     const sesAccessKey = new aws.iam.AccessKey("ses-smtp-key", {
       user: sesUser.name,
     }, opts);
+
+    // ─── SES bounce / complaint feedback ─────────────────────────────────────
+    // The production-access request tells AWS we handle bounces and complaints
+    // "automatically via SNS notifications". This is where that stops being a
+    // promise. Ignoring bounces is also how a sending domain gets throttled and
+    // then suspended: SES enforces a bounce rate under 5% and a complaint rate
+    // under 0.1%, measured across the whole account.
+    //
+    // Topic name is fixed (not Pulumi-suffixed) because the console app's
+    // consumer and the runbook both refer to it by name.
+    const sesEventsTopic = new aws.sns.Topic("arham-ses-events", {
+      name: "arham-ses-events",
+      tags: { Project: "arham-mail" },
+    }, opts);
+
+    // SES will not accept a destination it cannot publish to, so the topic policy
+    // has to exist first. Scope it to this account so another account cannot use
+    // our topic as a bounce-injection endpoint. Account id is lifted off the
+    // topic ARN rather than a getCallerIdentity call — same answer, one fewer
+    // API round trip during preview.
+    const sesEventsTopicPolicy = new aws.sns.TopicPolicy("arham-ses-events-policy", {
+      arn:    sesEventsTopic.arn,
+      policy: pulumi.all([sesEventsTopic.arn]).apply(([topicArn]) => JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [{
+          Sid:       "AllowSESPublish",
+          Effect:    "Allow",
+          Principal: { Service: "ses.amazonaws.com" },
+          Action:    "SNS:Publish",
+          Resource:  topicArn,
+          Condition: { StringEquals: { "AWS:SourceAccount": topicArn.split(":")[4] } },
+        }],
+      })),
+    }, opts);
+
+    // Configuration set — the reputation/event grouping SES hangs metrics off.
+    const sesConfigSet = new aws.ses.ConfigurationSet("arham-ses-config-set", {
+      name:                     "arham-mail-events",
+      reputationMetricsEnabled: true,   // per-config-set bounce/complaint CloudWatch metrics
+    }, opts);
+
+    // Event destination: bounces and complaints only. Deliveries and opens are
+    // high-volume noise that would hammer the console endpoint for no decision.
+    // (If you later want "reject" — SES refusing a message for virus/content —
+    // add it here AND teach the consumer that eventType, do not add it blind.)
+    new aws.ses.EventDestination("arham-ses-bounce-complaint", {
+      name:                 "bounce-complaint-to-sns",
+      configurationSetName: sesConfigSet.name,
+      enabled:              true,
+      matchingTypes:        ["bounce", "complaint"],
+      snsDestination:       { topicArn: sesEventsTopic.arn },
+    }, opts);
+
+    // IMPORTANT — a configuration set only sees mail that is *tagged* with it.
+    // Stalwart relays through the SES SMTP endpoint and does not add an
+    // X-SES-CONFIGURATION-SET header, so the event destination above would sit
+    // silent forever on its own. These identity-level feedback topics are what
+    // actually deliver bounces and complaints for everything we send, headers or
+    // not. Both are wired to the same topic on purpose.
+    //
+    // NOTE FOR THE CONSUMER: the two paths have DIFFERENT payload shapes.
+    //   - identity feedback  → { "notificationType": "Bounce" | "Complaint", ... }
+    //   - config-set events  → { "eventType":        "Bounce" | "Complaint", ... }
+    // /api/ses/notifications must handle both, plus SNS "SubscriptionConfirmation".
+    const sesBounceTopic = new aws.ses.IdentityNotificationTopic("arham-ses-bounces", {
+      identity:              sesDomain.domain,
+      notificationType:      "Bounce",
+      topicArn:              sesEventsTopic.arn,
+      includeOriginalHeaders: true,
+    }, { ...opts, dependsOn: [sesEventsTopicPolicy] });
+
+    const sesComplaintTopic = new aws.ses.IdentityNotificationTopic("arham-ses-complaints", {
+      identity:              sesDomain.domain,
+      notificationType:      "Complaint",
+      topicArn:              sesEventsTopic.arn,
+      includeOriginalHeaders: true,
+    }, { ...opts, dependsOn: [sesEventsTopicPolicy] });
+
+    // HTTPS delivery to the console endpoint.
+    //
+    // This subscription is created in "PendingConfirmation" and STAYS there until
+    // the endpoint answers SNS's SubscriptionConfirmation POST. On the first
+    // `pulumi up` that cannot happen: console.<domain> does not resolve to this
+    // instance until DNS cutover and has no real certificate until certbot runs.
+    // That is expected and is not a failure — after cutover, either hit "Request
+    // confirmation" on the subscription in the SNS console, or delete the
+    // subscription and re-run `pulumi up`. MIGRATION.md carries the step.
+    //
+    // endpointAutoConfirms is deliberately left off: turning it on makes Pulumi
+    // block waiting for a confirmation that cannot arrive yet, which would fail
+    // the whole deploy.
+    const sesEventsSubscription = new aws.sns.TopicSubscription("arham-ses-events-https", {
+      topic:    sesEventsTopic.arn,
+      protocol: "https",
+      endpoint: sesEventsEndpoint,
+    }, { ...opts, dependsOn: [sesBounceTopic, sesComplaintTopic] });
+
+    // FOLLOW-UP (not implemented here, deliberately): per-tenant configuration
+    // sets. Today every customer shares one SES reputation, so one tenant
+    // importing a stale 2018 contact list can bounce the whole platform into a
+    // sending pause. Isolating that means a configuration set per tenant, a
+    // dedicated IP pool for the noisy ones, and Stalwart stamping
+    // X-SES-CONFIGURATION-SET per sending domain — which is an application
+    // change (per-domain send path + provisioning), not an infra one, and needs
+    // the per-tenant reputation surfaced in the console. Half-doing it here
+    // (config sets nothing tags mail with) would just add resources that report
+    // zeros. Track it as its own piece of work.
 
     // ─── Monitoring — SNS alert topic + CloudWatch alarms ────────────────────
     const alertsTopic = new aws.sns.Topic("arham-alerts", {
@@ -430,6 +668,10 @@ echo "Bootstrap complete. Next: copy config to /etc/stalwart-mail/config.toml th
     this.sesSmtpPassword = sesAccessKey.sesSmtpPasswordV4;
     this.sesDkimTokens   = sesDkim.dkimTokens;
     this.alertsTopicArn  = alertsTopic.arn;
+    this.sesEventsTopicArn        = sesEventsTopic.arn;
+    this.sesConfigurationSet      = sesConfigSet.name;
+    this.sesEventsEndpoint        = pulumi.output(sesEventsEndpoint);
+    this.sesEventsSubscriptionArn = sesEventsSubscription.arn;
 
     this.registerOutputs({
       mailIp:          eip.publicIp,
@@ -441,6 +683,9 @@ echo "Bootstrap complete. Next: copy config to /etc/stalwart-mail/config.toml th
       sesDkimTokens:   sesDkim.dkimTokens,
       sesSmtpUser:     sesAccessKey.id,
       sesSmtpPassword: sesAccessKey.sesSmtpPasswordV4,
+      sesEventsTopicArn:   sesEventsTopic.arn,
+      sesConfigurationSet: sesConfigSet.name,
+      sesEventsEndpoint:   sesEventsEndpoint,
     });
   }
 }
