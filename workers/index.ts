@@ -5,6 +5,7 @@ import { runMigrations } from './db/pool.js';
 import { orchestratorProcessor } from './processors/orchestrator.processor.js';
 import { userMigrationProcessor } from './processors/user-migration.processor.js';
 import { messageImportProcessor } from './processors/message-import.processor.js';
+import { startStuckUserReaper } from './lib/reaper.js';
 
 const QUEUE_TYPE = process.env.QUEUE_TYPE ?? process.argv.find(a => a.startsWith('--queue='))?.split('=')[1] ?? 'orchestrator';
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 5);
@@ -17,6 +18,7 @@ async function main() {
 
   const connection = getRedisConnection();
   let worker: Worker;
+  let stopReaper: (() => void) | null = null;
 
   switch (QUEUE_TYPE) {
     case 'orchestrator':
@@ -32,8 +34,12 @@ async function main() {
         connection,
         concurrency: CONCURRENCY,
         stalledInterval: 60_000,
-        lockDuration: 3_600_000, // 1h — IMAP sessions are long
+        // User jobs now only enumerate folders/messages and fan the work out to
+        // message-import, so they finish in seconds-to-minutes rather than hours.
+        lockDuration: 900_000, // 15min — folder/UID enumeration only
       });
+      // Re-enqueue users a crashed worker left stranded in 'migrating'
+      stopReaper = startStuckUserReaper();
       break;
     case 'messages':
     case 'message-import':
@@ -55,6 +61,7 @@ async function main() {
 
   async function shutdown() {
     console.log('[worker] Shutting down gracefully…');
+    stopReaper?.();
     await worker.close();
     process.exit(0);
   }

@@ -3,6 +3,31 @@ export interface ZohoCreds {
   orgId: string;
   accessToken: string;
   region?: string; // 'com' | 'in' | 'eu' | 'com.au' | 'jp' — defaults to 'com'
+  refreshToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+}
+
+export async function refreshZohoToken(creds: ZohoCreds): Promise<string> {
+  if (!creds.refreshToken || !creds.clientId || !creds.clientSecret) {
+    return creds.accessToken;
+  }
+  const region = creds.region ?? 'com';
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    client_id: creds.clientId,
+    client_secret: creds.clientSecret,
+    refresh_token: creds.refreshToken,
+  });
+  const res = await fetch(`https://accounts.zoho.${region}/oauth/v2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) throw new Error(`Zoho token refresh failed: ${res.status} ${res.statusText}`);
+  const data = await res.json() as { access_token?: string; error?: string };
+  if (!data.access_token) throw new Error(`Zoho token refresh error: ${data.error ?? 'no access_token returned'}`);
+  return data.access_token;
 }
 
 export function zohoApiBase(creds: ZohoCreds): string {
@@ -64,19 +89,27 @@ export async function fetchZohoFolders(
   zohoAccountId: string,
 ): Promise<ZohoFolder[]> {
   const base = zohoApiBase(creds);
-  const res = await fetch(
-    `${base}/organization/${creds.orgId}/accounts/${zohoAccountId}/folders`,
-    { headers: headers(creds) },
-  );
-  if (!res.ok) throw new Error(`Zoho folders error: ${res.status} ${res.statusText}`);
-  const data = await res.json() as {
-    data?: Array<{ folderId: string; folderName: string; path?: string }>;
-  };
-  return (data.data ?? []).map(f => ({
-    folderId: f.folderId,
-    folderName: f.folderName,
-    path: f.path ?? f.folderName,
-  }));
+  const folders: ZohoFolder[] = [];
+  let start = 0;
+  const limit = 200;
+
+  while (true) {
+    const res = await fetch(
+      `${base}/organization/${creds.orgId}/accounts/${zohoAccountId}/folders?start=${start}&limit=${limit}`,
+      { headers: headers(creds) },
+    );
+    if (!res.ok) throw new Error(`Zoho folders error: ${res.status} ${res.statusText}`);
+    const data = await res.json() as {
+      data?: Array<{ folderId: string; folderName: string; path?: string }>;
+    };
+    const page = data.data ?? [];
+    for (const f of page) {
+      folders.push({ folderId: f.folderId, folderName: f.folderName, path: f.path ?? f.folderName });
+    }
+    if (page.length < limit) break;
+    start += limit;
+  }
+  return folders;
 }
 
 export interface ZohoMsgSummary {

@@ -2,7 +2,7 @@ export interface ImapCredentials {
   host: string;
   port: number;
   secure: boolean;
-  auth: { user: string; pass: string };
+  auth: { user: string; pass?: string; accessToken?: string | (() => Promise<string>) };
 }
 
 export function buildImapCredentials(
@@ -12,10 +12,8 @@ export function buildImapCredentials(
 ): ImapCredentials {
   switch (sourceType) {
     case 'cpanel': {
-      // Dovecot master-user: targetuser*masteruser
-      const host = creds.host;
       const masterUser = `${targetEmail}*${creds.adminUser}`;
-      return { host, port: 993, secure: true, auth: { user: masterUser, pass: creds.masterPass } };
+      return { host: creds.host, port: 993, secure: true, auth: { user: masterUser, pass: creds.masterPass } };
     }
     case 'dovecot': {
       const masterUser = `${targetEmail}*${creds.masterUser}`;
@@ -26,13 +24,42 @@ export function buildImapCredentials(
         auth: { user: masterUser, pass: creds.masterPass },
       };
     }
-    case 'gsuite':
+    case 'gsuite': {
+      const saJson = JSON.parse(creds.serviceAccountJson ?? '{}') as {
+        client_email: string; private_key: string;
+      };
+      return {
+        host: 'imap.gmail.com', port: 993, secure: true,
+        auth: {
+          user: targetEmail,
+          accessToken: async () => {
+            const { buildGSuiteAccessToken } = await import('./providers/gsuite.js');
+            return buildGSuiteAccessToken(saJson, targetEmail);
+          },
+        },
+      };
+    }
     case 'zoho':
-      // These use REST API paths in their own processors — IMAP is never called for them
-      throw new Error(`${sourceType} does not use IMAP master-user auth; this code path should not be reached`);
+      throw new Error('zoho does not use IMAP — this code path should not be reached');
     default:
       throw new Error(`Unknown source type: ${sourceType}`);
   }
+}
+
+/**
+ * ImapFlow only accepts a string `accessToken`; a callback would be serialised
+ * into the SASL payload verbatim. Resolve lazily-built tokens (gsuite) here so
+ * every caller hands ImapFlow a plain auth object.
+ */
+export async function resolveImapAuth(
+  creds: ImapCredentials,
+): Promise<{ user: string; pass?: string; accessToken?: string }> {
+  const { user, pass, accessToken } = creds.auth;
+  if (typeof accessToken === 'function') {
+    return { user, accessToken: await accessToken() };
+  }
+  if (accessToken) return { user, accessToken };
+  return { user, pass };
 }
 
 export const FOLDER_ROLE_MAP: Record<string, string> = {
@@ -52,6 +79,6 @@ export const FOLDER_ROLE_MAP: Record<string, string> = {
   '[Gmail]/All Mail':   'archive',
   '[Gmail]/Starred':    'flagged',
   // Zoho
-  'Zoho Mail':          'inbox',  // some Zoho accounts use this as root
+  'Zoho Mail':          'inbox',
   'Sent Messages':      'sent',
 };

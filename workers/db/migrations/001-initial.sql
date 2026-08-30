@@ -51,3 +51,23 @@ CREATE INDEX IF NOT EXISTS idx_mj_status    ON migration_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_mu_job       ON migration_users(migration_job_id);
 CREATE INDEX IF NOT EXISTS idx_mu_status    ON migration_users(status);
 CREATE INDEX IF NOT EXISTS idx_me_job       ON migration_events(migration_job_id, id DESC);
+
+-- ── Idempotent column additions (safe to re-run) ──────────────────────────────
+
+-- Per-job opt-in to skip TLS certificate verification against the SOURCE mail
+-- server. Defaults to FALSE: certificates are verified unless an operator has
+-- explicitly recorded an exception for a broken legacy server on this job.
+ALTER TABLE migration_jobs
+  ADD COLUMN IF NOT EXISTS allow_insecure_tls BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Provider-side account handle for the user (e.g. the Zoho numeric accountId).
+-- Persisted so a re-enqueued/reaped user job can be rebuilt from the DB alone.
+ALTER TABLE migration_users
+  ADD COLUMN IF NOT EXISTS source_account_ref TEXT;
+
+-- The console creates migration_events with "migration_user_id"; older worker
+-- installs created it as "user_id". Add the column the queries actually use.
+ALTER TABLE migration_events
+  ADD COLUMN IF NOT EXISTS migration_user_id UUID REFERENCES migration_users(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_mu_stuck ON migration_users(status, started_at);

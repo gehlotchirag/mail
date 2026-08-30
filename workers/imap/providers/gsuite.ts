@@ -4,6 +4,22 @@ export interface GSuiteCreds {
   adminEmail: string;
 }
 
+export async function buildGSuiteAccessToken(
+  serviceAccountJson: { client_email: string; private_key: string },
+  impersonateEmail: string,
+): Promise<string> {
+  const { google } = await import('googleapis');
+  const auth = new google.auth.JWT({
+    email: serviceAccountJson.client_email,
+    key: serviceAccountJson.private_key,
+    scopes: ['https://mail.google.com/'],
+    subject: impersonateEmail,
+  });
+  const token = await auth.getAccessToken();
+  if (!token.token) throw new Error('Failed to obtain GSuite XOAUTH2 access token');
+  return token.token;
+}
+
 export async function discoverGSuiteUsers(creds: GSuiteCreds): Promise<string[]> {
   // Use Google Admin SDK Directory API with service account + domain-wide delegation
   // Requires googleapis package — installed separately if gsuite migration is needed

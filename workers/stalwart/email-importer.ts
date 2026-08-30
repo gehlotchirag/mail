@@ -9,7 +9,8 @@ export async function uploadBlob(accountId: string, rawMessage: Buffer): Promise
   const res = await fetch(`${STALWART_URL}/jmap/upload/${accountId}/`, {
     method: 'POST',
     headers: { ...authHeader(), 'Content-Type': 'message/rfc822' },
-    body: rawMessage,
+    // Node's fetch accepts a Buffer at runtime; BodyInit's DOM typing does not model it
+    body: rawMessage as unknown as BodyInit,
   });
   if (!res.ok) throw new Error(`Blob upload failed: ${res.status} ${await res.text()}`);
   const data = await res.json() as { blobId: string; size: number };

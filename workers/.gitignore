@@ -1,4 +1,8 @@
 node_modules/
 dist/
 *.js.map
+
+# Environment files hold live credentials — ignore all but the template
 .env
+.env.*
+!.env.example

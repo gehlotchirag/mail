@@ -50,7 +50,9 @@ export async function orchestratorProcessor(job: Job): Promise<void> {
   for (const sourceEmail of sourceUsers) {
     if (await isJobCancelled(jobId)) { await updateJobStatus(jobId, 'cancelled'); return; }
     const targetEmail = sourceEmail;
-    const userId = await upsertMigrationUser(jobId, sourceEmail, targetEmail);
+    const userId = await upsertMigrationUser(
+      jobId, sourceEmail, targetEmail, zohoAccountIdMap.get(sourceEmail),
+    );
     userIds.push({ id: userId, sourceEmail, targetEmail });
   }
 
