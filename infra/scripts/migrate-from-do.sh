@@ -21,9 +21,12 @@ AWS_SSH_KEY="${AWS_SSH_KEY:-$HOME/.ssh/arham-aws-key.pem}"
 DO_SSH_KEY="${DO_SSH_KEY/#\~/$HOME}"
 AWS_SSH_KEY="${AWS_SSH_KEY/#\~/$HOME}"
 
-# DO PostgreSQL (direct port, not PgBouncer, for pg_dump)
-# Overridable so the rotated DO password can be supplied without editing this file.
-DO_PG_URL="${DO_PG_URL:-postgresql://USER:PASSWORD@DO-HOST:25060}"
+# Connection string for the DigitalOcean source database, WITHOUT a default.
+# It carries a live password, so it is supplied at run time and never stored in
+# the repository:
+#   export DO_PG_URL='postgresql://<user>:<pass>@<host>:25060'
+# Use the direct port (25060), not PgBouncer — pg_dump needs a session pool.
+DO_PG_URL="${DO_PG_URL:?Set DO_PG_URL to the DigitalOcean Postgres connection string (direct port 25060). It holds a live password and is deliberately not stored in this repo.}"
 # AWS RDS PostgreSQL. dbAddress is the BARE hostname; dbEndpoint is host:port and
 # breaks every -h flag and connection URL below.
 AWS_PG_HOST="${AWS_PG_HOST:?Set AWS_PG_HOST from pulumi stack output dbAddress}"

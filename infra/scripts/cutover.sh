@@ -52,9 +52,12 @@ echo "DO mail server stopped"
 # 2. Final PostgreSQL sync (catch any writes during migration window)
 echo ""
 echo "[2/5] Final PostgreSQL sync..."
-# Override with DO_PG_URL once the DO password has been rotated (post-cutover
-# checklist item) rather than editing this line under time pressure.
-DO_PG_URL="${DO_PG_URL:-postgresql://USER:PASSWORD@DO-HOST:25060}"
+# Connection string for the DigitalOcean source database, WITHOUT a default.
+# It carries a live password, so it is supplied at run time and never stored in
+# the repository:
+#   export DO_PG_URL='postgresql://<user>:<pass>@<host>:25060'
+# Use the direct port (25060), not PgBouncer — pg_dump needs a session pool.
+DO_PG_URL="${DO_PG_URL:?Set DO_PG_URL to the DigitalOcean Postgres connection string (direct port 25060). It holds a live password and is deliberately not stored in this repo.}"
 
 # --clean --if-exists: RDS already holds the bulk copy from migrate-from-do.sh, so
 #   a plain restore would hit "relation already exists" on every CREATE and then

@@ -310,8 +310,15 @@ export AWS_SSH_KEY=~/.ssh/arham-aws-key.pem
 export AWS_PG_HOST=<dbAddress from pulumi output>
 export AWS_PG_PASS=<dbPassword>
 
+# Source database. Deliberately has no default in the scripts: it carries a live
+# password, so it is never stored in the repo. Direct port 25060, not PgBouncer.
+export DO_PG_URL='postgresql://<do-user>:<do-password>@<do-host>:25060'
+
 bash infra/scripts/migrate-from-do.sh
 ```
+
+`cutover.sh` needs `DO_PG_URL` too — export it in the same shell, or the script
+stops before it touches anything.
 
 This copies both Postgres databases, streams the Flux on-disk state over, and then
 calls `deploy-apps.sh` for you (console + webui + workers) — so if you already ran
