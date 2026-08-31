@@ -14,7 +14,13 @@ interface SuppressionRow {
   last_seen_at: string;
 }
 
-/** The suppression list recorded from SES bounce and complaint notifications. */
+/**
+ * The suppression list recorded from SES bounce and complaint notifications.
+ *
+ * Every query is scoped to the caller's org. The addresses a tenant's mail
+ * bounced off — and the diagnostics SES returns with them — are that tenant's
+ * data, not the platform's.
+ */
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -29,16 +35,17 @@ export async function GET(req: Request) {
         `SELECT email, reason, sub_type, suppressed, diagnostic, source, occurrences,
                 first_seen_at, last_seen_at
          FROM email_suppressions
-         WHERE email LIKE '%' || $1 || '%'
-         ORDER BY last_seen_at DESC LIMIT $2`,
-        [search, limit]
+         WHERE org_id = $1 AND email LIKE '%' || $2 || '%'
+         ORDER BY last_seen_at DESC LIMIT $3`,
+        [session.orgId, search, limit]
       )
     : await query<SuppressionRow>(
         `SELECT email, reason, sub_type, suppressed, diagnostic, source, occurrences,
                 first_seen_at, last_seen_at
          FROM email_suppressions
-         ORDER BY last_seen_at DESC LIMIT $1`,
-        [limit]
+         WHERE org_id = $1
+         ORDER BY last_seen_at DESC LIMIT $2`,
+        [session.orgId, limit]
       );
 
   return NextResponse.json({ suppressions: rows });
@@ -58,7 +65,8 @@ export async function DELETE(req: Request) {
 
   await ensureDb();
   const removed = await query<{ email: string }>(
-    'DELETE FROM email_suppressions WHERE email = $1 RETURNING email', [email]
+    'DELETE FROM email_suppressions WHERE org_id = $1 AND email = $2 RETURNING email',
+    [session.orgId, email]
   );
   if (!removed.length) return NextResponse.json({ error: 'Not suppressed' }, { status: 404 });
 

@@ -67,7 +67,12 @@ export async function initDb(): Promise<void> {
 
   await query(`
     CREATE TABLE IF NOT EXISTS email_suppressions (
-      email TEXT PRIMARY KEY,
+      -- Scoped to the sending org: one tenant's hard bounce must not appear in
+      -- another tenant's list, nor stop them mailing the same address.
+      -- NULL means the sending domain resolved to no org (platform mail), which
+      -- no tenant can read.
+      org_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
       reason TEXT NOT NULL,
       sub_type TEXT,
       suppressed BOOLEAN NOT NULL DEFAULT TRUE,
@@ -81,9 +86,17 @@ export async function initDb(): Promise<void> {
     )
   `);
 
+  // Adopt an existing dev table created before scoping existed.
+  await query(`ALTER TABLE email_suppressions ADD COLUMN IF NOT EXISTS org_id UUID`);
+  await query(`ALTER TABLE email_suppressions DROP CONSTRAINT IF EXISTS email_suppressions_pkey`);
+  await query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_email_suppressions_org_email
+     ON email_suppressions (COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), email)`
+  );
+
   await query(
     `CREATE INDEX IF NOT EXISTS idx_email_suppressions_suppressed
-     ON email_suppressions (suppressed, last_seen_at DESC)`
+     ON email_suppressions (org_id, suppressed, last_seen_at DESC)`
   );
 
   // SNS delivers at least once; the message id makes replays a no-op.

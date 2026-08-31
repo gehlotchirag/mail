@@ -45,7 +45,24 @@ function normaliseAddress(raw: string | undefined): string | null {
   return address.includes('@') ? address : null;
 }
 
+/**
+ * Which tenant sent the message that bounced?
+ *
+ * SES reports the envelope sender; its domain is one the customer added, so the
+ * domains table maps it back to an org. Unresolvable senders (platform mail,
+ * a domain since removed) record with a NULL org and are visible to no tenant.
+ */
+async function resolveOrgForSender(source: string | null): Promise<string | null> {
+  const domain = source?.split('@').pop()?.trim().toLowerCase();
+  if (!domain) return null;
+  const row = await queryOne<{ org_id: string }>(
+    'SELECT org_id FROM domains WHERE LOWER(domain) = $1 LIMIT 1', [domain]
+  );
+  return row?.org_id ?? null;
+}
+
 async function upsert(entry: {
+  orgId: string | null;
   email: string;
   reason: string;
   subType: string | null;
@@ -57,9 +74,10 @@ async function upsert(entry: {
 }): Promise<void> {
   await query(
     `INSERT INTO email_suppressions
-       (email, reason, sub_type, suppressed, diagnostic, feedback_id, source, ses_message_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     ON CONFLICT (email) DO UPDATE SET
+       (org_id, email, reason, sub_type, suppressed, diagnostic, feedback_id, source, ses_message_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (COALESCE(org_id, '00000000-0000-0000-0000-000000000000'::uuid), email)
+     DO UPDATE SET
        reason = EXCLUDED.reason,
        sub_type = EXCLUDED.sub_type,
        -- Never un-suppress: a permanent failure followed by a transient one
@@ -72,7 +90,7 @@ async function upsert(entry: {
        occurrences = email_suppressions.occurrences + 1,
        last_seen_at = NOW()`,
     [
-      entry.email, entry.reason, entry.subType, entry.suppressed,
+      entry.orgId, entry.email, entry.reason, entry.subType, entry.suppressed,
       entry.diagnostic, entry.feedbackId, entry.source, entry.sesMessageId,
     ]
   );
@@ -90,6 +108,7 @@ export async function recordSesEvent(event: SesEvent): Promise<SuppressionOutcom
   const outcome: SuppressionOutcome = { eventType, suppressed: [], recorded: [] };
   const source = event.mail?.source ?? null;
   const sesMessageId = event.mail?.messageId ?? null;
+  const orgId = await resolveOrgForSender(source);
 
   if (eventType === 'Bounce' && event.bounce) {
     const permanent = event.bounce.bounceType === 'Permanent';
@@ -97,6 +116,7 @@ export async function recordSesEvent(event: SesEvent): Promise<SuppressionOutcom
       const email = normaliseAddress(recipient.emailAddress);
       if (!email) continue;
       await upsert({
+        orgId,
         email,
         reason: permanent ? 'bounce' : 'transient_bounce',
         subType: [event.bounce.bounceType, event.bounce.bounceSubType].filter(Boolean).join('/') || null,
@@ -116,6 +136,7 @@ export async function recordSesEvent(event: SesEvent): Promise<SuppressionOutcom
       const email = normaliseAddress(recipient.emailAddress);
       if (!email) continue;
       await upsert({
+        orgId,
         email,
         reason: 'complaint',
         subType: event.complaint.complaintFeedbackType ?? event.complaint.complaintSubType ?? null,
@@ -135,11 +156,14 @@ export async function recordSesEvent(event: SesEvent): Promise<SuppressionOutcom
 }
 
 /** True when the platform must not send to this address. */
-export async function isSuppressed(email: string): Promise<boolean> {
+export async function isSuppressed(email: string, orgId: string): Promise<boolean> {
   const address = normaliseAddress(email);
   if (!address) return false;
+  // Scoped: an address that hard-bounced for one tenant says nothing about
+  // whether another tenant may mail it.
   const row = await queryOne<{ suppressed: boolean }>(
-    'SELECT suppressed FROM email_suppressions WHERE email = $1', [address]
+    'SELECT suppressed FROM email_suppressions WHERE org_id = $1 AND email = $2',
+    [orgId, address]
   );
   return !!row?.suppressed;
 }
@@ -148,6 +172,18 @@ export async function isSuppressed(email: string): Promise<boolean> {
  * Marks an SNS message id as processed. Returns false when it has been seen
  * before, so a redelivery does not double-count occurrences.
  */
+/**
+ * Give back a claim whose processing failed.
+ *
+ * The claim is taken before recording so concurrent redeliveries cannot both
+ * write. If recording then throws we answer 500 for SNS to retry — but the
+ * retry would be discarded as a duplicate unless the claim is released first,
+ * and the bounce would be lost for good.
+ */
+export async function releaseNotification(snsMessageId: string): Promise<void> {
+  await query('DELETE FROM ses_notifications WHERE sns_message_id = $1', [snsMessageId]);
+}
+
 export async function claimNotification(
   snsMessageId: string, topicArn: string, eventType: string | null
 ): Promise<boolean> {

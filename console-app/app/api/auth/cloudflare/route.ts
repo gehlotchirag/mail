@@ -20,7 +20,11 @@ export async function GET(req: Request) {
     );
   }
 
-  const state = `${req.url.split('domainId=')[1] ?? ''}:${crypto.randomBytes(12).toString('hex')}`;
+  // Parse the param rather than splitting the raw URL: `?domainId=x&foo=1`
+  // folded everything after `domainId=` into the id, so the callback extracted
+  // "x&foo=1" and 404'd after an otherwise successful grant.
+  const domainId = new URL(req.url).searchParams.get('domainId') ?? '';
+  const state = `${domainId}:${crypto.randomBytes(12).toString('hex')}`;
   const redirectUri = `${process.env.NEXT_PUBLIC_URL}/api/auth/cloudflare/callback`;
 
   const params = new URLSearchParams({

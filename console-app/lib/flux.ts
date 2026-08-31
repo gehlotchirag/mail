@@ -378,8 +378,10 @@ export async function setAccountQuotas(
           const failure = result.notUpdated?.[id];
           if (failure) {
             errors[id] = describeSetError(failure, 'Quota update failed');
-          } else if (result.updated && !Object.prototype.hasOwnProperty.call(result.updated, id)) {
-            // Neither updated nor notUpdated: the server ignored the id.
+          } else if (!result.updated || !Object.prototype.hasOwnProperty.call(result.updated, id)) {
+            // Neither updated nor notUpdated: the server ignored the id. A
+            // missing or null `updated` map is exactly that case — gating this
+            // on `result.updated` being truthy reported every quota as applied.
             errors[id] = 'Quota update was not acknowledged by the server';
           }
         }

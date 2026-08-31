@@ -51,6 +51,13 @@ WEBUI_PORT="${WEBUI_PORT:-3000}"
 # you are pushing a fix to one thing at 2am.
 APPS="${APPS:-console webui workers}"
 
+# Public origin of the console. The OAuth routes (Cloudflare, Zoho) build their
+# redirect URIs and post-grant redirects from this; unset, `new URL('/login',
+# undefined)` throws and `${NEXT_PUBLIC_URL}/...` renders the literal string
+# "undefined", so an otherwise successful grant lands nowhere. Derived from
+# DOMAIN, so it is never empty — override only for a non-standard origin.
+NEXT_PUBLIC_URL="${NEXT_PUBLIC_URL:-https://console.${DOMAIN}}"
+
 SSH="ssh -i ${AWS_SSH_KEY} -o StrictHostKeyChecking=accept-new ${REMOTE_USER}@${AWS_EC2_IP}"
 SCP="scp -i ${AWS_SSH_KEY} -o StrictHostKeyChecking=accept-new"
 
@@ -194,6 +201,9 @@ MIGRATION_PG_URL=${PG_BASE}/arham-migration?sslmode=require
 # Local redis6 sidecar on this instance — not ElastiCache.
 REDIS_URL=${REDIS_URL_LOCAL}
 MIGRATION_ENCRYPTION_KEY=${MIGRATION_ENCRYPTION_KEY}
+# Public origin — OAuth redirect URIs are built from this at request time.
+NEXT_PUBLIC_URL=${NEXT_PUBLIC_URL}
+PORT=${CONSOLE_PORT}
 NODE_ENV=production
 ENVEOF
 

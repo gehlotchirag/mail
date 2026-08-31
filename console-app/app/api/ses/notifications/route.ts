@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { ensureDb } from '@/lib/db';
 import { verifySnsMessage, isAllowedTopic, confirmSubscription, type SnsMessage } from '@/lib/sns';
-import { recordSesEvent, claimNotification, type SesEvent } from '@/lib/suppression';
+import {
+  recordSesEvent, claimNotification, releaseNotification, type SesEvent,
+} from '@/lib/suppression';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,7 +88,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true, duplicate: true });
     }
 
-    const outcome = await recordSesEvent(event);
+    let outcome;
+    try {
+      outcome = await recordSesEvent(event);
+    } catch (e) {
+      // Hand the claim back before answering 500, or SNS's retry is discarded
+      // as a duplicate and this bounce is never recorded.
+      await releaseNotification(msg.MessageId).catch(() => { /* best effort */ });
+      throw e;
+    }
     if (outcome.suppressed.length) {
       console.warn(
         `[ses] ${outcome.eventType}: suppressed ${outcome.suppressed.join(', ')}`
