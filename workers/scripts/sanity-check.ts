@@ -22,7 +22,8 @@ const { encryptField, decryptField } = await import('../lib/crypto.js');
 const { buildImapTlsOptions, parseAllowInsecureTls } = await import('../lib/imap-tls.js');
 const { buildImapCredentials, resolveImapAuth } = await import('../imap/master-user.js');
 const { ProgressAccumulator } = await import('../lib/progress.js');
-const { PageGuard } = await import('../lib/pagination.js');
+const { PageGuard, pageSignature } = await import('../lib/pagination.js');
+const { batchJobId } = await import('../lib/bull-liveness.js');
 const { checkpointOffsetFor, outcomeFor } = await import('../lib/batch-settlement.js');
 const { listMigrationFiles } = await import('../db/pool.js');
 
@@ -220,6 +221,44 @@ await check('the DigitalOcean Spaces staging module is gone', () => {
   let present = false;
   try { readSrc('lib/spaces.ts'); present = true; } catch { /* expected */ }
   assert.equal(present, false, 'lib/spaces.ts is back — it defaults to a DigitalOcean endpoint');
+});
+
+await check('the repeated-page detector actually detects a repeated page', () => {
+  // The previous test fed hand-written signatures, so it passed while the real
+  // call site folded the advancing offset in and never matched. Build the
+  // signature the way the caller does and assert two identical pages at
+  // different offsets collide.
+  const page = [{ messageId: 'm1' }, { messageId: 'm9' }];
+  const sigAtOffset0   = pageSignature(page[0].messageId, page[1].messageId, page.length);
+  const sigAtOffset200 = pageSignature(page[0].messageId, page[1].messageId, page.length);
+  assert.equal(sigAtOffset0, sigAtOffset200,
+    'the same page at a different offset produces a different signature — the ' +
+    'repeated-page stop is dead code again');
+
+  const guard = new PageGuard(5000, 'test');
+  assert.equal(guard.next(sigAtOffset0).ok, true);
+  const verdict = guard.next(sigAtOffset200);
+  assert.equal(verdict.ok, false, 'a repeated page was not caught');
+  assert.equal(verdict.ok === false && verdict.reason, 'repeated-page');
+});
+
+await check('a batch job id is the range, so a retry cannot enqueue it twice', () => {
+  const a = batchJobId('user-1', 'INBOX/Archive', 100, 149);
+  const b = batchJobId('user-1', 'INBOX/Archive', 100, 149);
+  assert.equal(a, b, 'the same range produced two ids — a retrying user job would ' +
+    'enqueue a second job for messages the first is still importing');
+  assert.notEqual(a, batchJobId('user-1', 'INBOX/Archive', 150, 199), 'ranges collide');
+  assert.notEqual(a, batchJobId('user-2', 'INBOX/Archive', 100, 149), 'users collide');
+  assert.ok(!/[^A-Za-z0-9_-]/.test(a), `job id ${a} carries characters BullMQ keys reserve`);
+});
+
+await check('a retry only discards batches BullMQ has actually lost', () => {
+  const src = readSrc('processors/user-migration.processor.ts');
+  assert.ok(!src.includes('resetUserBatchAccounting'),
+    'the blanket reset is back — it deletes rows for batches whose jobs are still ' +
+    'queued, so their messages get imported twice and their settlement is stranded');
+  assert.ok(src.includes('findUnsettledBatches') && src.includes('isJobStillLive'),
+    'carried-over batches are not liveness-checked before being discarded');
 });
 
 console.log(process.exitCode ? '[sanity] FAILED' : `[sanity] ${checks} checks passed`);

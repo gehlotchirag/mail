@@ -7,13 +7,14 @@ import {
   getMigrationJob, updateUserStatus, getUserCheckpoint,
   appendMigrationEvent, incrementJobUserCounts, isJobCancelled,
   registerMessageBatch, attachBatchBullJob, voidMessageBatch,
-  resetUserBatchAccounting, markUserEnqueueComplete, setUserBullJobId,
+  findUnsettledBatches, discardDeadBatches, markUserEnqueueComplete, setUserBullJobId,
 } from '../db/queries.js';
 import { buildImapCredentials, resolveImapAuth, FOLDER_ROLE_MAP } from '../imap/master-user.js';
 import { buildImapTlsOptions, parseAllowInsecureTls } from '../lib/imap-tls.js';
 import { startHeartbeat } from '../lib/heartbeat.js';
 import { finishUserIfDone } from '../lib/user-completion.js';
-import { PageGuard } from '../lib/pagination.js';
+import { PageGuard, pageSignature } from '../lib/pagination.js';
+import { isJobStillLive, batchJobId } from '../lib/bull-liveness.js';
 import { ensureAccountExists, resolveMailboxId } from '../stalwart/account-manager.js';
 import {
   fetchZohoFolders, fetchZohoMessageIds, refreshZohoToken,
@@ -58,11 +59,30 @@ export async function userMigrationProcessor(job: Job): Promise<void> {
     // which never advanced past them. Done before anything slow, so a straggler
     // from the old attempt cannot settle into this attempt's accounting and
     // complete the user while it is still enumerating.
-    const dropped = await resetUserBatchAccounting(userId);
-    if (dropped > 0) {
+    // Only batches BullMQ has genuinely lost are discarded. One whose job is
+    // still queued keeps its row: it will import its range and settle it, and
+    // re-enumeration of that range is a no-op because the batch is identified
+    // by the range (004) and its job id is deterministic. Dropping live rows
+    // here is what caused every message in an already-enqueued folder to be
+    // imported twice on a retry.
+    const carriedOver = await findUnsettledBatches(userId);
+    const deadIds: string[] = [];
+    if (carriedOver.length > 0) {
+      const probe = new Queue('message-import', { connection: getRedisConnection() });
+      try {
+        for (const b of carriedOver) {
+          if (!await isJobStillLive(probe, b.bull_job_id, 'user-migration')) deadIds.push(b.id);
+        }
+      } finally {
+        await probe.close();
+      }
+    }
+    const dropped = await discardDeadBatches(userId, deadIds);
+    if (carriedOver.length > 0) {
       console.warn(
-        `[user-migration] ${sourceEmail}: discarded ${dropped} unsettled batch record(s) ` +
-        'from a previous attempt — their messages will be re-enumerated',
+        `[user-migration] ${sourceEmail}: ${carriedOver.length} unsettled batch(es) from a ` +
+        `previous attempt — ${dropped} had no live job and will be re-enumerated, ` +
+        `${carriedOver.length - dropped} are still running and were left alone`,
       );
     }
 
@@ -122,9 +142,23 @@ async function enqueueBatch(
   },
   payload: Record<string, unknown>,
 ): Promise<void> {
-  const batchId = await registerMessageBatch(reg);
+  const { batchId, created } = await registerMessageBatch(reg);
+  if (!created) {
+    // This range is already registered and still owned by a live batch from the
+    // attempt we superseded. Enqueuing again would import its messages twice.
+    return;
+  }
   try {
-    const queued = await queue.add('import-batch', { ...payload, batchId }, BATCH_JOB_OPTS);
+    const queued = await queue.add(
+      'import-batch',
+      { ...payload, batchId },
+      {
+        ...BATCH_JOB_OPTS,
+        // Same range => same id, and BullMQ refuses a duplicate id. Belt and
+        // braces with the range constraint above.
+        jobId: batchJobId(reg.userId, reg.folderKey, reg.seqStart, reg.seqEnd),
+      },
+    );
     if (queued.id) await attachBatchBullJob(batchId, String(queued.id));
   } catch (err) {
     await voidMessageBatch(batchId, reg.userId).catch(() => { /* best effort */ });
@@ -198,9 +232,11 @@ async function migrateZohoUser(params: {
 
         // Signature over the page's contents: a provider that keeps handing back
         // the same page while claiming hasMore would otherwise loop forever.
-        const verdict = guard.next(
-          `${start}:${messages[0].messageId}:${messages[messages.length - 1].messageId}:${messages.length}`,
-        );
+        const verdict = guard.next(pageSignature(
+          messages[0].messageId,
+          messages[messages.length - 1].messageId,
+          messages.length,
+        ));
         if (!verdict.ok) {
           console.error(`[user-migration] ABORTING FOLDER — ${verdict.detail}`);
           await appendMigrationEvent(jobId, userId, 'pagination_aborted', {

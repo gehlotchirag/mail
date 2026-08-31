@@ -172,20 +172,62 @@ export interface SettledBatch {
  *
  * 'imported' rows are kept: they are what holds the watermark in place.
  */
-export async function resetUserBatchAccounting(userId: string): Promise<number> {
+export interface UnsettledBatch {
+  id: string;
+  bull_job_id: string | null;
+  folder_key: string;
+  seq_start: string;
+  seq_end: string;
+}
+
+/** Batches from a previous attempt that have not reached a terminal state. */
+export async function findUnsettledBatches(userId: string): Promise<UnsettledBatch[]> {
+  const { rows } = await pool.query(
+    `SELECT id, bull_job_id, folder_key, seq_start, seq_end
+       FROM migration_batches
+      WHERE migration_user_id = $1 AND status = 'pending'`,
+    [userId],
+  );
+  return rows as UnsettledBatch[];
+}
+
+/**
+ * Discard batch rows whose BullMQ job is gone, and resync the pending counter.
+ *
+ * Deliberately NOT a blanket reset. A user job retried by BullMQ runs while its
+ * previous attempt's batches may still be queued; deleting those rows would
+ * strand their settlement (the job settles a row that no longer exists, so
+ * pending_batches never drops and the user never completes) on top of letting
+ * re-enumeration import their messages twice. Only genuinely dead batches are
+ * dropped, so their ranges — still behind the checkpoint — get re-enumerated.
+ */
+export async function discardDeadBatches(userId: string, deadIds: string[]): Promise<number> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rowCount } = await client.query(
-      `DELETE FROM migration_batches WHERE migration_user_id = $1 AND status <> 'imported'`,
-      [userId],
-    );
+    let dropped = 0;
+    if (deadIds.length > 0) {
+      const { rowCount } = await client.query(
+        `DELETE FROM migration_batches
+          WHERE migration_user_id = $1 AND id = ANY($2::uuid[]) AND status = 'pending'`,
+        [userId, deadIds],
+      );
+      dropped = rowCount ?? 0;
+    }
+    // enqueue_complete goes back to false because this attempt is about to
+    // enumerate again; the counter is recomputed rather than zeroed.
     await client.query(
-      `UPDATE migration_users SET pending_batches = 0, enqueue_complete = FALSE WHERE id = $1`,
+      `UPDATE migration_users u
+          SET enqueue_complete = FALSE,
+              pending_batches = (
+                SELECT COUNT(*) FROM migration_batches b
+                 WHERE b.migration_user_id = u.id AND b.status = 'pending'
+              )
+        WHERE u.id = $1`,
       [userId],
     );
     await client.query('COMMIT');
-    return rowCount ?? 0;
+    return dropped;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => { /* ignore */ });
     throw err;
@@ -194,29 +236,46 @@ export async function resetUserBatchAccounting(userId: string): Promise<number> 
   }
 }
 
-/** Record a batch about to be enqueued and count it as outstanding. */
 export async function registerMessageBatch(reg: {
   jobId: string; userId: string; folderKey: string; folderName: string;
   seqStart: number; seqEnd: number; messageCount: number;
-}): Promise<string> {
+}): Promise<{ batchId: string; created: boolean }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows: [row] } = await client.query(
+    // A batch is its range (004). A retrying user job re-enumerates from a
+    // checkpoint that deliberately never advanced past unsettled batches, so it
+    // re-registers ranges whose first batch may still be queued. DO NOTHING
+    // makes that a no-op rather than a duplicate row and a duplicate import.
+    const { rows: [inserted] } = await client.query(
       `INSERT INTO migration_batches
          (migration_job_id, migration_user_id, folder_key, folder_name,
           seq_start, seq_end, message_count)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (migration_user_id, folder_key, seq_start, seq_end) DO NOTHING
        RETURNING id`,
       [reg.jobId, reg.userId, reg.folderKey, reg.folderName,
        reg.seqStart, reg.seqEnd, reg.messageCount],
     );
+    if (!inserted) {
+      // Already registered by the attempt we superseded. Leave its accounting
+      // alone — that batch is still the one that will settle this range.
+      const { rows: [existing] } = await client.query(
+        `SELECT id FROM migration_batches
+          WHERE migration_user_id = $1 AND folder_key = $2
+            AND seq_start = $3 AND seq_end = $4`,
+        [reg.userId, reg.folderKey, reg.seqStart, reg.seqEnd],
+      );
+      await client.query('COMMIT');
+      return { batchId: String(existing.id), created: false };
+    }
+    const row = inserted;
     await client.query(
       'UPDATE migration_users SET pending_batches = pending_batches + 1 WHERE id = $1',
       [reg.userId],
     );
     await client.query('COMMIT');
-    return row.id as string;
+    return { batchId: String(row.id), created: true };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => { /* ignore */ });
     throw err;

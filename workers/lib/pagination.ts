@@ -11,6 +11,17 @@ export type PageVerdict =
   | { ok: true }
   | { ok: false; reason: 'max-pages' | 'repeated-page'; detail: string };
 
+/**
+ * Signature identifying a page BY ITS CONTENTS.
+ *
+ * Deliberately excludes the request offset: the offset advances on every
+ * iteration, so folding it in makes two identical pages look different and
+ * silently disables the repeated-page stop. Contents only.
+ */
+export function pageSignature(firstId: string, lastId: string, count: number): string {
+  return `${firstId}:${lastId}:${count}`;
+}
+
 export class PageGuard {
   private pages = 0;
   private lastSignature: string | null = null;
