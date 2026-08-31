@@ -320,6 +320,23 @@ bash infra/scripts/migrate-from-do.sh
 `cutover.sh` needs `DO_PG_URL` too — export it in the same shell, or the script
 stops before it touches anything.
 
+### Check the schema migrations before starting the workers
+
+The worker migrations `002` and `003`/`004` dedupe rows before adding unique
+constraints, and they run automatically at worker startup. On a fresh database
+they do nothing; against the data just restored from DigitalOcean they may
+delete rows. Look before you leap:
+
+```bash
+cd workers
+MIGRATION_PG_URL="postgresql://arhamapp:<dbPassword>@<dbAddress>:5432/arham-migration?sslmode=require" \
+  npm run migrations:dry-run
+```
+
+It is read-only — it opens a transaction and always rolls back. Expect
+"Nothing destructive to do" on a first migration. If it reports rows that will
+be deleted, take an RDS snapshot before continuing.
+
 This copies both Postgres databases, streams the Flux on-disk state over, and then
 calls `deploy-apps.sh` for you (console + webui + workers) — so if you already ran
 that step by hand, this just redeploys the same three apps. Mailbox *contents* move

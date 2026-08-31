@@ -6,7 +6,8 @@
   "scripts": {
     "start": "tsx index.ts",
     "build": "tsc --noEmit",
-    "check": "tsx scripts/sanity-check.ts"
+    "check": "tsx scripts/sanity-check.ts",
+    "migrations:dry-run": "tsx scripts/migration-dry-run.ts"
   },
   "dependencies": {
     "bullmq": "^5.79.0",
