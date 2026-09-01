@@ -150,15 +150,18 @@ export class ArhamAwsIndiaStack extends pulumi.ComponentResource {
     // ─── EC2 — Graviton2 ARM64 (t4g.medium: 2 vCPU / 4 GB, burstable ~$25/mo) ─
     // Burstable: sustained CPU above the 20%/vCPU baseline drains CPU credits and
     // then throttles, so the CPUCreditBalance alarm below is not optional.
-    const stalwartAmi = aws.ec2.getAmiOutput({
-      owners: ["amazon"],
-      mostRecent: true,
-      filters: [
-        { name: "name",         values: ["al2023-ami-*-arm64"] },
-        { name: "architecture", values: ["arm64"] },
-        { name: "state",        values: ["available"] },
-      ],
-    });
+    // PINNED, deliberately. This was `getAmiOutput({ mostRecent: true })`, which
+    // re-resolves on every preview — so the moment Amazon published a newer
+    // AL2023 image, Pulumi wanted a different AMI, and an AMI change FORCES
+    // REPLACEMENT of the instance. On a live mail server that destroys the disk:
+    // Stalwart's config.toml, the certbot TLS material, the DKIM private key,
+    // the Redis sidecar and every PM2 app. Mail down, and outbound failing DKIM
+    // until a new key is published in DNS.
+    //
+    // Pin it to what is actually running. Moving to a newer AMI is a deliberate
+    // rebuild (snapshot, launch, restore config and DKIM, reassociate the EIP),
+    // never a side effect of running `pulumi up` for an unrelated change.
+    const stalwartAmiId = cfg.get("amiId") ?? "ami-002fc85c039f93d93";
 
     // Runs once on first boot — installs Stalwart + nginx + Redis sidecar
     const userData = `#!/bin/bash
@@ -258,13 +261,42 @@ echo "See infra/MIGRATION.md - 'Configure Server' and 'Deploy the applications'.
       }`,
     }, opts);
 
+    // Customer-domain SES onboarding. This is a multi-tenant platform: when a
+    // customer adds a domain in the console we must register it with SES and read
+    // back its Easy-DKIM tokens, otherwise SES rejects their mail with
+    // "Email address is not verified" and nothing they send ever leaves.
+    // Doing that by hand per domain does not scale, so the console needs these at
+    // runtime. Scoped to identity lifecycle + read-back only — no sending policy,
+    // no account-level mutation.
+    new aws.iam.RolePolicy("stalwart-ses-identity-policy", {
+      role: ec2Role.name,
+      policy: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [{
+          Effect: "Allow",
+          Action: [
+            "ses:CreateEmailIdentity",
+            "ses:DeleteEmailIdentity",
+            "ses:GetEmailIdentity",
+            "ses:ListEmailIdentities",
+            "ses:PutEmailIdentityDkimAttributes",
+            "ses:PutEmailIdentityMailFromAttributes",
+            // Lets the console show whether the account is still sandboxed,
+            // which changes what we tell the customer to expect.
+            "ses:GetAccount",
+          ],
+          Resource: "*",
+        }],
+      }),
+    }, opts);
+
     const ec2InstanceProfile = new aws.iam.InstanceProfile("stalwart-profile", {
       role: ec2Role.name,
     }, opts);
 
     const mailServer = new aws.ec2.Instance("stalwart", {
       instanceType: "t4g.medium",
-      ami: stalwartAmi.id,
+      ami: stalwartAmiId,
       subnetId: vpc.publicSubnetIds[0],
       vpcSecurityGroupIds: [mailSg.id],
       keyName: keyPairName,
@@ -638,7 +670,7 @@ echo "See infra/MIGRATION.md - 'Configure Server' and 'Deploy the applications'.
     }, opts);
 
     new aws.dlm.LifecyclePolicy("mail-ebs-daily", {
-      description:      "Daily EBS snapshots of the Stalwart mail instance (7 day retention)",
+      description:      "Daily EBS snapshots of the Stalwart mail instance - 7 day retention",
       executionRoleArn: dlmRole.arn,
       state:            "ENABLED",
       policyDetails: {
