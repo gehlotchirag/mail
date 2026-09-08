@@ -1,0 +1,15 @@
+{
+  "@type": "PostgreSql",
+  "host": "127.0.0.1",
+  "port": 5432,
+  "database": "flux_mail",
+  "authUsername": "flux_mail",
+  "authSecret": {
+    "@type": "Value",
+    "secret": "YOUR_DB_PASSWORD_HERE"
+  },
+  "useTls": false,
+  "allowInvalidCerts": false,
+  "poolMaxConnections": 10,
+  "poolRecyclingMethod": "fast"
+}
