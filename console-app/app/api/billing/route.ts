@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { PLANS } from '@/lib/plans';
+import { PLANS, PLAN_ORDER, GST_RATE, MAX_SEATS } from '@/lib/plans';
+import { countOrgMailboxes } from '@/lib/subscription';
+import { getPlanPricingMode } from '@/lib/razorpay';
 
 export async function GET() {
   const session = await getSession();
@@ -13,5 +15,22 @@ export async function GET() {
     current_period_end: string;
   }>('SELECT * FROM subscriptions WHERE org_id = $1', [session.orgId]);
 
-  return NextResponse.json({ subscription: sub, plans: PLANS });
+  // The seat picker cannot offer fewer seats than the org is already using, so the
+  // floor is sent with the plans rather than discovered on a rejected checkout.
+  const seatsInUse = await countOrgMailboxes(session.orgId);
+
+  // What the gateway will actually charge decides how the price is labelled. If the
+  // Razorpay plans carry no GST, the page must not print "+18% GST" beside a number
+  // nobody will be asked to pay on top of.
+  const gstMode = await getPlanPricingMode();
+
+  return NextResponse.json({
+    subscription: sub,
+    plans: PLANS,
+    planOrder: PLAN_ORDER,
+    seatsInUse,
+    gstRate: GST_RATE,
+    gstMode,
+    maxSeats: MAX_SEATS,
+  });
 }

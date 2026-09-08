@@ -50,3 +50,26 @@ export function subErrorResponse(): Response {
 export function limitErrorResponse(message: string): Response {
   return NextResponse.json({ error: message, limitReached: true }, { status: 403 });
 }
+
+/**
+ * Mailboxes this organisation already has on the mail server, across every domain
+ * it owns. Seats are sold per organisation, not per domain, so the count has to
+ * span all of them.
+ *
+ * Returns 0 rather than throwing when the mail server cannot be reached: callers
+ * use this to *tighten* a limit, and a transient JMAP failure must not become a
+ * refusal to sell seats or run a migration.
+ */
+export async function countOrgMailboxes(orgId: string): Promise<number> {
+  try {
+    const { query } = await import('./db');
+    const { countUsersForDomains } = await import('./flux');
+    const rows = await query<{ flux_domain_id: string | null }>(
+      'SELECT flux_domain_id FROM domains WHERE org_id = $1 AND flux_domain_id IS NOT NULL', [orgId],
+    );
+    return await countUsersForDomains(rows.map(r => r.flux_domain_id).filter((x): x is string => !!x));
+  } catch (err) {
+    console.warn('[subscription] could not count existing mailboxes:', err instanceof Error ? err.message : err);
+    return 0;
+  }
+}

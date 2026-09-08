@@ -1,16 +1,63 @@
 const GB = 1024 ** 3;
 
+/**
+ * Pricing is PER SEAT PER MONTH, in rupees, exclusive of GST — the same basis Zoho
+ * quotes on, so the comparison below is like-for-like.
+ *
+ * Benchmarked against Zoho Mail India (Sep 2026) at roughly 20% under:
+ *   lite       5 GB   ₹40   vs Zoho Mail Lite 5GB       ₹59   (-32%)
+ *   starter    10 GB  ₹60   vs Zoho Mail Lite 10GB      ₹75   (-20%)
+ *   business   50 GB  ₹159  vs Zoho Mail Premium        ₹199  (-20%)
+ *   enterprise 100 GB ₹319  vs Zoho Workplace Pro       ₹399  (-20%)
+ *
+ * `maxDomains` is deliberately flat across paid tiers. Zoho charges for mailboxes
+ * and lets any paid plan hold ~30 domains; gating domains by tier made us look
+ * meaner than the incumbent on exactly the axis we were pitching as a strength.
+ */
 export const PLANS = {
-  trial:      { name: 'Free Trial',  price: 0,    maxUsers: 3,   maxDomains: 1,   storageGbPerUser: 5,   features: ['3 users', '5 GB storage/user', 'Basic support'] },
-  starter:    { name: 'Starter',     price: 499,  maxUsers: 10,  maxDomains: 3,   storageGbPerUser: 15,  features: ['10 users', '15 GB storage/user', 'Email support', 'Custom domain'] },
-  business:   { name: 'Business',    price: 1499, maxUsers: 50,  maxDomains: 10,  storageGbPerUser: 50,  features: ['50 users', '50 GB storage/user', 'Priority support', 'Custom domain', 'Team aliases'] },
-  enterprise: { name: 'Enterprise',  price: 3999, maxUsers: 999, maxDomains: 999, storageGbPerUser: 100, features: ['Unlimited users', '100 GB storage/user', 'Dedicated support', 'SLA', 'Custom DKIM', 'Team aliases'] },
+  trial: {
+    name: 'Free Trial', pricePerUser: 0, storageGbPerUser: 5, maxDomains: 1, includedUsers: 3,
+    features: ['3 mailboxes', '5 GB per mailbox', '1 domain', '14-day trial'],
+  },
+  lite: {
+    name: 'Lite', pricePerUser: 40, storageGbPerUser: 5, maxDomains: 30, includedUsers: 1,
+    features: ['5 GB per mailbox', 'Up to 30 domains', 'IMAP, POP and ActiveSync', 'Free migration', 'Email support'],
+  },
+  starter: {
+    name: 'Starter', pricePerUser: 60, storageGbPerUser: 10, maxDomains: 30, includedUsers: 1,
+    features: ['10 GB per mailbox', 'Up to 30 domains', 'IMAP, POP and ActiveSync', 'Free migration', 'Email support'],
+  },
+  business: {
+    name: 'Business', pricePerUser: 159, storageGbPerUser: 50, maxDomains: 30, includedUsers: 1,
+    features: ['50 GB per mailbox', 'Up to 30 domains', 'Team aliases and distribution lists', 'Priority support'],
+  },
+  enterprise: {
+    name: 'Enterprise', pricePerUser: 319, storageGbPerUser: 100, maxDomains: 30, includedUsers: 1,
+    features: ['100 GB per mailbox', 'Up to 30 domains', 'Team aliases and distribution lists', 'Custom DKIM', 'Dedicated support and SLA'],
+  },
 } as const;
 
 export type PlanKey = keyof typeof PLANS;
 
-/** Cheapest → most expensive. Used to infer an effective tier from max_users. */
-export const PLAN_ORDER: readonly PlanKey[] = ['trial', 'starter', 'business', 'enterprise'];
+/** Cheapest → most expensive. Drives the order plans are listed in. */
+export const PLAN_ORDER: readonly PlanKey[] = ['trial', 'lite', 'starter', 'business', 'enterprise'];
+
+/**
+ * Indian GST on a SaaS subscription. Prices are quoted exclusive of it (as Zoho
+ * does) and it is added at checkout, so the advertised number stays comparable
+ * while the amount actually charged is the lawful one.
+ */
+export const GST_RATE = 0.18;
+
+/** Seats are unbounded by tier, but a typo should not be able to order 99,999. */
+export const MAX_SEATS = 2000;
+
+/** Rupees charged for `seats` on `plan`, inclusive of GST. */
+export function priceForSeats(plan: PlanKey, seats: number): { net: number; gst: number; total: number } {
+  const net = PLANS[plan].pricePerUser * seats;
+  const gst = Math.round(net * GST_RATE);
+  return { net, gst, total: net + gst };
+}
 
 /**
  * Per-user mailbox quota in bytes, derived from the advertised GB figure in
@@ -19,6 +66,7 @@ export const PLAN_ORDER: readonly PlanKey[] = ['trial', 'starter', 'business', '
  */
 export const PLAN_STORAGE_BYTES_PER_USER: Record<PlanKey, number> = {
   trial:      PLANS.trial.storageGbPerUser * GB,
+  lite:       PLANS.lite.storageGbPerUser * GB,
   starter:    PLANS.starter.storageGbPerUser * GB,
   business:   PLANS.business.storageGbPerUser * GB,
   enterprise: PLANS.enterprise.storageGbPerUser * GB,
@@ -34,6 +82,7 @@ export const PLAN_STORAGE_BYTES_PER_USER: Record<PlanKey, number> = {
  */
 export const PLAN_CAPABILITIES: Record<PlanKey, { teamAliases: boolean }> = {
   trial:      { teamAliases: false },
+  lite:       { teamAliases: false },
   starter:    { teamAliases: false },
   business:   { teamAliases: true },
   enterprise: { teamAliases: true },
@@ -64,21 +113,16 @@ export interface PlanLimits {
 }
 
 /**
- * Reconciles the two sources of plan limits.
+ * Resolves the limits in force for a subscription.
  *
- * `subscriptions.max_users` is written by the billing webhook and shown in the
- * dashboard, so it is authoritative for the user cap — it may legitimately have
- * been overridden for a custom/grandfathered deal. `maxDomains` and the storage
- * quota exist only in PLANS, keyed by `subscriptions.plan`.
+ * Under per-seat pricing the two inputs no longer compete: `subscriptions.plan`
+ * decides storage, domains and features, while `subscriptions.max_users` is simply
+ * the number of seats bought and paid for. It is therefore taken at face value —
+ * the old logic promoted an org to a more expensive tier's storage whenever its
+ * seat count exceeded that tier's cap, which under this model would hand out free
+ * upgrades to anyone who bought enough seats.
  *
- * The two can disagree. Rather than silently trusting either:
- *  - an unknown `plan` string falls back to the most restrictive tier (trial);
- *  - if `max_users` is *larger* than the named plan allows, the row has been
- *    overridden upwards, so the effective tier becomes the cheapest tier that
- *    covers that user count and its domain/storage limits are used with it;
- *  - if `max_users` is smaller, the named plan is kept (the customer never gets
- *    more than the tier they are on) and only the user cap is tightened.
- * Every disagreement is logged.
+ * An unknown plan string still falls back to the most restrictive tier.
  */
 export function resolvePlanLimits(sub: { plan: string; max_users: number }): PlanLimits {
   let plan: PlanKey;
@@ -90,27 +134,13 @@ export function resolvePlanLimits(sub: { plan: string; max_users: number }): Pla
   }
 
   const maxUsers = Number.isFinite(sub.max_users) && sub.max_users > 0
-    ? Math.floor(sub.max_users)
-    : PLANS[plan].maxUsers;
-
-  let effective = plan;
-  if (maxUsers > PLANS[plan].maxUsers) {
-    effective = PLAN_ORDER.find(p => PLANS[p].maxUsers >= maxUsers) ?? 'enterprise';
-    console.warn(
-      `[plans] subscriptions.max_users (${maxUsers}) exceeds plan "${plan}" (${PLANS[plan].maxUsers}) — ` +
-      `applying "${effective}" domain and storage limits`
-    );
-  } else if (maxUsers < PLANS[plan].maxUsers) {
-    console.warn(
-      `[plans] subscriptions.max_users (${maxUsers}) is below plan "${plan}" (${PLANS[plan].maxUsers}) — ` +
-      `honouring the lower user cap from the database`
-    );
-  }
+    ? Math.min(Math.floor(sub.max_users), MAX_SEATS)
+    : PLANS[plan].includedUsers;
 
   return {
-    plan: effective,
+    plan,
     maxUsers,
-    maxDomains: PLANS[effective].maxDomains,
-    storageBytesPerUser: PLAN_STORAGE_BYTES_PER_USER[effective],
+    maxDomains: PLANS[plan].maxDomains,
+    storageBytesPerUser: PLAN_STORAGE_BYTES_PER_USER[plan],
   };
 }

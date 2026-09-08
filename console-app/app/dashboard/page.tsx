@@ -64,7 +64,7 @@ export default async function DashboardPage() {
           { value: domains.length,                        label: 'Domains added',   cap: false },
           { value: domains.filter(d=>d.verified).length,  label: 'Verified',         cap: false },
           { value: sub?.plan ?? 'trial',                  label: 'Plan',             cap: true  },
-          { value: sub?.max_users ?? 3,                   label: 'Max email users',  cap: false },
+          { value: sub?.max_users ?? 3,                   label: 'Seats',            cap: false },
         ].map((s, i) => (
           <div key={i} className="card">
             <div style={{ fontSize: '2rem', fontWeight: 800, color: '#0f2040', letterSpacing: '-1px', textTransform: s.cap ? ('capitalize' as const) : undefined }}>
