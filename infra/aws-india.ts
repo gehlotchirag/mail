@@ -290,12 +290,41 @@ echo "See infra/MIGRATION.md - 'Configure Server' and 'Deploy the applications'.
       }),
     }, opts);
 
+    // SSM Session Manager — shell access with no SSH port and no IP allowlist.
+    //
+    // sshAllowedCidr pins port 22 to one address, but this operator is on Airtel
+    // residential broadband: the IP rotated twice in a week, and each rotation
+    // locks everyone out until someone runs `pulumi config set` + `pulumi up`.
+    // That is a bad dependency for the only shell into a production mail server.
+    //
+    // Attaching the managed policy to the EXISTING role is deliberate: it changes
+    // the role, not the instance, so it cannot trigger the stop/start cycle that
+    // took production down on 2026-09-01. The agent ships with AL2023 and picks
+    // up the new permissions without a reboot.
+    //
+    //   aws ssm start-session --target <instance-id> --region ap-south-1
+    new aws.iam.RolePolicyAttachment("stalwart-ssm-policy", {
+      role: ec2Role.name,
+      policyArn: "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+    }, opts);
+
     const ec2InstanceProfile = new aws.iam.InstanceProfile("stalwart-profile", {
       role: ec2Role.name,
     }, opts);
 
     const mailServer = new aws.ec2.Instance("stalwart", {
-      instanceType: "t4g.medium",
+      // m6g.medium, not t4g.medium. On 2026-09-01 a `pulumi up` stopped this
+      // instance to apply a userData change and AWS then refused to start it:
+      // InsufficientInstanceCapacity in ap-south-1a, for t4g.medium AND t4g.large.
+      // Production was down until the type was switched to m6g.medium, which AWS
+      // accepted. Do NOT revert this to a t4g type without first confirming capacity
+      // in the AZ — reverting recreates that outage, because the volume is pinned to
+      // ap-south-1a and cannot simply move.
+      //
+      // m6g is also non-burstable: no CPU credits to exhaust, which suits a mail
+      // server under sustained load better than t4g did. Same 4 GB RAM, 1 vCPU
+      // instead of 2, ~$28/mo vs ~$25.
+      instanceType: "m6g.medium",
       ami: stalwartAmiId,
       subnetId: vpc.publicSubnetIds[0],
       vpcSecurityGroupIds: [mailSg.id],
