@@ -13,6 +13,7 @@ import { useFileStore } from "@/stores/file-store";
 import { toast } from "@/stores/toast-store";
 import { cn, formatFileSize } from "@/lib/utils";
 import { NavigationRail } from "@/components/layout/navigation-rail";
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SidebarAppsModal } from "@/components/layout/sidebar-apps-modal";
 import { InlineAppView } from "@/components/layout/inline-app-view";
 import { useSidebarApps } from "@/hooks/use-sidebar-apps";
@@ -375,20 +376,7 @@ export default function FilesPage() {
 
   return (
     <div className="flex h-dvh bg-background overflow-hidden">
-      {!isMobile && (
-        <div className="w-14 bg-secondary flex flex-col flex-shrink-0" style={{ borderRight: '1px solid rgba(128, 128, 128, 0.3)' }}>
-          <NavigationRail
-            collapsed
-            quota={quota}
-            isPushConnected={isPushConnected}
-            onLogout={logout}
-            onManageApps={handleManageApps}
-            onInlineApp={handleInlineApp}
-            onCloseInlineApp={closeInlineApp}
-            activeAppId={inlineApp?.id ?? null}
-          />
-        </div>
-      )}
+      {!isMobile && <AppSidebar />}
 
       <div className="flex flex-col flex-1 min-w-0">
         {inlineApp && (

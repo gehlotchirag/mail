@@ -10,7 +10,7 @@
   --color-ring: #94a3b8;
   --color-background: #ffffff;
   --color-foreground: #0f172a;
-  --color-primary: #3b82f6;
+  --color-primary: #1a73e8;
   --color-primary-foreground: #ffffff;
   --color-secondary: #f8fafc;
   --color-secondary-foreground: #0f172a;
@@ -62,11 +62,11 @@
   --transition-duration: 0.2s;
 
   /* Density spacing variables (defaults = regular) */
-  --density-item-py: 12px;
-  --density-item-gap: 12px;
+  --density-item-py: 10px;
+  --density-item-gap: 10px;
   --density-header-py: 12px;
   --density-card-p: 16px;
-  --density-sidebar-py: 4px;
+  --density-sidebar-py: 13px;
 }
 
 .dark {
@@ -178,6 +178,7 @@ body {
     "rlig" 1,
     "calt" 1;
 }
+
 
 /* Minimalist scrollbar */
 ::-webkit-scrollbar {

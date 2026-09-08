@@ -64,6 +64,29 @@ import { appLifecycleHooks, uiHooks, routerHooks, toastHooks, emailHooks } from 
 import { emailToReadView } from "@/lib/plugin-projection";
 
 
+function stripCidImages(html: string): string {
+  // cid: references can't be resolved in the composer — remove the broken img tags
+  return html.replace(/<img[^>]+src=["']cid:[^"']*["'][^>]*\/?>/gi, '');
+}
+
+function buildThreadChainHtml(emails: Email[]): string {
+  return emails.map(email => {
+    const from = email.from?.[0];
+    const fromStr = from?.name
+      ? `${from.name} &lt;${from.email}&gt;`
+      : (from?.email || '');
+    const date = email.receivedAt ? new Date(email.receivedAt).toLocaleString() : '';
+    const htmlBody = email.bodyValues?.[email.htmlBody?.[0]?.partId ?? '']?.value;
+    const textBody = email.bodyValues?.[email.textBody?.[0]?.partId ?? '']?.value;
+    const body = htmlBody
+      ? stripCidImages(htmlBody)
+      : (textBody
+            ? textBody.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+            : email.preview || '');
+    return `<div style="margin-bottom:4px;color:#555;font-size:0.85em">On ${date}, <strong>${fromStr}</strong> wrote:</div><div style="margin-bottom:8px">${body}</div>`;
+  }).join('<hr style="border:none;border-top:1px solid #e2e8f0;margin:8px 0">');
+}
+
 export default function Home() {
   const t = useTranslations();
   const tCommon = useTranslations('common');
@@ -87,6 +110,7 @@ export default function Home() {
   const [conversationThread, setConversationThread] = useState<ThreadGroup | null>(null);
   const [conversationEmails, setConversationEmails] = useState<Email[]>([]);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
+  const [resolvedThreadHistoryHtml, setResolvedThreadHistoryHtml] = useState<string | undefined>(undefined);
   const [rateLimitSecondsLeft, setRateLimitSecondsLeft] = useState<number | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<{ blobId: string; name: string; type?: string } | null>(null);
   const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1701,6 +1725,73 @@ export default function Home() {
     await fetchEmails(client, selectedMailbox);
   };
 
+  // Resolve CID inline images in thread history to base64 data URLs when the
+  // composer opens in conversation mode. Base64 data URLs are safe to display
+  // and can be embedded in sent email HTML (unlike blob: object URLs).
+  //
+  // This MUST stay above the auth loading early-return below. It used to sit
+  // after it, so the hook was skipped on the render where auth was still
+  // resolving and called on the next one — React counts hooks per render and
+  // threw "Rendered more hooks than during the previous render" (error #310),
+  // which surfaced as the "Something went wrong" boundary on every cold load.
+  // Every hook in this component has to be called before that return.
+  useEffect(() => {
+    if (!showComposer || !conversationThread || !selectedEmail || !client || conversationEmails.length < 1) {
+      setResolvedThreadHistoryHtml(undefined);
+      return;
+    }
+
+    let cancelled = false;
+
+    const resolveCid = async (html: string, attachments: Email['attachments']): Promise<string> => {
+      const cidAtts = (attachments || []).filter(a => a.cid && a.blobId);
+      if (!cidAtts.length) return html;
+      const cidMap: Record<string, string> = {};
+      await Promise.all(cidAtts.map(async att => {
+        const cidKey = att.cid!.replace(/^<|>$/g, '');
+        try {
+          const blob = await client.fetchBlob(att.blobId, att.name || 'inline', att.type);
+          await new Promise<void>(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => { if (!cancelled) cidMap[cidKey] = reader.result as string; resolve(); };
+            reader.onerror = () => resolve();
+            reader.readAsDataURL(blob);
+          });
+        } catch { /* ignore failed blobs */ }
+      }));
+      return html.replace(/\bcid:([^"'\s)]+)/gi, (_, ref) => cidMap[ref] || '');
+    };
+
+    (async () => {
+      const idx = conversationEmails.findIndex(e => e.id === selectedEmail.id);
+      const chain = idx >= 0 ? conversationEmails.slice(0, idx + 1) : conversationEmails;
+
+      const parts = await Promise.all(chain.map(async email => {
+        const from = email.from?.[0];
+        const fromStr = from?.name ? `${from.name} &lt;${from.email}&gt;` : (from?.email || '');
+        const date = email.receivedAt ? new Date(email.receivedAt).toLocaleString() : '';
+        const rawHtml = email.bodyValues?.[email.htmlBody?.[0]?.partId ?? '']?.value;
+        const textBody = email.bodyValues?.[email.textBody?.[0]?.partId ?? '']?.value;
+        let body: string;
+        if (rawHtml) {
+          body = await resolveCid(rawHtml, email.attachments);
+        } else if (textBody) {
+          body = textBody.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        } else {
+          body = email.preview || '';
+        }
+        return `<div style="margin-bottom:4px;color:#555;font-size:0.85em">On ${date}, <strong>${fromStr}</strong> wrote:</div><div style="margin-bottom:8px">${body}</div>`;
+      }));
+
+      if (!cancelled) {
+        setResolvedThreadHistoryHtml(parts.join('<hr style="border:none;border-top:1px solid #e2e8f0;margin:8px 0">'));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showComposer, conversationThread?.threadId, selectedEmail?.id]);
+
   // Show loading state while checking auth
   if (!initialCheckDone || authLoading || (!isAuthenticated || !client)) {
     return (
@@ -1715,6 +1806,7 @@ export default function Home() {
 
   // Get current mailbox name for mobile header
   const currentMailboxName = mailboxes.find(m => m.id === selectedMailbox)?.name || "Inbox";
+  const currentUnreadCount = mailboxes.find(m => m.id === selectedMailbox)?.unreadEmails || 0;
   const isFocusedMailLayout = mailLayout === 'focus';
   const isHorizontalMailLayout = mailLayout === 'horizontal' && !isMobile && !isTablet;
   const hasViewerContent = showComposer || Boolean(conversationThread) || Boolean(selectedEmail);
@@ -1729,6 +1821,12 @@ export default function Home() {
     // If composing, suspend the composer (unmount will trigger onSaveState)
     if (showComposer) {
       setShowComposer(false);
+    }
+
+    // Clear conversation view so EmailViewer shows for this specific email
+    if (conversationThread) {
+      setConversationThread(null);
+      setConversationEmails([]);
     }
 
     // Show the list stub immediately so subject/sender render without
@@ -1892,22 +1990,6 @@ export default function Home() {
           </div>
         )}
         <div className="flex flex-1 overflow-hidden">
-        {/* Desktop Navigation Rail */}
-        {!isMobile && !isTablet && (
-          <div className="w-[68px] bg-secondary flex flex-col flex-shrink-0" style={{ borderRight: '1px solid rgba(128, 128, 128, 0.3)' }}>
-            <NavigationRail
-              collapsed
-              quota={quota}
-              isPushConnected={isPushConnected}
-              onLogout={handleLogout}
-              onShowShortcuts={() => setShowShortcutsModal(true)}
-              onManageApps={handleManageApps}
-              onInlineApp={handleInlineApp}
-              onCloseInlineApp={closeInlineApp}
-              activeAppId={inlineApp?.id ?? null}
-            />
-          </div>
-        )}
 
         {inlineApp && (
           <InlineAppView apps={loadedApps} activeAppId={inlineApp!.id} onClose={closeInlineApp} className="flex-1" />
@@ -1954,6 +2036,7 @@ export default function Home() {
               onDeleteFolder={handleDeleteFolderFromContextMenu}
               onImportEmail={handleImportEmailFromContextMenu}
               onRefreshMailboxes={handleRefreshMailboxes}
+              quota={quota}
               onCompose={() => {
                 setComposerMode('compose');
                 setShowComposer(true);
@@ -2005,9 +2088,7 @@ export default function Home() {
             }
           >
             {/* Mobile Header for List View */}
-            <MobileHeader
-              title={currentMailboxName}
-            />
+            <MobileHeader />
 
             {/* Search Bar + Inline Advanced Filters */}
             <div className="border-b border-border bg-background">
@@ -2222,6 +2303,17 @@ export default function Home() {
               )}
             </div>
 
+            <div className="flex items-center justify-between border-b border-border bg-background px-5 py-3">
+              <div className="flex items-baseline gap-2 min-w-0">
+                <h2 className="truncate text-[17px] font-semibold text-foreground">{currentMailboxName}</h2>
+                {currentUnreadCount > 0 && <span className="text-xs font-medium text-muted-foreground">{currentUnreadCount} unread</span>}
+              </div>
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <Filter className="h-4 w-4" />
+                <span className="flex h-4 w-4 items-center justify-center text-lg leading-none">⋮</span>
+              </div>
+            </div>
+
             {(searchQuery || !isFilterEmpty(searchFilters)) && !isLoading && (
               <div className="px-4 py-1.5 text-xs text-muted-foreground border-b border-border bg-muted/20">
                 {hasMoreEmails
@@ -2331,6 +2423,7 @@ export default function Home() {
 
           {/* Email Viewer / Composer - full screen on mobile, flex on tablet/desktop */}
           <div
+            data-evolve-viewer-pane
             className={cn(
               "flex flex-col bg-background flex-1 min-w-0",
               isHorizontalMailLayout ? "min-h-0" : "h-full",
@@ -2344,7 +2437,6 @@ export default function Home() {
               shouldHideHorizontalViewerPane && "md:hidden"
             )}
           >
-            {/* Inline Composer - shown in viewer pane */}
             {showComposer ? (
               <ErrorBoundary
                 fallback={ComposerErrorFallback}
@@ -2364,13 +2456,14 @@ export default function Home() {
                     bcc: selectedEmail.bcc,
                     subject: selectedEmail.subject,
                     body: selectedEmail.bodyValues?.[selectedEmail.textBody?.[0]?.partId || '']?.value || selectedEmail.preview || '',
-                    htmlBody: selectedEmail.bodyValues?.[selectedEmail.htmlBody?.[0]?.partId || '']?.value || undefined,
+                    htmlBody: (() => { const raw = selectedEmail.bodyValues?.[selectedEmail.htmlBody?.[0]?.partId || '']?.value; return raw ? stripCidImages(raw) : undefined; })(),
                     receivedAt: selectedEmail.receivedAt,
                     attachments: selectedEmail.attachments,
                     messageId: selectedEmail.messageId,
                     inReplyTo: selectedEmail.inReplyTo,
                     references: selectedEmail.references,
                   } : undefined)}
+                  threadHistory={resolvedThreadHistoryHtml}
                   initialDraftText={composerDraftText}
                   initialData={pendingDraft}
                   onSaveState={(data) => setPendingDraft(data)}
@@ -2394,59 +2487,70 @@ export default function Home() {
                 />
               </ErrorBoundary>
             ) : (
-            <>
-            {/* Pending draft banner */}
-            {pendingDraft && (
-              <button
-                onClick={() => {
-                  setShowComposer(true);
-                  if (isMobile) setActiveView('viewer');
-                }}
-                className="flex items-center gap-3 px-4 py-2.5 bg-primary/10 border-b border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer w-full text-left"
-              >
-                <PenLine className="w-4 h-4 text-primary shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-primary">{t('email_composer.continue_draft')}</span>
-                  {pendingDraft.subject && (
-                    <span className="text-xs text-muted-foreground ml-2 truncate">{pendingDraft.subject}</span>
-                  )}
-                </div>
-                <X
-                  className="w-4 h-4 text-muted-foreground hover:text-foreground shrink-0"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    const confirmed = await confirmDialog({
-                      title: t('email_composer.discard_draft_title'),
-                      message: t('email_composer.discard_draft_confirm'),
-                      confirmText: t('email_composer.discard'),
-                      variant: "destructive",
-                    });
-                    if (confirmed) {
-                      setPendingDraft(null);
+              <>
+              {pendingDraft && (
+                <button
+                  onClick={() => {
+                    setShowComposer(true);
+                    if (isMobile) setActiveView('viewer');
+                  }}
+                  className="flex items-center gap-3 px-4 py-2.5 bg-primary/10 border-b border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer w-full text-left"
+                >
+                  <PenLine className="w-4 h-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-primary">{t('email_composer.continue_draft')}</span>
+                    {pendingDraft.subject && (
+                      <span className="text-xs text-muted-foreground ml-2 truncate">{pendingDraft.subject}</span>
+                    )}
+                  </div>
+                  <X
+                    className="w-4 h-4 text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const confirmed = await confirmDialog({
+                        title: t('email_composer.discard_draft_title'),
+                        message: t('email_composer.discard_draft_confirm'),
+                        confirmText: t('email_composer.discard'),
+                        variant: "destructive",
+                      });
+                      if (confirmed) {
+                        setPendingDraft(null);
+                      }
+                    }}
+                  />
+                </button>
+              )}
+              {conversationThread ? (
+                <ThreadConversationView
+                  thread={conversationThread}
+                  emails={conversationEmails}
+                  isLoading={isLoadingConversation}
+                  onBack={handleMobileBack}
+                  onReply={handleConversationReply}
+                  onReplyAll={handleConversationReplyAll}
+                  onForward={handleConversationForward}
+                  onDownloadAttachment={handleDownloadAttachment}
+                  onMarkAsRead={async (emailId, read) => {
+                    if (client) {
+                      await markAsRead(client, emailId, read);
                     }
                   }}
-                />
-              </button>
-            )}
-            {/* Mobile Conversation View - shown when thread is selected on mobile */}
-            {isMobile && conversationThread ? (
-              <ThreadConversationView
-                thread={conversationThread}
-                emails={conversationEmails}
-                isLoading={isLoadingConversation}
-                onBack={handleMobileBack}
-                onReply={handleConversationReply}
-                onReplyAll={handleConversationReplyAll}
-                onForward={handleConversationForward}
-                onDownloadAttachment={handleDownloadAttachment}
-                onMarkAsRead={async (emailId, read) => {
-                  if (client) {
-                    await markAsRead(client, emailId, read);
+                  onRestoreToInbox={
+                    mailboxes.find(m => m.id === selectedMailbox)?.role === 'trash'
+                      ? async () => {
+                          const inboxMailboxId = mailboxes.find(m => m.role === 'inbox')?.id;
+                          if (client && inboxMailboxId) {
+                            for (const email of conversationEmails) {
+                              await moveToMailbox(client, email.id, inboxMailboxId);
+                            }
+                            setConversationThread(null);
+                            setConversationEmails([]);
+                          }
+                        }
+                      : undefined
                   }
-                }}
-              />
-            ) : (
-              <>
+                />
+              ) : (
                 <ErrorBoundary fallback={EmailViewerErrorFallback}>
                   <EmailViewer
                     email={selectedEmail}
@@ -2489,9 +2593,8 @@ export default function Home() {
                     className={isMobile ? "flex-1" : undefined}
                   />
                 </ErrorBoundary>
+              )}
               </>
-            )}
-            </>
             )}
           </div>
           </div>

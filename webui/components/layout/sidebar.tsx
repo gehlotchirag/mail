@@ -28,7 +28,16 @@ import {
   FlaskConical,
   PlayCircle,
   Loader2,
+  Calendar,
+  BookUser,
+  HardDrive,
+  Pencil,
 } from "lucide-react";
+import { Link, usePathname } from "@/i18n/navigation";
+import { useCalendarStore } from "@/stores/calendar-store";
+import { usePolicyStore } from "@/stores/policy-store";
+import { useConfig } from "@/hooks/use-config";
+import { useThemeStore } from "@/stores/theme-store";
 import { cn, buildMailboxTree, MailboxNode } from "@/lib/utils";
 import { Mailbox } from "@/lib/jmap/types";
 import { useContextMenu } from "@/hooks/use-context-menu";
@@ -69,10 +78,11 @@ interface SidebarProps {
   onImportEmail?: (mailboxId: string) => void;
   onRefreshMailboxes?: () => void;
   className?: string;
+  quota?: { used: number; total: number } | null;
 }
 
-const ROW_PX_BASE = 8;
-const CHEVRON_SLOT = 20;
+const ROW_PX_BASE = 4;
+const CHEVRON_SLOT = 16;
 const INDENT_STEP = 12;
 
 const getIconForMailbox = (role?: string, name?: string, hasChildren?: boolean, isExpanded?: boolean, _isShared?: boolean, id?: string) => {
@@ -117,18 +127,15 @@ function resolveRoleKey(role?: string, name?: string): string | undefined {
   return undefined;
 }
 
-function getIconClass(isSelected: boolean, isVirtual: boolean, colorful: boolean, roleKey?: string) {
+function getIconClass(isSelected: boolean, isVirtual: boolean, _colorful: boolean, _roleKey?: string) {
   const base = "w-4 h-4 flex-shrink-0 transition-colors";
   if (isVirtual) return cn(base, "text-muted-foreground");
-  if (colorful && roleKey && ROLE_ICON_COLOR[roleKey]) {
-    return cn(base, ROLE_ICON_COLOR[roleKey]);
-  }
-  return cn(base, isSelected ? "text-foreground" : "text-foreground/80");
+  return cn(base, isSelected ? "text-primary" : "text-muted-foreground");
 }
 
 function SidebarRowCounts({
   unread,
-  total,
+  total: _total,
   isSelected,
   onUnreadClick,
 }: {
@@ -138,46 +145,35 @@ function SidebarRowCounts({
   onUnreadClick?: () => void;
 }) {
   const unreadCount = unread ?? 0;
-  const totalCount = total ?? 0;
+  if (unreadCount === 0) return null;
 
-  if (unreadCount === 0 && totalCount === 0) return null;
+  const badgeClass = cn(
+    "flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-semibold tabular-nums",
+    isSelected
+      ? "bg-primary text-primary-foreground"
+      : "bg-primary/15 text-primary"
+  );
 
-  const unreadClass = "text-xs font-semibold tabular-nums text-foreground";
-  const totalClass = "text-xs tabular-nums text-muted-foreground";
-
-  const unreadNode = unreadCount > 0 ? (
-    onUnreadClick ? (
+  if (onUnreadClick) {
+    return (
       <span
         role="button"
         tabIndex={0}
-        onClick={(e) => {
-          e.stopPropagation();
-          onUnreadClick();
-        }}
+        onClick={(e) => { e.stopPropagation(); onUnreadClick(); }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            e.stopPropagation();
-            onUnreadClick();
-          }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onUnreadClick(); }
         }}
-        className={cn(unreadClass, "cursor-pointer hover:underline")}
+        className={cn(badgeClass, "cursor-pointer")}
         title={`${unreadCount} unread`}
       >
-        {unreadCount}
+        {unreadCount > 99 ? "99+" : unreadCount}
       </span>
-    ) : (
-      <span className={unreadClass}>{unreadCount}</span>
-    )
-  ) : null;
+    );
+  }
 
   return (
-    <span className="ml-2 flex-shrink-0 flex items-baseline gap-1" title={`${unreadCount} unread / ${totalCount} total`}>
-      {unreadNode}
-      {unreadCount > 0 && totalCount > 0 && (
-        <span className="text-xs text-muted-foreground/60">/</span>
-      )}
-      {totalCount > 0 && <span className={totalClass}>{totalCount}</span>}
+    <span className={badgeClass} title={`${unreadCount} unread`}>
+      {unreadCount > 99 ? "99+" : unreadCount}
     </span>
   );
 }
@@ -230,13 +226,13 @@ function SidebarRow({
       onContextMenu={onContextMenu}
       style={{ paddingBlock: 'var(--density-sidebar-py)' }}
       className={cn(
-        "group w-full flex items-center max-lg:min-h-[44px] text-sm transition-colors duration-150",
-        isCollapsed ? "justify-center px-1" : "pr-2",
+        "group flex items-center max-lg:min-h-[44px] text-sm transition-colors duration-150 rounded-lg",
+        isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
         isVirtual
           ? "text-muted-foreground"
           : isSelected
-            ? "bg-accent text-accent-foreground font-semibold border-l-2 border-primary"
-            : "hover:bg-muted/50 text-foreground border-l-2 border-transparent",
+            ? "bg-primary/10 text-primary font-semibold"
+            : "hover:bg-muted/50 text-muted-foreground",
         isValidDropTarget && "bg-primary/20 ring-2 ring-primary ring-inset",
         isInvalidDropTarget && "bg-destructive/10 ring-2 ring-destructive/30 ring-inset opacity-50"
       )}
@@ -626,7 +622,7 @@ export function Sidebar({
   selectedKeyword = null,
   onMailboxSelect,
   onTagSelect,
-  onCompose: _onCompose,
+  onCompose,
   onSidebarClose,
   onUnreadFilterClick,
   onMarkFolderRead,
@@ -640,10 +636,21 @@ export function Sidebar({
   onImportEmail,
   onRefreshMailboxes,
   className,
+  quota,
 }: SidebarProps) {
   const router = useRouter();
   const { sidebarCollapsed: isCollapsed, toggleSidebarCollapsed } = useUIStore();
   const { primaryIdentity: _primaryIdentity } = useAuthStore();
+  const pathname = usePathname();
+  const { appLogoLightUrl, appLogoDarkUrl, appName } = useConfig();
+  const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
+  const logoUrl = resolvedTheme === 'dark' ? (appLogoDarkUrl || appLogoLightUrl) : (appLogoLightUrl || appLogoDarkUrl);
+  const { supportsCalendar } = useCalendarStore();
+  const client = useAuthStore((s) => s.client);
+  const supportsContacts = client?.supportsContacts() ?? false;
+  const supportsFiles = client?.supportsFiles() ?? false;
+  const filesEnabled = usePolicyStore((s) => s.isFeatureEnabled('filesEnabled'));
+  const isSettingsActive = pathname.startsWith('/settings');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [foldersExpanded, setFoldersExpanded] = useState(() => {
     try {
@@ -840,37 +847,65 @@ export function Sidebar({
     <div
       className={cn(
         "relative flex flex-col h-full border-r transition-all duration-300 overflow-hidden",
-        "bg-secondary border-border",
+        "bg-background border-border",
         "max-lg:w-full",
         isCollapsed ? "lg:w-12" : "lg:w-full",
         className
       )}
     >
-      {/* Header */}
-      <div className={cn("flex items-center border-b border-border", isCollapsed ? "justify-center px-2 py-2" : "gap-1 px-2 py-2")}>
+      {/* Header — logo + app name + collapse toggle */}
+      <div className={cn(
+        "flex items-center border-b border-border flex-shrink-0",
+        isCollapsed ? "justify-center px-2 py-3" : "gap-2 px-3 py-3"
+      )}>
+        {/* Mobile close */}
         <Button
           variant="ghost"
           size="icon"
           onClick={onSidebarClose}
-          className="lg:hidden h-9 w-9 flex-shrink-0"
+          className="lg:hidden h-8 w-8 flex-shrink-0"
           aria-label={t("close")}
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </Button>
 
+        {/* Logo */}
+        {logoUrl && (
+          <img src={logoUrl} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
+        )}
+
+        {/* App name (hidden when collapsed) */}
+        {!isCollapsed && (
+          <span className="text-sm font-semibold text-foreground flex-1 truncate">
+            {appName || "Mail"}
+          </span>
+        )}
+
+        {/* Desktop collapse toggle */}
         <Button
           variant="ghost"
           size="icon"
           onClick={toggleSidebarCollapsed}
-          className="hidden lg:flex h-8 w-8 flex-shrink-0"
+          className="hidden lg:flex h-7 w-7 flex-shrink-0 ml-auto"
           title={isCollapsed ? t("expand_tooltip") : t("collapse_tooltip")}
         >
           {isCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
         </Button>
+      </div>
 
-        {!isCollapsed && !hideAccountSwitcher && (
-          <AccountSwitcher variant="expanded" className="flex-1" />
-        )}
+      {/* Compose button */}
+      <div className={cn("px-3 py-2.5 flex-shrink-0", isCollapsed && "flex justify-center px-1")}>
+        <button
+          onClick={onCompose}
+          className={cn(
+            "flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-full font-medium text-sm transition-colors hover:bg-primary/90 active:bg-primary/80 shadow-sm",
+            isCollapsed ? "w-10 h-10" : "w-full px-4 py-2.5"
+          )}
+          title={isCollapsed ? t("compose") : undefined}
+        >
+          <Pencil className="w-4 h-4 flex-shrink-0" />
+          {!isCollapsed && <span>{t("compose")}</span>}
+        </button>
       </div>
 
       {!isCollapsed && <DemoBanner />}
@@ -913,38 +948,25 @@ export function Sidebar({
         )}
 
         <div onContextMenu={handleFoldersHeaderContextMenu}>
-          <SidebarSectionHeader
-            label={t("folders")}
-            expanded={foldersExpanded}
-            onToggle={toggleFolders}
-            onSettings={openFolderSettings}
-            settingsTitle={t('settings')}
-            isCollapsed={isCollapsed}
-            first={!showUnified}
-          />
-          {((foldersExpanded && !isCollapsed) || isCollapsed) && (
-            <>
-              {mailboxes.length === 0 ? (
-                <div className="px-4 py-2 text-sm text-muted-foreground">
-                  {!isCollapsed && t("loading_mailboxes")}
-                </div>
-              ) : (
-                ownTree.map((node) => (
-                  <MailboxTreeItem
-                    key={node.id}
-                    node={node}
-                    selectedMailbox={selectedKeyword ? "" : selectedMailbox}
-                    expandedFolders={expandedFolders}
-                    onMailboxSelect={onMailboxSelect}
-                    onToggleExpand={handleToggleExpand}
-                    isCollapsed={isCollapsed}
-                    onUnreadFilterClick={onUnreadFilterClick}
-                    colorful={colorfulSidebarIcons}
-                    onContextMenu={handleMailboxContextMenu}
-                  />
-                ))
-              )}
-            </>
+          {mailboxes.length === 0 ? (
+            <div className="px-4 py-2 text-sm text-muted-foreground">
+              {!isCollapsed && t("loading_mailboxes")}
+            </div>
+          ) : (
+            ownTree.map((node) => (
+              <MailboxTreeItem
+                key={node.id}
+                node={node}
+                selectedMailbox={selectedKeyword ? "" : selectedMailbox}
+                expandedFolders={expandedFolders}
+                onMailboxSelect={onMailboxSelect}
+                onToggleExpand={handleToggleExpand}
+                isCollapsed={isCollapsed}
+                onUnreadFilterClick={onUnreadFilterClick}
+                colorful={colorfulSidebarIcons}
+                onContextMenu={handleMailboxContextMenu}
+              />
+            ))
           )}
         </div>
 
@@ -992,6 +1014,87 @@ export function Sidebar({
           </div>
         )}
 
+        {/* App navigation: Calendar, Contacts, Files — above labels */}
+        {(supportsCalendar || supportsContacts || (supportsFiles && filesEnabled)) && (
+          <div className="mt-1">
+            {supportsCalendar && (() => {
+              const isActive = pathname === '/calendar' || pathname.startsWith('/calendar/');
+              return (
+                <Link
+                  href="/calendar"
+                  style={{ paddingBlock: 'var(--density-sidebar-py)' }}
+                  className={cn(
+                    "flex items-center text-sm transition-colors duration-150 rounded-lg",
+                    isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
+                    isActive
+                      ? "bg-primary/10 text-primary font-semibold"
+                      : "hover:bg-muted/50 text-muted-foreground",
+                  )}
+                  title={isCollapsed ? t("calendar") : undefined}
+                >
+                  {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
+                  <span className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
+                      <Calendar className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                    </span>
+                    {!isCollapsed && <span className="flex-1 truncate">{t("calendar")}</span>}
+                  </span>
+                </Link>
+              );
+            })()}
+            {supportsContacts && (() => {
+              const isActive = pathname === '/contacts' || pathname.startsWith('/contacts/');
+              return (
+                <Link
+                  href="/contacts"
+                  style={{ paddingBlock: 'var(--density-sidebar-py)' }}
+                  className={cn(
+                    "flex items-center text-sm transition-colors duration-150 rounded-lg",
+                    isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
+                    isActive
+                      ? "bg-primary/10 text-primary font-semibold"
+                      : "hover:bg-muted/50 text-muted-foreground",
+                  )}
+                  title={isCollapsed ? t("contacts") : undefined}
+                >
+                  {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
+                  <span className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
+                      <BookUser className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                    </span>
+                    {!isCollapsed && <span className="flex-1 truncate">{t("contacts")}</span>}
+                  </span>
+                </Link>
+              );
+            })()}
+            {supportsFiles && filesEnabled && (() => {
+              const isActive = pathname === '/files' || pathname.startsWith('/files/');
+              return (
+                <Link
+                  href="/files"
+                  style={{ paddingBlock: 'var(--density-sidebar-py)' }}
+                  className={cn(
+                    "flex items-center text-sm transition-colors duration-150 rounded-lg",
+                    isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
+                    isActive
+                      ? "bg-primary/10 text-primary font-semibold"
+                      : "hover:bg-muted/50 text-muted-foreground",
+                  )}
+                  title={isCollapsed ? t("files") : undefined}
+                >
+                  {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
+                  <span className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
+                      <HardDrive className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                    </span>
+                    {!isCollapsed && <span className="flex-1 truncate">{t("files")}</span>}
+                  </span>
+                </Link>
+              );
+            })()}
+          </div>
+        )}
+
         {emailKeywords.length > 0 && (
           <div data-tour="keyword-tags">
             <SidebarSectionHeader
@@ -1023,6 +1126,66 @@ export function Sidebar({
 
         {!isCollapsed && <PluginSlot name="sidebar-widget" className="border-t border-border" />}
       </div>
+
+      {!isCollapsed && quota !== null && quota !== undefined && quota.used > 0 && (() => {
+        const usedGB = (quota.used / 1073741824).toFixed(1);
+        const hasLimit = quota.total > 0;
+        const totalGB = hasLimit ? (quota.total / 1073741824).toFixed(1) : null;
+        const pct = hasLimit ? Math.min(100, (quota.used / quota.total) * 100) : 0;
+        const barColor = pct > 90 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-green-500";
+        return (
+          <div className="px-3 py-2.5 flex-shrink-0">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-muted-foreground">{t("storage")}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {totalGB ? `${usedGB} / ${totalGB} GB` : `${usedGB} GB used`}
+              </span>
+            </div>
+            {hasLimit && (
+              <div className="w-full bg-muted rounded-full h-1.5">
+                <div
+                  className={cn("h-1.5 rounded-full transition-all", barColor)}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Settings row at bottom — only shown standalone when the account switcher (which now
+          hosts a Settings entry of its own) is hidden */}
+      {hideAccountSwitcher && (
+        <div className={cn("flex-shrink-0", isCollapsed ? "flex justify-center py-1.5" : "px-2 py-1.5")}>
+          <Link
+            href="/settings"
+            className={cn(
+              "flex items-center gap-2 rounded-lg text-sm transition-colors duration-150",
+              isCollapsed
+                ? "w-10 h-10 justify-center"
+                : "w-full px-2 py-1.5",
+              isSettingsActive
+                ? "bg-primary/10 text-primary font-medium"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+            title={isCollapsed ? t("settings") : undefined}
+          >
+            <Settings className="w-4 h-4 flex-shrink-0" />
+            {!isCollapsed && <span>{t("settings")}</span>}
+          </Link>
+        </div>
+      )}
+
+      {/* Account / profile section — avatar + name + email for switching */}
+      {!hideAccountSwitcher && (
+        <div className={cn("flex-shrink-0", isCollapsed ? "flex justify-center py-1.5 px-1" : "px-2 py-2")}>
+          <AccountSwitcher
+            variant={isCollapsed ? "rail" : "expanded"}
+            popoverDirection="up"
+            className={isCollapsed ? undefined : "w-full"}
+          />
+        </div>
+      )}
 
       <MailboxContextMenu
         target={mailboxContextMenu.data}

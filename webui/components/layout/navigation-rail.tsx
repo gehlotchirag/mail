@@ -77,7 +77,8 @@ function StorageQuotaCircle({ quota, usagePercent }: { quota: { used: number; to
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open, updatePosition]);
 
-  const free = quota.total - quota.used;
+  const hasLimit = quota.total > 0;
+  const free = hasLimit ? quota.total - quota.used : null;
   const strokeColor = usagePercent > 90
     ? "stroke-destructive"
     : usagePercent > 70
@@ -115,31 +116,39 @@ function StorageQuotaCircle({ quota, usagePercent }: { quota: { used: number; to
               <span className="text-muted-foreground">{t("storage_used")}</span>
               <span className="font-medium tabular-nums">{formatFileSize(quota.used)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t("storage_free")}</span>
-              <span className="font-medium tabular-nums">{formatFileSize(free)}</span>
-            </div>
+            {hasLimit && free !== null && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("storage_free")}</span>
+                <span className="font-medium tabular-nums">{formatFileSize(free)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">{t("storage_total")}</span>
-              <span className="font-medium tabular-nums">{formatFileSize(quota.total)}</span>
+              <span className="font-medium tabular-nums">
+                {hasLimit ? formatFileSize(quota.total) : "Unlimited"}
+              </span>
             </div>
           </div>
-          <div className="mt-2.5 w-full bg-muted rounded-full h-1.5">
-            <div
-              className={cn(
-                "h-1.5 rounded-full transition-all",
-                usagePercent > 90
-                  ? "bg-destructive"
-                  : usagePercent > 70
-                    ? "bg-warning"
-                    : "bg-success"
-              )}
-              style={{ width: `${usagePercent}%` }}
-            />
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-1 tabular-nums">
-            {Math.round(usagePercent)}% {t("storage_used").toLowerCase()}
-          </p>
+          {hasLimit && (
+            <>
+              <div className="mt-2.5 w-full bg-muted rounded-full h-1.5">
+                <div
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    usagePercent > 90
+                      ? "bg-destructive"
+                      : usagePercent > 70
+                        ? "bg-warning"
+                        : "bg-success"
+                  )}
+                  style={{ width: `${usagePercent}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1 tabular-nums">
+                {Math.round(usagePercent)}% {t("storage_used").toLowerCase()}
+              </p>
+            </>
+          )}
         </div>,
         document.body
       )}
@@ -285,23 +294,21 @@ export function NavigationRail({
               href={item.href}
               onClick={activeAppId ? () => onCloseInlineApp?.() : undefined}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 py-2 px-1 min-h-[44px] grow shrink-0 basis-[64px]",
+                "flex flex-col items-center justify-center gap-0.5 py-2 px-1 min-h-[56px] grow shrink-0 basis-[64px]",
                 "transition-colors duration-150",
-                isActive
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
               aria-current={isActive ? "page" : undefined}
             >
-              <div className="relative">
+              <div className={cn(
+                "relative flex items-center justify-center w-14 h-7 rounded-full transition-colors",
+                isActive ? "bg-primary/15" : "bg-transparent"
+              )}>
                 <Icon className="w-5 h-5" />
                 {item.badge != null && item.badge > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 flex items-center justify-center min-w-[16px] h-4 text-[10px] font-bold rounded-full bg-red-500 text-white px-1">
+                  <span className="absolute -top-1.5 -right-1 flex items-center justify-center min-w-[16px] h-4 text-[10px] font-bold rounded-full bg-red-500 text-white px-1">
                     {item.badge > 99 ? "99+" : item.badge}
                   </span>
-                )}
-                {isActive && (
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-primary" />
                 )}
               </div>
               <span className="text-[10px] font-medium leading-tight truncate max-w-full">{t(item.labelKey)}</span>
@@ -326,18 +333,16 @@ export function NavigationRail({
                 }
               }}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 py-2 px-1 min-h-[44px] grow shrink-0 basis-[64px]",
+                "flex flex-col items-center justify-center gap-0.5 py-2 px-1 min-h-[56px] grow shrink-0 basis-[64px]",
                 "transition-colors duration-150",
-                isActive
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <div className="relative">
+              <div className={cn(
+                "relative flex items-center justify-center w-14 h-7 rounded-full transition-colors",
+                isActive ? "bg-primary/15" : "bg-transparent"
+              )}>
                 {AppIcon ? <AppIcon className="w-5 h-5" /> : null}
-                {isActive && (
-                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full bg-primary" />
-                )}
               </div>
               <span className="text-[10px] font-medium leading-tight truncate max-w-full">{app.name}</span>
             </button>
@@ -396,6 +401,7 @@ export function NavigationRail({
   }
 
   const quotaUsagePercent = quota && quota.total > 0 ? Math.min((quota.used / quota.total) * 100, 100) : 0;
+  const hasQuota = quota !== null && quota !== undefined && quota.used > 0;
 
   return (
     <div
@@ -602,7 +608,7 @@ export function NavigationRail({
           </>
         )}
 
-        {quota && quota.total > 0 && (
+        {hasQuota && quota && (
           <div data-tour="storage-quota">
             <StorageQuotaCircle quota={quota} usagePercent={quotaUsagePercent} />
           </div>

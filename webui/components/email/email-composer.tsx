@@ -104,6 +104,7 @@ interface EmailComposerProps {
     inReplyTo?: string[];
     references?: string[];
   };
+  threadHistory?: string;
 }
 
 type ComposerAttachment = {
@@ -159,7 +160,8 @@ export function EmailComposer({
   initialDraftText,
   initialData,
   mode = 'compose',
-  replyTo
+  replyTo,
+  threadHistory,
 }: EmailComposerProps) {
   const t = useTranslations('email_composer');
   const tCommon = useTranslations('common');
@@ -298,6 +300,8 @@ export function EmailComposer({
   const recognitionRef = useRef<any>(null);
   // Avoids stale-closure issues when auto-submitting from recognition.onend
   const finalTranscriptRef = useRef<string>('');
+  // Updated each render so callbacks always read the current signature
+  const sigHtmlRef = useRef<string>('');
 
   const handleAiDraftWithPrompt = useCallback(async (promptText: string) => {
     const trimmed = promptText.trim();
@@ -330,7 +334,8 @@ export function EmailComposer({
       } else if (variants?.length === 1) {
         const { subject: aiSubject, text } = variants[0];
         if (text) {
-          setBody(plainTextMode ? text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : text);
+          const sig = sigHtmlRef.current;
+          setBody(plainTextMode ? text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : text + sig);
           if (aiSubject) setSubject(aiSubject);
           setAiPrompt('');
         }
@@ -349,7 +354,8 @@ export function EmailComposer({
 
   const applyVariant = useCallback((v: { subject: string; text: string }) => {
     if (v.text) {
-      setBody(plainTextMode ? v.text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : v.text);
+      const sig = sigHtmlRef.current;
+      setBody(plainTextMode ? v.text.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : v.text + sig);
       if (v.subject) setSubject(v.subject);
     }
     setAiVariants(null);
@@ -371,42 +377,54 @@ export function EmailComposer({
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    const startRecognition = () => {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
-    // Seed from current prompt value; updates via ref to avoid stale closure
-    finalTranscriptRef.current = aiPrompt;
+      // Seed from current prompt value; updates via ref to avoid stale closure
+      finalTranscriptRef.current = aiPrompt;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscriptRef.current += result[0].transcript;
-        } else {
-          interim = result[0].transcript;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onresult = (event: any) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalTranscriptRef.current += result[0].transcript;
+          } else {
+            interim = result[0].transcript;
+          }
         }
-      }
-      setAiPrompt(finalTranscriptRef.current + interim);
+        setAiPrompt(finalTranscriptRef.current + interim);
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onerror = (event: any) => {
+        setIsRecording(false);
+        if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+          toast.error('Microphone access denied. Click the lock icon in your browser address bar → Site Settings → Microphone → Allow.');
+        } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          toast.error('Microphone error: ' + event.error + '. Please try again.');
+        }
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+        const final = finalTranscriptRef.current.trim();
+        setAiPrompt(final);
+        if (final) handleAiDraftWithPrompt(final);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsRecording(true);
     };
 
-    recognition.onerror = () => {
-      setIsRecording(false);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-      const final = finalTranscriptRef.current.trim();
-      setAiPrompt(final);
-      if (final) handleAiDraftWithPrompt(final);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsRecording(true);
+    // SpeechRecognition handles its own permission dialog — just start it.
+    // onerror fires if the user denies or if recognition is unavailable.
+    startRecognition();
   }, [isRecording, aiPrompt, handleAiDraftWithPrompt]);
   const [showCc, setShowCc] = useState(initialData?.showCc ?? !!getInitialCc());
   const [showBcc, setShowBcc] = useState(initialData?.showBcc ?? false);
@@ -442,6 +460,7 @@ export function EmailComposer({
   const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
   const [showAllAttachments, setShowAllAttachments] = useState(false);
+  const [threadHistoryVisible, setThreadHistoryVisible] = useState(false);
   const [smimeSign_, setSmimeSign] = useState(false);
   const [smimeEncrypt_, setSmimeEncrypt] = useState(false);
   const [smimePassphrasePrompt, setSmimePassphrasePrompt] = useState<{ keyId: string; resolve: (passphrase: string) => void; reject: () => void } | null>(null);
@@ -478,6 +497,7 @@ export function EmailComposer({
   const signatureIdentity = (currentIdentity?.htmlSignature || currentIdentity?.textSignature)
     ? currentIdentity
     : primaryIdentity;
+  sigHtmlRef.current = buildEmbeddedSignatureHtml(signatureIdentity, { embed: true, separator: true });
 
   // Hold the TipTap editor instance so we can swap the embedded signature
   // when the user switches identity in "above quote" mode without rebuilding
@@ -1268,7 +1288,7 @@ export function EmailComposer({
     const rewritten = plainTextMode ? null : rewriteInlineImages(body);
     const finalHtmlBody = plainTextMode
       ? undefined
-      : `<div>${rewritten!.html}</div>${buildSignatureHtml()}`;
+      : `<div>${rewritten!.html}</div>${buildSignatureHtml()}${threadHistory ? `<div class="gmail_quote" style="margin:0 0 0 0.8ex;border-left:2px solid #ccc;padding-left:1ex">${threadHistory}</div>` : ''}`;
     const inlineAttachments = rewritten?.attachments ?? [];
 
     try {
@@ -1856,6 +1876,7 @@ export function EmailComposer({
             dangerouslySetInnerHTML={{ __html: `${signatureSeparatorEnabled ? '<div>-- </div>' : ''}${composerSignatureHtml}` }}
           />
         ) : null}
+
       </div>
 
         {/* Attachments */}

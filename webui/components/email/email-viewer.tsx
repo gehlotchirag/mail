@@ -63,6 +63,7 @@ import {
   EditIcon,
   PlayCircle,
   PenSquare,
+  Undo2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { Attachment as PostalMimeAttachment } from 'postal-mime';
@@ -902,8 +903,10 @@ export function EmailViewer({
   const timeFormat = useSettingsStore((state) => state.timeFormat);
   const isFocusedMailLayout = mailLayout === 'focus';
 
-  // Detect if current mailbox is Junk folder
+  // Detect if current mailbox is Junk or Trash folder
   const isInJunkFolder = currentMailboxRole === 'junk';
+  const isInTrash = currentMailboxRole === 'trash';
+  const inboxMailboxId = mailboxes?.find(m => m.role === 'inbox')?.id;
 
   // Detect if the email is a draft
   const isDraft = email?.keywords?.['$draft'] === true;
@@ -3290,19 +3293,34 @@ export function EmailViewer({
 
       {/* Right: Organize actions - order: archive, delete, move, tag, spam, read state, print, view source */}
       <div className="flex items-center gap-0 sm:gap-0.5">
-        {/* Archive */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onArchive}
-          data-overflow-item
-          data-overflow-priority="4"
-          className="flex-col items-center gap-0.5 h-auto py-1.5 px-2 sm:flex-row sm:h-8 sm:gap-1.5 sm:py-0"
-          title={t('tooltips.archive')}
-        >
-          <Archive className="w-4 h-4" />
-          {showToolbarLabels && <span className="text-[10px] leading-tight sm:text-sm">{t('archive')}</span>}
-        </Button>
+        {/* Restore (trash only) or Archive */}
+        {isInTrash && inboxMailboxId && onMoveToMailbox ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onMoveToMailbox(inboxMailboxId)}
+            data-overflow-item
+            data-overflow-priority="4"
+            className="flex-col items-center gap-0.5 h-auto py-1.5 px-2 sm:flex-row sm:h-8 sm:gap-1.5 sm:py-0"
+            title="Restore to Inbox"
+          >
+            <Undo2 className="w-4 h-4" />
+            {showToolbarLabels && <span className="text-[10px] leading-tight sm:text-sm">Restore</span>}
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onArchive}
+            data-overflow-item
+            data-overflow-priority="4"
+            className="flex-col items-center gap-0.5 h-auto py-1.5 px-2 sm:flex-row sm:h-8 sm:gap-1.5 sm:py-0"
+            title={t('tooltips.archive')}
+          >
+            <Archive className="w-4 h-4" />
+            {showToolbarLabels && <span className="text-[10px] leading-tight sm:text-sm">{t('archive')}</span>}
+          </Button>
+        )}
         {/* Delete */}
         <Button
           variant="ghost"
@@ -3753,6 +3771,7 @@ export function EmailViewer({
     <div
       key={email.id}
       data-tour="email-viewer"
+      data-evolve-viewer
       className={cn("flex-1 flex flex-row h-full bg-background overflow-hidden animate-in fade-in duration-300 relative", className)}
     >
     {/* Mobile More menu sidebar overlay */}

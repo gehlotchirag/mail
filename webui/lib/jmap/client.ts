@@ -130,6 +130,15 @@ const ADDRESS_BOOK_PROPERTIES = [
   "myRights",
 ] as const;
 
+// Replace Stalwart's default calendar names with neutral equivalents so the
+// rebranded "Inbox" app identity is not undermined by upstream default strings.
+function normalizeCalendarName<T extends { name?: string }>(cal: T): T {
+  if (!cal.name) return cal;
+  // "Stalwart calendar" or "Stalwart" → "Personal"
+  const normalized = cal.name.replace(/\bstalwart\s+calendar\b/i, 'Personal').replace(/\bstalwart\b/i, 'Personal');
+  return normalized === cal.name ? cal : { ...cal, name: normalized };
+}
+
 /**
  * Detect whether a calendar object returned by the server is actually a
  * task (VTODO) rather than an event (VEVENT).  CalDAV clients like
@@ -701,7 +710,7 @@ export class JMAPClient implements IJMAPClient {
     }
 
     const requestBody = {
-      using: using || ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+      using: using || ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", ...(this.capabilities?.["urn:ietf:params:jmap:submission"] !== undefined ? ["urn:ietf:params:jmap:submission"] : [])],
       methodCalls,
     };
 
@@ -733,20 +742,25 @@ export class JMAPClient implements IJMAPClient {
 
   async getQuota(): Promise<{ used: number; total: number } | null> {
     try {
+      // Must include the quota capability in the using array or Stalwart returns unknownMethod
+      const using = [
+        "urn:ietf:params:jmap:core",
+        "urn:ietf:params:jmap:mail",
+        "urn:ietf:params:jmap:quota",
+      ];
       const response = await this.request([
-        ["Quota/get", {
-          accountId: this.accountId,
-        }, "0"]
-      ]);
+        ["Quota/get", { accountId: this.accountId }, "0"]
+      ], using);
 
       if (response.methodResponses?.[0]?.[0] === "Quota/get") {
         const quotas = (response.methodResponses[0][1].list || []) as JMAPQuota[];
-        const mailQuota = quotas.find((q) => q.resourceType === "mail" || q.scope === "mail");
+        // Pick the first quota that has actual usage — Stalwart may return multiple scopes
+        const mailQuota = quotas.find((q) => q.resourceType === "mail" || q.scope === "mail") ?? quotas[0];
 
         if (mailQuota) {
           return {
             used: mailQuota.used ?? 0,
-            total: mailQuota.hardLimit ?? mailQuota.limit ?? 0
+            total: mailQuota.hardLimit ?? mailQuota.limit ?? 0,
           };
         }
       }
@@ -1778,8 +1792,18 @@ export class JMAPClient implements IJMAPClient {
           namespaceMailboxIds(emails, accountId);
         }
 
-        return emails.sort((a: Email, b: Email) =>
-          new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+        // Deduplicate by id — the server may return the same email twice
+        // if it appears in multiple mailboxes or due to draft accumulation.
+        const seen = new Set<string>();
+        const unique = (emails as Email[]).filter(e => {
+          if (seen.has(e.id)) return false;
+          seen.add(e.id);
+          return true;
+        });
+
+        // Sort oldest first so thread views show chronological order (Gmail style)
+        return unique.sort((a: Email, b: Email) =>
+          new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime()
         );
       }
 
@@ -3667,7 +3691,7 @@ export class JMAPClient implements IJMAPClient {
       ], this.calendarUsing());
 
       if (response.methodResponses?.[0]?.[0] === "Calendar/get") {
-        return (response.methodResponses[0][1].list || []) as Calendar[];
+        return ((response.methodResponses[0][1].list || []) as Calendar[]).map(normalizeCalendarName);
       }
       return [];
     } catch (error) {
@@ -3694,7 +3718,7 @@ export class JMAPClient implements IJMAPClient {
           if (response.methodResponses?.[0]?.[0] === "Calendar/get") {
             const rawCalendars = (response.methodResponses[0][1].list || []) as Calendar[];
             const calendars = rawCalendars.map((cal) => ({
-              ...cal,
+              ...normalizeCalendarName(cal),
               id: isPrimary ? cal.id : `${accountId}:${cal.id}`,
               originalId: cal.id,
               accountId,

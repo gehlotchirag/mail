@@ -177,7 +177,10 @@ export const useContactStore = create<ContactStore>()(
 
       fetchAddressBooks: async (client) => {
         try {
-          const addressBooks = await client.getAllAddressBooks();
+          const raw = await client.getAllAddressBooks();
+          const addressBooks = raw.map((b) =>
+            /^stalwart/i.test(b.name) ? { ...b, name: 'Personal' } : b
+          );
           set({ addressBooks });
         } catch (error) {
           console.error('Failed to fetch address books:', error);

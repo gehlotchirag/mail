@@ -39,6 +39,7 @@ import { ICalImportModal } from "@/components/calendar/ical-import-modal";
 import { ICalSubscriptionModal } from "@/components/calendar/ical-subscription-modal";
 import { RecurrenceScopeDialog, type RecurrenceEditScope } from "@/components/calendar/recurrence-scope-dialog";
 import { NavigationRail } from "@/components/layout/navigation-rail";
+import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SidebarAppsModal } from "@/components/layout/sidebar-apps-modal";
 import { InlineAppView } from "@/components/layout/inline-app-view";
 import { useSidebarApps } from "@/hooks/use-sidebar-apps";
@@ -1084,20 +1085,7 @@ export default function CalendarPage() {
   return (
     <div className={cn("flex h-dvh bg-background overflow-hidden", isMobile && "flex-col")}>
       {/* Left Navigation Rail */}
-      {!isMobile && (
-        <div className="w-14 bg-secondary flex flex-col flex-shrink-0" style={{ borderRight: '1px solid rgba(128, 128, 128, 0.3)' }}>
-          <NavigationRail
-            collapsed
-            quota={quota}
-            isPushConnected={isPushConnected}
-            onLogout={logout}
-            onManageApps={handleManageApps}
-            onInlineApp={handleInlineApp}
-            onCloseInlineApp={closeInlineApp}
-            activeAppId={inlineApp?.id ?? null}
-          />
-        </div>
-      )}
+      {!isMobile && <AppSidebar />}
 
       {inlineApp && (
         <InlineAppView apps={loadedApps} activeAppId={inlineApp!.id} onClose={closeInlineApp} className="flex-1" />

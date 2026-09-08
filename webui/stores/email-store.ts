@@ -559,7 +559,28 @@ export const useEmailStore = create<EmailStore>((set, get) => ({
   fetchQuota: async (client) => {
     try {
       const quota = await client.getQuota();
-      set({ quota });
+      if (quota !== null) {
+        set({ quota });
+        return;
+      }
+      // JMAP Quota/get returned null (no quotas configured in Stalwart).
+      // Fall back to the server-side management API which reads the user's
+      // own principal data from the Stalwart admin port.
+      try {
+        const resp = await fetch('/api/account/storage');
+        if (resp.ok) {
+          const data = await resp.json() as { used: number; total: number };
+          // Only use the result if there's meaningful data — zeros mean the
+          // admin JMAP is not yet configured, so keep quota null (hides display)
+          if (typeof data.used === 'number' && (data.used > 0 || data.total > 0)) {
+            set({ quota: { used: data.used, total: data.total ?? 0 } });
+            return;
+          }
+        }
+      } catch {
+        // Management API unavailable — quota stays null
+      }
+      set({ quota: null });
     } catch {
       // Don't set error state as quota is optional
     }

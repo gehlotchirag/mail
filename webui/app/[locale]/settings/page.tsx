@@ -559,7 +559,6 @@ export default function SettingsPage() {
     // General
     { id: 'account', label: t('tabs.account'), icon: tabIcons.account, group: 'general' },
     { id: 'language', label: t('tabs.language'), icon: tabIcons.language, group: 'general' },
-    { id: 'notifications', label: t('tabs.notifications'), icon: tabIcons.notifications, group: 'general' },
 
     // Appearance
     { id: 'appearance', label: t('tabs.appearance'), icon: tabIcons.appearance, group: 'appearance' },
@@ -587,7 +586,6 @@ export default function SettingsPage() {
     ...(isFeatureEnabled('sidebarAppsEnabled') ? [{ id: 'sidebar_apps' as Tab, label: t('tabs.sidebar_apps'), icon: tabIcons.sidebar_apps, group: 'apps' as TabGroup }] : []),
 
     // Advanced
-    { id: 'about_data', label: t('tabs.about_data'), icon: tabIcons.about_data, group: 'advanced' },
     ...(isFeatureEnabled('themesEnabled') ? [{ id: 'themes' as Tab, label: 'Themes', icon: tabIcons.themes, group: 'advanced' as TabGroup }] : []),
     ...(isFeatureEnabled('pluginsEnabled') ? [{ id: 'plugins' as Tab, label: 'Plugins', icon: tabIcons.plugins, group: 'advanced' as TabGroup }] : []),
     ...(isFeatureEnabled('debugModeEnabled') ? [{ id: 'debug' as Tab, label: t('tabs.debug'), icon: tabIcons.debug, group: 'advanced' as TabGroup }] : []),
@@ -649,7 +647,6 @@ export default function SettingsPage() {
     <>
       {effectiveActiveTab === 'account' && <AccountSettings />}
       {effectiveActiveTab === 'language' && <LanguageSettings />}
-      {effectiveActiveTab === 'notifications' && <NotificationSettings />}
       {effectiveActiveTab === 'appearance' && <AppearanceSettings />}
       {effectiveActiveTab === 'layout' && <LayoutSettings />}
       {effectiveActiveTab === 'reading' && <ReadingSettings />}
@@ -667,7 +664,6 @@ export default function SettingsPage() {
       {effectiveActiveTab === 'contacts' && <><ContactsSettings /><div className="mt-8"><AddressBookManagementSettings /></div></>}
       {effectiveActiveTab === 'files' && <FilesSettingsComponent />}
       {effectiveActiveTab === 'sidebar_apps' && <SidebarAppsSettings />}
-      {effectiveActiveTab === 'about_data' && <AboutDataSettings />}
       {effectiveActiveTab === 'themes' && <ThemesSettings />}
       {effectiveActiveTab === 'plugins' && <PluginsSettings />}
       {effectiveActiveTab === 'debug' && <DebugSettings />}

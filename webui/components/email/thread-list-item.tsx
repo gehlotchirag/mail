@@ -129,24 +129,21 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
         {...dragHandlers}
         {...longPressHandlers}
         className={cn(
-          "relative group cursor-pointer select-none transition-shadow duration-200 border-b border-border overflow-hidden",
+          "relative group cursor-pointer select-none transition-all duration-200 mx-2 rounded-xl overflow-hidden border-b border-border/40",
           resolvedColorTag ? resolvedColorTag : (
             selected
-              ? "bg-accent"
-              : "bg-background"
+              ? "bg-primary/10"
+              : isUnread ? "bg-primary/5" : "hover:bg-muted/60"
           ),
           selected && !resolvedColorTag && "shadow-sm",
-          !resolvedColorTag && !selected && !isChecked && "hover:bg-muted hover:shadow-sm",
-          !resolvedColorTag && (selected || isChecked) && "hover:bg-accent hover:shadow-sm",
+          !resolvedColorTag && (selected || isChecked) && "hover:bg-primary/10",
           resolvedColorTag && "hover:brightness-95 dark:hover:brightness-110",
-          isUnread && !resolvedColorTag && "bg-accent/30",
-          isChecked && "ring-2 ring-primary/20 bg-accent/40",
+          isChecked && "ring-2 ring-primary/20 bg-primary/10",
           isDragging && "opacity-50 scale-[0.98] ring-2 ring-primary/30",
           isPressed && "bg-muted scale-[0.98] ring-2 ring-primary/30"
         )}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
-        style={{ minHeight: isFocusedMailLayout ? undefined : 'var(--list-item-height)' }}
       >
         <div
           className={cn('px-3', isFocusedMailLayout ? 'flex items-center' : 'flex items-start')}
@@ -242,45 +239,63 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                {/* Row 1: Sender + indicators + time + star */}
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
                     {isUnifiedView && email.accountId && accountColor && (
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: accountColor }}
-                        title={email.accountLabel}
-                      />
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: accountColor }} title={email.accountLabel} />
                     )}
                     <span className={cn(
                       "truncate text-sm",
-                      isUnread
-                        ? "font-bold text-foreground"
-                        : "font-medium text-muted-foreground"
+                      isUnread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
                     )}>
                       {sender?.name || sender?.email || "Unknown"}
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      {isStarred && (
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      )}
-                      {isAnswered && !isForwarded && (
-                        <Reply className="w-3.5 h-3.5 text-muted-foreground" />
-                      )}
-                      {isForwarded && !isAnswered && (
-                        <Forward className="w-3.5 h-3.5 text-muted-foreground" />
-                      )}
-                      {isAnswered && isForwarded && (
-                        <>
-                          <Reply className="w-3.5 h-3.5 text-muted-foreground" />
-                          <Forward className="w-3.5 h-3.5 text-muted-foreground" />
-                        </>
-                      )}
-                      {email.hasAttachment && (
-                        <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                      )}
-                    </div>
+                    {isAnswered && !isForwarded && <Reply className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
+                    {isForwarded && !isAnswered && <Forward className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
+                    {isAnswered && isForwarded && (
+                      <>
+                        <Reply className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+                        <Forward className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+                      </>
+                    )}
+                    {email.hasAttachment && <Paperclip className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className={cn(
+                      "text-xs tabular-nums",
+                      isUnread ? "text-primary font-semibold" : "text-muted-foreground"
+                    )}>
+                      {formatDate(email.receivedAt)}
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleStar?.(); }}
+                      className="p-0.5 rounded transition-all"
+                      style={{ opacity: isStarred ? 1 : undefined }}
+                    >
+                      <Star className={cn("w-3.5 h-3.5 transition-colors", isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30 opacity-0 group-hover:opacity-100 hover:text-amber-400")} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Subject */}
+                <div className={cn(
+                  "line-clamp-1 text-sm",
+                  isUnread ? "font-semibold text-foreground" : "font-normal text-foreground/85"
+                )}>
+                  {email.subject || "(no subject)"}
+                </div>
+
+                {/* Row 3: Preview — 1 line */}
+                {showPreview && trimmedPreview && (
+                  <p className="text-xs text-muted-foreground/70 line-clamp-1 mt-0.5">
+                    {trimmedPreview}
+                  </p>
+                )}
+
+                {/* Keyword tags */}
+                {resolvedKeywordDefs.length > 0 && (
+                  <div className="flex items-center gap-1 mt-1">
                     {resolvedKeywordDefs.map((kd) => (
                       <span key={kd.id} className={cn(
                         "inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full",
@@ -290,35 +305,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                         {kd.label}
                       </span>
                     ))}
-                    <span className={cn(
-                      "text-xs tabular-nums",
-                      isUnread
-                        ? "text-foreground font-semibold"
-                        : "text-muted-foreground"
-                    )}>
-                      {formatDate(email.receivedAt)}
-                    </span>
                   </div>
-                </div>
-
-                <div className={cn(
-                  "mb-1 line-clamp-1 text-sm",
-                  isUnread
-                    ? "font-semibold text-foreground"
-                    : "font-normal text-foreground/90"
-                )}>
-                  {email.subject || "(no subject)"}
-                </div>
-
-                {showPreview && density !== 'extra-compact' && density !== 'compact' && (
-                  <p className={cn(
-                    "text-sm leading-relaxed line-clamp-2",
-                    isUnread
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/80"
-                  )}>
-                    {trimmedPreview || "No preview available"}
-                  </p>
                 )}
               </>
             )}
@@ -461,7 +448,8 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
         return;
       }
 
-      if (isMobile && onOpenConversation) {
+
+      if (onOpenConversation) {
         onOpenConversation(thread);
         return;
       }
@@ -483,24 +471,22 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
     };
 
     return (
-      <div ref={ref} className={cn("border-b border-border", isThreadDragging && "opacity-50 scale-[0.98] ring-2 ring-primary/30")}>
+      <div ref={ref} className={cn("mx-2 rounded-xl overflow-hidden border-b border-border/40", isThreadDragging && "opacity-50 scale-[0.98] ring-2 ring-primary/30")}>
         <div
           {...dragHandlers}
           {...threadLongPressHandlers}
           className={cn(
-            "relative group cursor-pointer select-none transition-shadow duration-200 overflow-hidden",
+            "relative group cursor-pointer select-none transition-all duration-200",
             colorTag ? colorTag : (
               isSelected
-                ? "bg-accent"
-                : "bg-background"
+                ? "bg-primary/10"
+                : hasUnread ? "bg-primary/5" : "hover:bg-muted/60"
             ),
             isSelected && !colorTag && "shadow-sm",
-            !colorTag && !isSelected && !isChecked && "hover:bg-muted hover:shadow-sm",
-            !colorTag && (isSelected || isChecked) && "hover:bg-accent hover:shadow-sm",
+            !colorTag && (isSelected || isChecked) && "hover:bg-primary/10",
             colorTag && "hover:brightness-95 dark:hover:brightness-110",
-            hasUnread && !colorTag && !isSelected && "bg-accent/30",
-            isExpanded && "border-b border-border/50",
-            isChecked && "ring-2 ring-primary/20 bg-accent/40",
+            isExpanded && "border-b border-border/30",
+            isChecked && "ring-2 ring-primary/20 bg-primary/10",
             isThreadPressed && "bg-muted scale-[0.98] ring-2 ring-primary/30"
           )}
           onClick={handleHeaderClick}
@@ -532,32 +518,6 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
               </button>
             )}
 
-            {!isMobile && !isFocusedMailLayout && (
-              <button
-                data-expand-toggle
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleExpand();
-                }}
-                className={cn(
-                  "p-1 rounded mt-2 flex-shrink-0 transition-all duration-200",
-                  "hover:bg-muted/50 hover:scale-110",
-                  "active:scale-95",
-                  "text-muted-foreground hover:text-foreground"
-                )}
-                aria-expanded={isExpanded}
-                aria-label={t('toggle_thread')}
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isExpanded ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronRight className="w-4 h-4" />
-                )}
-              </button>
-            )}
-
             {hasUnread && (
               <div className="absolute left-1 top-1/2 -translate-y-1/2">
                 <Circle className="w-2 h-2 fill-unread text-unread" />
@@ -565,13 +525,32 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
             )}
 
             {density !== 'extra-compact' && (
-              <Avatar
-                name={avatarPerson?.name}
-                email={avatarPerson?.email}
-                size={isFocusedMailLayout ? "sm" : "md"}
-                className="flex-shrink-0 shadow-sm"
-                disableImages={hideJunkAvatarImages}
-              />
+              <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
+                <Avatar
+                  name={avatarPerson?.name}
+                  email={avatarPerson?.email}
+                  size={isFocusedMailLayout ? "sm" : "md"}
+                  className="shadow-sm"
+                  disableImages={hideJunkAvatarImages}
+                />
+                {!isMobile && !isFocusedMailLayout && (
+                  <button
+                    data-expand-toggle
+                    onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
+                    className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200 active:scale-95 opacity-0 group-hover:opacity-100"
+                    aria-expanded={isExpanded}
+                    aria-label={t('toggle_thread')}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : isExpanded ? (
+                      <ChevronDown className="w-3 h-3" />
+                    ) : (
+                      <ChevronRight className="w-3 h-3" />
+                    )}
+                  </button>
+                )}
+              </div>
             )}
 
             <div className="flex-1 min-w-0">
@@ -637,95 +616,75 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {/* Row 1: Senders + count + indicators + time + star */}
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       {isUnifiedView && latestEmail.accountId && threadAccountColor && (
-                        <span
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: threadAccountColor }}
-                          title={latestEmail.accountLabel}
-                        />
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: threadAccountColor }} title={latestEmail.accountLabel} />
                       )}
                       <span className={cn(
                         "truncate text-sm",
-                        hasUnread
-                          ? "font-bold text-foreground"
-                          : "font-medium text-muted-foreground"
+                        hasUnread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
                       )}>
                         {displayNames.join(", ")}
                       </span>
                       <span
                         className={cn(
                           "flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs rounded-full font-medium",
-                          hasUnread
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
+                          hasUnread ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                         )}
                         title={t('messages_tooltip', { count: emailCount })}
                       >
                         <MessageSquare className="w-3 h-3" />
                         {emailCount}
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        {hasStarred && (
-                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        )}
-                        {hasAnswered && !hasForwarded && (
-                          <Reply className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
-                        {hasForwarded && !hasAnswered && (
-                          <Forward className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
-                        {hasAnswered && hasForwarded && (
-                          <>
-                            <Reply className="w-3.5 h-3.5 text-muted-foreground" />
-                            <Forward className="w-3.5 h-3.5 text-muted-foreground" />
-                          </>
-                        )}
-                        {hasAttachment && (
-                          <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
-                      </div>
+                      {hasAnswered && !hasForwarded && <Reply className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
+                      {hasForwarded && !hasAnswered && <Forward className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
+                      {hasAttachment && <Paperclip className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      {keywordDef && (
-                        <span className={cn(
-                          "inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full",
-                          KEYWORD_PALETTE[keywordDef.color]?.bg || "bg-muted"
-                        )}>
-                          <span className={cn("w-1.5 h-1.5 rounded-full", KEYWORD_PALETTE[keywordDef.color]?.dot || "bg-gray-400")} />
-                          {keywordDef.label}
-                        </span>
-                      )}
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <span className={cn(
                         "text-xs tabular-nums",
-                        hasUnread
-                          ? "text-foreground font-semibold"
-                          : "text-muted-foreground"
+                        hasUnread ? "text-primary font-semibold" : "text-muted-foreground"
                       )}>
                         {formatDate(latestEmail.receivedAt)}
                       </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onToggleStar?.(latestEmail); }}
+                        className="p-0.5 rounded transition-all"
+                        style={{ opacity: hasStarred ? 1 : undefined }}
+                      >
+                        <Star className={cn("w-3.5 h-3.5 transition-colors", hasStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30 opacity-0 group-hover:opacity-100 hover:text-amber-400")} />
+                      </button>
                     </div>
                   </div>
 
+                  {/* Row 2: Subject */}
                   <div className={cn(
-                    "mb-1 line-clamp-1 text-sm",
-                    hasUnread
-                      ? "font-semibold text-foreground"
-                      : "font-normal text-foreground/90"
+                    "line-clamp-1 text-sm",
+                    hasUnread ? "font-semibold text-foreground" : "font-normal text-foreground/85"
                   )}>
                     {latestEmail.subject || "(no subject)"}
                   </div>
 
-                  {showPreview && density !== 'extra-compact' && density !== 'compact' && (
-                    <p className={cn(
-                      "text-sm leading-relaxed line-clamp-2",
-                      hasUnread
-                        ? "text-muted-foreground"
-                        : "text-muted-foreground/80"
-                    )}>
-                      {trimmedPreview || "No preview available"}
+                  {/* Row 3: Preview — 1 line */}
+                  {showPreview && trimmedPreview && (
+                    <p className="text-xs text-muted-foreground/70 line-clamp-1 mt-0.5">
+                      {trimmedPreview}
                     </p>
+                  )}
+
+                  {/* Keyword tag */}
+                  {keywordDef && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className={cn(
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full",
+                        KEYWORD_PALETTE[keywordDef.color]?.bg || "bg-muted"
+                      )}>
+                        <span className={cn("w-1.5 h-1.5 rounded-full", KEYWORD_PALETTE[keywordDef.color]?.dot || "bg-gray-400")} />
+                        {keywordDef.label}
+                      </span>
+                    </div>
                   )}
                 </>
               )}

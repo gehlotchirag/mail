@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Check, Plus, LogOut, Star, ChevronDown, AlertCircle } from "lucide-react";
+import { Check, Plus, LogOut, Settings, Star, ChevronDown, AlertCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useAccountStore, type AccountEntry } from "@/stores/account-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -13,6 +13,8 @@ import { useRouter } from "@/i18n/navigation";
 interface AccountSwitcherProps {
   /** "rail" = small avatar only (NavigationRail), "expanded" = avatar + name + email (Sidebar) */
   variant?: "rail" | "expanded";
+  /** Direction the popover opens — "up" for bottom-anchored triggers */
+  popoverDirection?: "up" | "down";
   className?: string;
 }
 
@@ -31,7 +33,7 @@ function AccountAvatar({ account, size = "sm" }: { account: AccountEntry; size?:
   );
 }
 
-export function AccountSwitcher({ variant = "rail", className }: AccountSwitcherProps) {
+export function AccountSwitcher({ variant = "rail", popoverDirection = "down", className }: AccountSwitcherProps) {
   const t = useTranslations("sidebar");
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -59,14 +61,22 @@ export function AccountSwitcher({ variant = "rail", className }: AccountSwitcher
         left: rect.right + 8,
         bottom: Math.max(8, window.innerHeight - rect.bottom),
       });
+    } else if (popoverDirection === "up") {
+      setPopoverStyle({
+        position: "fixed",
+        left: rect.left,
+        bottom: window.innerHeight - rect.top + 4,
+        minWidth: rect.width,
+      });
     } else {
       setPopoverStyle({
         position: "fixed",
         left: rect.left,
         top: rect.bottom + 4,
+        minWidth: rect.width,
       });
     }
-  }, [variant]);
+  }, [variant, popoverDirection]);
 
   useEffect(() => {
     if (!open) return;
@@ -112,6 +122,11 @@ export function AccountSwitcher({ variant = "rail", className }: AccountSwitcher
 
   const handleSetDefault = (accountId: string) => {
     setDefaultAccount(accountId);
+  };
+
+  const handleSettings = () => {
+    setOpen(false);
+    router.push('/settings');
   };
 
   // Show the account's own identity, not the preferred sending identity -
@@ -236,6 +251,14 @@ export function AccountSwitcher({ variant = "rail", className }: AccountSwitcher
 
           {/* Separator + Actions */}
           <div className="border-t border-border">
+            <button
+              onClick={handleSettings}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+              role="menuitem"
+            >
+              <Settings className="w-4 h-4" />
+              {t("settings")}
+            </button>
             {activeAccount && !activeAccount.isDefault && accounts.length > 1 && (
               <button
                 onClick={() => handleSetDefault(activeAccount.id)}

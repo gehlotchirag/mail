@@ -42,6 +42,29 @@ export function formatDate(date: Date | string): string {
   });
 }
 
+export function formatDateDetailed(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  let relative: string;
+  if (minutes < 1) return "Just now";
+  else if (minutes < 60) relative = `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  else if (hours < 24) relative = `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  else if (days === 1) relative = "1 day ago";
+  else relative = `${days} days ago`;
+
+  const absolute =
+    d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) +
+    ", " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+  return `${absolute} (${relative})`;
+}
+
 /**
  * Format a date/time string respecting the user's 12h/24h time format preference.
  */

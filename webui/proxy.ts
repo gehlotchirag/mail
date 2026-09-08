@@ -148,7 +148,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set("X-XSS-Protection", "0");
   response.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), payment=()"
+    "camera=(), microphone=(self), geolocation=(), payment=()"
   );
   response.headers.set("Content-Security-Policy", csp);
 
