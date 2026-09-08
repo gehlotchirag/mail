@@ -39,17 +39,63 @@ export async function GET(req: Request) {
   const region = accountsServer.includes('.in') ? 'in' : 'com';
   const mailApiBase = region === 'in' ? 'https://mail.zoho.in/api' : 'https://mail.zoho.com/api';
 
-  // Fetch the first Zoho account (org) to get orgId
+  // Fetch orgId and displayEmail from Zoho accounts endpoint
   let orgId = '';
   let displayEmail = '';
+  let firstAccountId = '';
   try {
-    const acctRes = await fetch(`${mailApiBase}/accounts?limit=1`, {
+    const acctRes = await fetch(`${mailApiBase}/accounts`, {
       headers: { Authorization: `Zoho-oauthtoken ${tokenData.access_token}` },
     });
-    const acctData = await acctRes.json() as { data?: { accountId?: string; emailAddress?: string }[] };
-    orgId = acctData.data?.[0]?.accountId ?? '';
-    displayEmail = acctData.data?.[0]?.emailAddress ?? '';
-  } catch { /* non-fatal — user can fill org ID manually */ }
+    const acctRaw = await acctRes.text();
+    console.log('[zoho-oauth] accounts raw:', acctRaw);
+    const acctData = JSON.parse(acctRaw) as {
+      data?: {
+        accountId?: string;
+        emailAddress?: Array<{ mailId?: string; isPrimary?: boolean }> | string;
+        primaryEmailAddress?: string;
+        mailboxAddress?: string;
+        policyId?: Record<string, unknown>;
+      }[]
+    };
+    const acct = acctData.data?.[0];
+    firstAccountId = acct?.accountId ?? '';
+    // Zoho org admin API uses the ZOID (organization ID), not the personal accountId
+    const zoid = acct?.policyId?.zoid;
+    orgId = zoid ? String(zoid) : firstAccountId;
+    // emailAddress can be an array of {mailId, isPrimary} objects or a plain string
+    const emailField = acct?.emailAddress;
+    if (Array.isArray(emailField)) {
+      displayEmail = emailField.find(e => e.isPrimary)?.mailId
+        ?? emailField[0]?.mailId
+        ?? acct?.primaryEmailAddress
+        ?? acct?.mailboxAddress
+        ?? '';
+    } else {
+      displayEmail = emailField ?? acct?.primaryEmailAddress ?? acct?.mailboxAddress ?? '';
+    }
+  } catch (e) {
+    console.error('[zoho-oauth] fetch error:', e);
+  }
+  console.log('[zoho-oauth] resolved orgId:', orgId, 'displayEmail:', displayEmail);
+
+  // Probe: check if the org-level folder API works (paid Workplace) or returns 404
+  // URL_RULE_NOT_CONFIGURED (free/personal). This determines whether an IMAP app
+  // password is needed for content fetching.
+  let isPersonal = true;
+  if (orgId && firstAccountId) {
+    try {
+      const probeRes = await fetch(`${mailApiBase}/organization/${orgId}/accounts/${firstAccountId}/folders`, {
+        headers: { Authorization: `Zoho-oauthtoken ${tokenData.access_token}` },
+      });
+      const probeText = await probeRes.text();
+      // Paid orgs return 200; free/personal return 404 URL_RULE_NOT_CONFIGURED
+      isPersonal = probeRes.status === 404 && probeText.includes('URL_RULE_NOT_CONFIGURED');
+      console.log('[zoho-oauth] org probe →', probeRes.status, isPersonal ? 'personal/free' : 'paid org');
+    } catch (e) {
+      console.warn('[zoho-oauth] org probe failed, assuming personal:', e instanceof Error ? e.message : e);
+    }
+  }
 
   const payload = JSON.stringify({
     accessToken: tokenData.access_token,
@@ -58,6 +104,7 @@ export async function GET(req: Request) {
     displayEmail,
     region,
     accountsServer,
+    isPersonal,
   });
 
   const res = NextResponse.redirect(`${base}/dashboard/migration?zoho_connected=1`);

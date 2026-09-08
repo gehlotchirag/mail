@@ -1,7 +1,47 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-interface User { id: string; name: string; emailAddress: string; description?: string; }
+interface User {
+  id: string;
+  name: string;
+  emailAddress: string;
+  description?: string;
+  /** Bytes stored by this mailbox, from x:Account.usedDiskQuota. */
+  usedDiskQuota?: number;
+  /** maxDiskQuota is the cap in bytes, when the plan sets one. */
+  quotas?: { maxDiskQuota?: number };
+}
+
+function fmtBytes(b: number): string {
+  if (b >= 1e9) return (b / 1e9).toFixed(1) + ' GB';
+  if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB';
+  if (b >= 1e3) return (b / 1e3).toFixed(0) + ' KB';
+  return b + ' B';
+}
+
+/** Usage for one mailbox: a bar only when a quota exists to measure against. */
+function StorageCell({ used, limit }: { used?: number; limit?: number }) {
+  if (used == null) return <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>—</span>;
+  if (!limit) {
+    return (
+      <span style={{ color: '#3b5f8a', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}>
+        {fmtBytes(used)}
+      </span>
+    );
+  }
+  const pct = Math.min(100, Math.round((used / limit) * 100));
+  const bar = pct >= 90 ? '#dc2626' : pct >= 75 ? '#d97706' : '#2563eb';
+  return (
+    <div style={{ minWidth: 130 }}>
+      <div style={{ color: '#3b5f8a', fontSize: '0.78rem', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
+        {fmtBytes(used)} <span style={{ color: '#94a3b8' }}>of {fmtBytes(limit)} · {pct}%</span>
+      </div>
+      <div style={{ background: '#dbeafe', borderRadius: 99, height: 5 }}>
+        <div style={{ background: bar, borderRadius: 99, height: 5, width: `${pct}%`, transition: 'width .4s ease' }} />
+      </div>
+    </div>
+  );
+}
 interface DomainGroup { domainId: string; domain: string; users: User[]; }
 
 const S = {
@@ -126,7 +166,12 @@ export default function UsersPage() {
             <div key={g.domainId} style={S.card}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
                 <div style={{ fontWeight: 700, color: '#1e3a5f' }}>@{g.domain}</div>
-                <span style={{ color: '#3b5f8a', fontSize: '0.8rem' }}>{g.users.length} user{g.users.length !== 1 ? 's' : ''}</span>
+                <span style={{ color: '#3b5f8a', fontSize: '0.8rem' }}>
+                  {g.users.length} user{g.users.length !== 1 ? 's' : ''}
+                  {g.users.some(u => u.usedDiskQuota != null) && (
+                    <> · {fmtBytes(g.users.reduce((n, u) => n + (u.usedDiskQuota ?? 0), 0))} used</>
+                  )}
+                </span>
               </div>
               {g.users.length === 0 ? (
                 <p style={{ color: '#3b5f8a', fontSize: '0.875rem' }}>No users yet for this domain.</p>
@@ -137,6 +182,7 @@ export default function UsersPage() {
                       <div style={{ color: '#1e3a5f', fontWeight: 500 }}>{u.emailAddress}</div>
                       {u.description && <div style={{ color: '#3b5f8a', fontSize: '0.78rem' }}>{u.description}</div>}
                     </div>
+                    <StorageCell used={u.usedDiskQuota} limit={u.quotas?.maxDiskQuota} />
                     <div style={{ display: 'flex', gap: '.5rem' }}>
                       <button onClick={() => { setResetModal({ id: u.id, email: u.emailAddress }); setNewPw(''); }} style={{ ...S.btn('#334155'), fontSize: '0.75rem' }}>🔑 Reset password</button>
                       <button onClick={() => deleteUser(u.id, u.emailAddress)} style={{ ...S.btn('#7f1d1d'), fontSize: '0.75rem' }}>🗑 Delete</button>

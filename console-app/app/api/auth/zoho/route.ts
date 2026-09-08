@@ -19,7 +19,12 @@ export async function GET() {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: clientId,
-    scope: 'ZohoMail.accounts.READ,ZohoMail.messages.READ,ZohoMail.folders.READ',
+    // organization.accounts.UPDATE is what lets us turn IMAP on for each mailbox.
+    // Zoho disables IMAP for every user by default and exposes no bulk toggle in the
+    // admin console — it is a per-user switch — so without this scope a 40-person
+    // migration means 40 manual clicks before anything can be read.
+    scope: 'ZohoMail.accounts.READ,ZohoMail.messages.READ,ZohoMail.folders.READ,'
+      + 'ZohoMail.organization.accounts.READ,ZohoMail.organization.accounts.UPDATE',
     redirect_uri: redirectUri,
     access_type: 'offline',
     prompt: 'consent',
