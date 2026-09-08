@@ -8,8 +8,9 @@ import {
   appendMigrationEvent, incrementJobUserCounts, isJobCancelled,
   registerMessageBatch, attachBatchBullJob, voidMessageBatch,
   findUnsettledBatches, discardDeadBatches, markUserEnqueueComplete, setUserBullJobId,
+  setUserTempPassword,
 } from '../db/queries.js';
-import { buildImapCredentials, resolveImapAuth, FOLDER_ROLE_MAP } from '../imap/master-user.js';
+import { buildImapCredentials, resolveImapAuth, FOLDER_ROLE_MAP, shouldSkipFolder } from '../imap/master-user.js';
 import { buildImapTlsOptions, parseAllowInsecureTls } from '../lib/imap-tls.js';
 import { startHeartbeat } from '../lib/heartbeat.js';
 import { finishUserIfDone } from '../lib/user-completion.js';
@@ -28,12 +29,33 @@ const BATCH_JOB_OPTS = {
   removeOnFail: false,
 };
 
+/**
+ * Do we hold an IMAP credential for this specific mailbox?
+ *
+ * Two shapes: `imapPassword` (one app password, only ever valid for the account
+ * that owns it) and `imapPasswords` (a per-address map provisioned by the admin
+ * password-reset flow). The map is stored as JSON inside the encrypted credentials
+ * blob, so it arrives as a string.
+ */
+function hasCredentialFor(creds: Record<string, unknown>, email: string): boolean {
+  if (creds.imapPassword) return true;
+  const raw = creds.imapPasswords;
+  if (!raw) return false;
+  try {
+    const map = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, string>;
+    return Boolean(map && map[email.toLowerCase()]);
+  } catch {
+    return false;
+  }
+}
+
 export async function userMigrationProcessor(job: Job): Promise<void> {
   const {
-    jobId, userId, sourceEmail, targetEmail, sourceType, zohoAccountId,
+    jobId, userId, sourceEmail, targetEmail, sourceType, zohoAccountId, zohoIsPersonal, displayName,
   } = job.data as {
     jobId: string; userId: string; sourceEmail: string;
-    targetEmail: string; sourceType: string; zohoAccountId?: string;
+    targetEmail: string; sourceType: string; zohoAccountId?: string; zohoIsPersonal?: boolean;
+    displayName?: string;
   };
   console.log(`[user-migration] ${sourceEmail} → ${targetEmail} (${sourceType})`);
 
@@ -88,7 +110,17 @@ export async function userMigrationProcessor(job: Job): Promise<void> {
 
     let accountId: string;
     try {
-      accountId = await ensureAccountExists(targetEmail, targetEmail.split('@')[0]);
+      const ensured = await ensureAccountExists(targetEmail, displayName ?? targetEmail.split('@')[0]);
+      accountId = ensured.id;
+      // Only set when this call created the mailbox. Persist it so the admin can
+      // hand the user their sign-in details; a migrated account is useless otherwise.
+      if (ensured.tempPassword) {
+        try {
+          await setUserTempPassword(userId, ensured.tempPassword);
+        } catch (e) {
+          console.warn(`[user-migration] could not store credential for ${targetEmail}: ${e instanceof Error ? e.message : e}`);
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await updateUserStatus(userId, 'failed', { error_message: `Account creation failed: ${msg}` });
@@ -99,12 +131,86 @@ export async function userMigrationProcessor(job: Job): Promise<void> {
 
     await updateUserStatus(userId, 'migrating', { target_account_id: accountId });
 
-    if (sourceType === 'zoho') {
-      await migrateZohoUser({
-        jobId, userId, sourceEmail, accountId,
-        creds: creds as unknown as ZohoCreds,
-        zohoAccountId: zohoAccountId ?? sourceEmail,
-      });
+    // Use IMAP only when the account really is personal: (a) the orchestrator flagged
+    // it, or (b) the credentials say so (set by the console from the OAuth org probe).
+    //
+    // An IMAP app password deliberately does NOT select this path. It used to, and that
+    // was wrong: a paid Zoho org whose admin had also pasted an app password skipped the
+    // org REST API entirely and went to IMAP — which Zoho rejects outright when the
+    // mailbox has `imapAccessEnabled: false`, the default for org accounts. Every user
+    // failed with "Command failed" while the org API would have worked.
+    //
+    // The app password stays available as a FALLBACK: migrateZohoUser throws
+    // SWITCH_TO_IMAP when the org folder API is genuinely unavailable, and the catch
+    // below uses the password then.
+    const credsAny = creds as Record<string, unknown>;
+    const isPersonalInCreds = credsAny.isPersonal === true || credsAny.isPersonal === 'true';
+    const zohoUseImap = (zohoIsPersonal ?? false) || isPersonalInCreds;
+    if (sourceType === 'zoho' && !zohoUseImap) {
+      // Org Zoho accounts: use the REST API path (has /organization/{orgId}/... endpoints).
+      // migrateZohoUser may throw SWITCH_TO_IMAP if it detects the org folder API is
+      // unavailable and an IMAP app password is present — fall through to the IMAP path.
+      try {
+        await migrateZohoUser({
+          jobId, userId, sourceEmail, accountId,
+          creds: creds as unknown as ZohoCreds,
+          zohoAccountId: zohoAccountId ?? sourceEmail,
+          isPersonal: false,
+          canFallBack: hasCredentialFor(credsAny, sourceEmail),
+        });
+      } catch (err) {
+        if ((err as { code?: string }).code !== 'SWITCH_TO_IMAP') throw err;
+        console.log(`[user-migration] ${sourceEmail}: falling back to IMAP after org API unavailable`);
+        await migrateImapUser({
+          jobId, userId, sourceEmail, accountId, sourceType: 'zoho',
+          creds: creds as unknown as Record<string, string>, allowInsecureTls,
+        });
+      }
+    } else if (sourceType === 'zoho') {
+      // Zoho account the org content API cannot serve. The user-level REST endpoint
+      // (/api/accounts/{id}/folders) DOES work — but only for the mailbox the OAuth
+      // token itself belongs to, which Zoho enforces: reading another member returns
+      // 404 "Account id ... is invalid".
+      //
+      // So try REST first. It succeeds for the connecting user's own mailbox even when
+      // IMAP is switched off on the account (`imapAccessEnabled: false`, the Zoho org
+      // default), which is exactly the case that used to fail with "Command failed".
+      // Fall back to IMAP only when REST cannot serve this mailbox AND we hold an app
+      // password for it.
+      try {
+        await migrateZohoUser({
+          jobId, userId, sourceEmail, accountId,
+          creds: creds as unknown as ZohoCreds,
+          zohoAccountId: zohoAccountId ?? sourceEmail,
+          isPersonal: true,
+          canFallBack: hasCredentialFor(credsAny, sourceEmail),
+        });
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        // A credential for THIS mailbox may arrive two ways: the single app password
+        // a customer pastes for their own account, or the per-user map that the
+        // console's "prepare all mailboxes" step provisions via Zoho's admin API.
+        // Checking only the former made every non-admin user fail with "no app
+        // password supplied" while their password sat unused in the map.
+        const hasImapPassword = hasCredentialFor(credsAny, sourceEmail);
+        // Whatever REST said, the actionable fact is that we hold no credential for
+        // this mailbox. Rethrowing Zoho's raw "Zoho folders error: 404" told the
+        // customer nothing about what to do next.
+        void code;
+        if (!hasImapPassword) {
+          throw new Error(
+            `Zoho will not serve ${sourceEmail} over the API with the connected account's `
+            + 'credentials, and no IMAP app password was supplied for it. Zoho only exposes a '
+            + "mailbox to the account that owns it: migrate each user with that user's own Zoho "
+            + 'connection, or enable IMAP for the mailbox and supply its app password.',
+          );
+        }
+        console.log(`[user-migration] ${sourceEmail}: REST unavailable, falling back to IMAP`);
+        await migrateImapUser({
+          jobId, userId, sourceEmail, accountId, sourceType: 'zoho',
+          creds: creds as unknown as Record<string, string>, allowInsecureTls,
+        });
+      }
     } else {
       await migrateImapUser({
         jobId, userId, sourceEmail, accountId, sourceType, creds, allowInsecureTls,
@@ -176,9 +282,24 @@ const ZOHO_BATCH_SIZE = Number(process.env.ZOHO_BATCH_SIZE ?? 50);
 
 async function migrateZohoUser(params: {
   jobId: string; userId: string; sourceEmail: string;
-  accountId: string; creds: ZohoCreds; zohoAccountId: string;
+  accountId: string; creds: ZohoCreds; zohoAccountId: string; isPersonal: boolean;
+  /**
+   * True when the caller holds an IMAP credential and will retry this mailbox that
+   * way. Failures here are then NOT terminal: recording them as such marked users
+   * failed — and incremented the job's failure count — even when the IMAP fallback
+   * went on to import their mail successfully. Only the caller knows whether a
+   * failure is final, so when this is set we just throw and let it decide.
+   */
+  canFallBack?: boolean;
 }): Promise<void> {
-  const { jobId, userId, sourceEmail, accountId, creds, zohoAccountId } = params;
+  const { jobId, userId, sourceEmail, accountId, creds, zohoAccountId, isPersonal } = params;
+
+  const failTerminally = async (msg: string): Promise<void> => {
+    if (params.canFallBack) return;
+    await updateUserStatus(userId, 'failed', { error_message: msg, completed_at: new Date() });
+    await incrementJobUserCounts(jobId, 0, 1);
+    await appendMigrationEvent(jobId, userId, 'user_failed', { sourceEmail, error: msg });
+  };
 
   const checkpoint = await getUserCheckpoint(userId);
 
@@ -188,21 +309,27 @@ async function migrateZohoUser(params: {
     freshToken = await refreshZohoToken(creds);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await updateUserStatus(userId, 'failed', { error_message: msg, completed_at: new Date() });
-    await incrementJobUserCounts(jobId, 0, 1);
-    await appendMigrationEvent(jobId, userId, 'user_failed', { sourceEmail, error: msg });
+    await failTerminally(msg);
     throw err;
   }
 
   let folders;
+  let effectiveIsPersonal = isPersonal;
   try {
-    folders = await fetchZohoFolders({ ...creds, accessToken: freshToken }, zohoAccountId);
+    const result = await fetchZohoFolders({ ...creds, accessToken: freshToken }, zohoAccountId, isPersonal);
+    folders = result.folders;
+    effectiveIsPersonal = result.effectiveIsPersonal;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await updateUserStatus(userId, 'failed', { error_message: msg, completed_at: new Date() });
-    await incrementJobUserCounts(jobId, 0, 1);
-    await appendMigrationEvent(jobId, userId, 'user_failed', { sourceEmail, error: msg });
+    await failTerminally(msg);
     throw err;
+  }
+
+  // Org folder API failed — account has ZOID but REST content won't work either.
+  // If an IMAP app password is available, signal the outer function to switch paths.
+  if (effectiveIsPersonal && !isPersonal && Boolean((creds as unknown as Record<string, unknown>).imapPassword)) {
+    console.log(`[user-migration] ${sourceEmail}: org folder API unavailable and imapPassword present — switching to IMAP`);
+    throw Object.assign(new Error('SWITCH_TO_IMAP'), { code: 'SWITCH_TO_IMAP' });
   }
 
   const messageQueue = new Queue('message-import', { connection: getRedisConnection() });
@@ -217,7 +344,22 @@ async function migrateZohoUser(params: {
     for (const folder of folders) {
       if (await isJobCancelled(jobId)) break;
 
-      const mailboxId = await resolveMailboxId(accountId, folder.folderName, FOLDER_ROLE_MAP);
+      if (shouldSkipFolder(folder.folderName)) {
+        console.log(`[user-migration] ${sourceEmail}: skipping provider UI folder "${folder.folderName}"`);
+        continue;
+      }
+
+      // Created lazily, only once the folder is known to contain at least one
+      // message. Resolving it up front recreated every empty source folder on our
+      // side, so imported mailboxes carried folders the user had never used.
+      let mailboxId: string | null = null;
+      const ensureMailbox = async (): Promise<string> => {
+        if (mailboxId === null) {
+          mailboxId = await resolveMailboxId(accountId, folder.folderName, FOLDER_ROLE_MAP);
+        }
+        return mailboxId;
+      };
+
       // Zoho paginates by offset, so the checkpoint is "next offset to fetch".
       let start = checkpoint[folder.folderId] ?? 0;
       const guard = new PageGuard(ZOHO_MAX_PAGES, `zoho ${sourceEmail} folder ${folder.folderName}`);
@@ -226,7 +368,7 @@ async function migrateZohoUser(params: {
         if (await isJobCancelled(jobId)) break;
 
         const { messages, hasMore } = await fetchZohoMessageIds(
-          { ...creds, accessToken: freshToken }, zohoAccountId, folder.folderId, start,
+          { ...creds, accessToken: freshToken }, zohoAccountId, folder.folderId, start, effectiveIsPersonal,
         );
         if (messages.length === 0) break;
 
@@ -246,6 +388,9 @@ async function migrateZohoUser(params: {
           break;
         }
 
+        // First real message in this folder — now it earns a mailbox.
+        const resolvedMailboxId = await ensureMailbox();
+
         for (let i = 0; i < messages.length; i += ZOHO_BATCH_SIZE) {
           const batch = messages.slice(i, i + ZOHO_BATCH_SIZE);
           await enqueueBatch(messageQueue, {
@@ -256,13 +401,14 @@ async function migrateZohoUser(params: {
             seqEnd: start + i + batch.length - 1,
             messageCount: batch.length,
           }, {
-            jobId, userId, accountId, mailboxId,
+            jobId, userId, accountId, mailboxId: resolvedMailboxId,
             folderName: folder.folderName,
             folderKey: folder.folderId,
             sourceType: 'zoho',
             zohoApiBase: zohoApiBase(creds),
             zohoOrgId: creds.orgId,
             zohoAccountId,
+            zohoIsPersonal: effectiveIsPersonal,
             zohoRegion: creds.region ?? 'com',
             // Encrypted credentials (S-2)
             zohoAccessTokenEnc: accessTokenEnc,
@@ -330,7 +476,25 @@ async function migrateImapUser(params: {
   const messageQueue = new Queue('message-import', { connection: getRedisConnection() });
 
   try {
-    await client.connect();
+    try {
+      await client.connect();
+    } catch (err) {
+      // ImapFlow reports an auth rejection as a bare "Command failed", which tells
+      // nobody anything. The overwhelmingly common cause for Zoho is IMAP being
+      // switched off on the mailbox (`imapAccessEnabled: false` in the accounts API),
+      // followed by an app password that belongs to a different user — one app
+      // password cannot authenticate as every member of an organisation.
+      const raw = err instanceof Error ? err.message : String(err);
+      const authish = /command failed|authenticate|invalid credentials|login/i.test(raw);
+      if (sourceType === 'zoho' && authish) {
+        throw new Error(
+          `Zoho refused the IMAP login for ${sourceEmail} (${raw}). Enable IMAP access for this `
+          + 'mailbox in the Zoho Admin Console (Mail Settings → IMAP Access), and make sure the app '
+          + 'password belongs to this same mailbox — one app password cannot log in as other users.',
+        );
+      }
+      throw new Error(`IMAP connection failed for ${sourceEmail}: ${raw}`);
+    }
     const folders = await client.list();
 
     for (const folder of folders) {
@@ -339,8 +503,12 @@ async function migrateImapUser(params: {
       const folderName = folder.path;
       if (folder.flags?.has('\\Noselect')) continue;
 
+      if (shouldSkipFolder(folderName)) {
+        console.log(`[user-migration] ${sourceEmail}: skipping provider UI folder "${folderName}"`);
+        continue;
+      }
+
       const lastUid = checkpoint[folderName] ?? 0;
-      const mailboxId = await resolveMailboxId(accountId, folderName, FOLDER_ROLE_MAP);
 
       let lock: Awaited<ReturnType<typeof client.getMailboxLock>> | null = null;
       try {
@@ -360,6 +528,10 @@ async function migrateImapUser(params: {
       }
 
       if (uids.length === 0) continue;
+
+      // Only now that the folder is known to hold messages does it earn a mailbox.
+      // Resolving before this recreated every empty source folder on our side.
+      const mailboxId = await resolveMailboxId(accountId, folderName, FOLDER_ROLE_MAP);
 
       let batches = 0;
       for (let i = 0; i < uids.length; i += IMAP_BATCH_SIZE) {

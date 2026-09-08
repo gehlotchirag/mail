@@ -14,9 +14,10 @@ import type { ZohoMsgSummary } from '../imap/providers/zoho.js';
 const PROGRESS_FLUSH_EVERY = Number(process.env.PROGRESS_FLUSH_EVERY ?? 10);
 
 export async function messageImportProcessor(job: Job): Promise<void> {
-  const { sourceType } = job.data as { sourceType?: string };
+  const { sourceType, imapCredsEnc } = job.data as { sourceType?: string; imapCredsEnc?: string };
 
-  if (sourceType === 'zoho') {
+  // IMAP-based Zoho batches (personal accounts) carry imapCredsEnc, not zohoBatch.
+  if (sourceType === 'zoho' && !imapCredsEnc) {
     return processZohoBatch(job);
   }
   return processImapBatch(job);
@@ -58,7 +59,7 @@ export async function handleBatchFinalFailure(job: Job, err: Error): Promise<voi
 async function processZohoBatch(job: Job): Promise<void> {
   const {
     jobId, userId, accountId, mailboxId, folderName, batchId,
-    zohoApiBase, zohoOrgId, zohoAccountId, zohoRegion, zohoBatch,
+    zohoApiBase, zohoOrgId, zohoAccountId, zohoRegion, zohoIsPersonal, zohoBatch,
     // Encrypted credential fields (S-2)
     zohoAccessTokenEnc, zohoRefreshTokenEnc, zohoClientIdEnc, zohoClientSecretEnc,
     // Legacy unencrypted fallback for jobs enqueued before this change
@@ -66,7 +67,7 @@ async function processZohoBatch(job: Job): Promise<void> {
   } = job.data as {
     jobId: string; userId: string; accountId: string; mailboxId: string; folderName: string;
     batchId?: string;
-    zohoApiBase: string; zohoOrgId: string; zohoAccountId: string; zohoRegion?: string;
+    zohoApiBase: string; zohoOrgId: string; zohoAccountId: string; zohoRegion?: string; zohoIsPersonal?: boolean;
     zohoBatch: ZohoMsgSummary[];
     zohoAccessTokenEnc?: string; zohoRefreshTokenEnc?: string;
     zohoClientIdEnc?: string; zohoClientSecretEnc?: string;
@@ -116,8 +117,15 @@ async function processZohoBatch(job: Job): Promise<void> {
 
       try {
         const raw = await withRetry(async () => {
+          // `/messages/{id}/originalmessage` — verified against the live API.
+          // The previous `/messages/content/{id}?include=raw` 404s on every message,
+          // and `/folders/{fid}/messages/{id}/content` returns the RENDERED HTML body
+          // rather than the raw message, which would lose headers, attachments and
+          // threading. Only originalmessage returns full RFC822.
           const res = await fetch(
-            `${zohoApiBase}/organization/${zohoOrgId}/accounts/${zohoAccountId}/messages/content/${msg.messageId}?include=raw`,
+            zohoIsPersonal
+              ? `${zohoApiBase}/accounts/${zohoAccountId}/messages/${msg.messageId}/originalmessage`
+              : `${zohoApiBase}/organization/${zohoOrgId}/accounts/${zohoAccountId}/messages/${msg.messageId}/originalmessage`,
             { headers: { Authorization: authHeader } },
           );
           if (res.status === 429) throw Object.assign(new Error('rate limit'), { code: 'RATE_LIMIT' });
@@ -126,7 +134,9 @@ async function processZohoBatch(job: Job): Promise<void> {
           const data = await res.json() as { data?: { content?: string } };
           const rawStr = data.data?.content;
           if (!rawStr) throw new Error(`No raw content for message ${msg.messageId}`);
-          return Buffer.from(rawStr, 'base64');
+          // originalmessage returns the RFC822 message as plain text, not base64.
+          // Decoding it as base64 silently produced garbage bytes.
+          return Buffer.from(rawStr, 'utf8');
         }, { maxAttempts: 3, baseDelayMs: 5000 });
 
         const { blobId, size } = await withRetry(

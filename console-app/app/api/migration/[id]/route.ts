@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 
 let _pool: Pool | null = null;
 function getPool() {
-  if (!_pool) _pool = new Pool({ connectionString: process.env.MIGRATION_PG_URL });
+  if (!_pool) _pool = new Pool({ connectionString: process.env.MIGRATION_PG_URL, ssl: { rejectUnauthorized: false } });
   return _pool;
 }
 

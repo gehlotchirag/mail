@@ -58,6 +58,21 @@ export async function getMigrationUsers(jobId: string) {
   return rows;
 }
 
+/**
+ * Store the password a migrated mailbox was created with, encrypted with the same
+ * key that protects the source credentials. Without this the account exists but
+ * nobody — not even the org admin — can tell the user how to sign in, which is
+ * unworkable past a handful of mailboxes.
+ *
+ * Encrypted rather than plaintext because it is a live credential at rest; the org
+ * admin can already reset any of these passwords, so revealing it to them later
+ * grants no privilege they did not have.
+ */
+export async function setUserTempPassword(id: string, password: string): Promise<void> {
+  const { encryptField } = await import('../lib/crypto.js');
+  await pool.query('UPDATE migration_users SET temp_password_enc = $2 WHERE id = $1', [id, encryptField(password)]);
+}
+
 export async function updateUserStatus(id: string, status: string, extra: Record<string, unknown> = {}) {
   const sets = ['status = $2'];
   const vals: unknown[] = [id, status];

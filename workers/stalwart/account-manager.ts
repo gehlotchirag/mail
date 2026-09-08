@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 // Flux mail server uses JMAP x: extension methods for all admin operations.
 // REST /api/principal does NOT exist in this build.
 
@@ -19,7 +20,7 @@ async function jmap(calls: unknown[][]): Promise<unknown[][]> {
     method: 'POST',
     headers: adminHeaders(),
     body: JSON.stringify({
-      using: ['urn:ietf:params:jmap:core', 'urn:stalwart:jmap'],
+      using: ['urn:ietf:params:jmap:core', 'urn:ietf:params:jmap:mail', 'urn:stalwart:jmap'],
       methodCalls: calls,
     }),
   });
@@ -197,17 +198,69 @@ async function findAccountUnfiltered(key: string): Promise<string | null> {
   return accountIdCache.get(key) ?? null;
 }
 
-export async function ensureAccountExists(email: string, _displayName: string): Promise<string> {
+/**
+ * Character set for generated passwords. Excludes I/O/l/0/1 so a password read off
+ * a CSV or dictated over a phone cannot be mistyped.
+ */
+const PW_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+
+function randomChars(n: number): string {
+  // Rejection sampling. 256 is not a multiple of 57, so a plain `byte % 57` would
+  // make the first 28 characters of the alphabet 25% likelier than the other 29.
+  const limit = 256 - (256 % PW_ALPHABET.length);
+  let out = '';
+  while (out.length < n) {
+    for (const b of randomBytes(n * 2)) {
+      if (b >= limit) continue;
+      out += PW_ALPHABET[b % PW_ALPHABET.length];
+      if (out.length === n) break;
+    }
+  }
+  return out;
+}
+
+/**
+ * A migrated mailbox's initial password: ~105 bits from the system CSPRNG.
+ *
+ * This was `Migrated_${Math.random().toString(36).slice(2, 10)}!`, which was unsafe
+ * in two ways. `Math.random()` is a plain PRNG whose internal state can be recovered
+ * from a few outputs, so any user who saw their own password — every migrated user
+ * gets one — could derive the passwords of everyone else migrated in the same run.
+ * And 8 base36 characters in a known wrapper is a ~41-bit search space, brute
+ * forceable offline. Nothing forces a change at first login, so this value is the
+ * real, lasting password on the customer's new mailbox.
+ *
+ * The fixed affixes satisfy complexity rules only; all secrecy is in the middle.
+ */
+export function generateMailboxPassword(): string {
+  return `Am${randomChars(18)}9!`;
+}
+
+/**
+ * The account id, plus the generated password when this call CREATED the account.
+ *
+ * A migrated user cannot sign in unless somebody knows their password, and this is
+ * the only moment it exists. It used to be written to a log file and forgotten,
+ * which left the admin resetting every mailbox by hand — unworkable for an
+ * organisation of forty. Callers persist it (encrypted) so it can be handed over.
+ */
+export interface EnsuredAccount {
+  id: string;
+  /** Present only for a newly created account; absent when one already existed. */
+  tempPassword?: string;
+}
+
+export async function ensureAccountExists(email: string, displayName: string): Promise<EnsuredAccount> {
   // Check if already exists
   const existing = await findAccountByEmail(email);
-  if (existing) return existing;
+  if (existing) return { id: existing };
 
   // Determine domain
   const domain = email.split('@')[1];
   if (!domain) throw new Error(`Invalid email: ${email}`);
   const domainId = await getDomainId(domain);
   const name = email.split('@')[0];
-  const tempPassword = `Migrated_${Math.random().toString(36).slice(2, 10)}!`;
+  const tempPassword = generateMailboxPassword();
 
   // Create via x:Account/set
   const responses = await jmap([
@@ -217,7 +270,9 @@ export async function ensureAccountExists(email: string, _displayName: string): 
           '@type': 'User',
           name,
           domainId,
-          description: 'Migrated account',
+          // Flux has no separate displayName field — `description` IS the profile
+          // name the webui renders, so never hardcode a label like "Migrated account".
+          description: displayName || name,
           credentials: { 0: { '@type': 'Password', secret: tempPassword } },
           roles: { '@type': 'User' },
         },
@@ -233,7 +288,7 @@ export async function ensureAccountExists(email: string, _displayName: string): 
         if (JSON.stringify(err).includes('already')) {
           accountIdCache.delete(normalizeEmail(email));
           const retry = await findAccountByEmail(email);
-          if (retry) return retry;
+          if (retry) return { id: retry };
         }
         throw new Error(`Failed to create account ${email}: ${err.description ?? JSON.stringify(err)}`);
       }
@@ -242,7 +297,9 @@ export async function ensureAccountExists(email: string, _displayName: string): 
         accountIdCache.set(normalizeEmail(email), id);
         // A brand-new account cannot have stale mailboxes cached against it.
         mailboxCache.delete(id);
-        return id;
+        console.log(`[account-manager] Created account ${email} (id=${id})`);
+        await ensureArchiveMailbox(id);
+        return { id, tempPassword };
       }
     }
   }
@@ -250,6 +307,45 @@ export async function ensureAccountExists(email: string, _displayName: string): 
 }
 
 // ── Mailboxes ─────────────────────────────────────────────────────────────────
+
+/**
+ * Flux provisions a new account with Inbox, Drafts, Sent Items, Junk Mail and
+ * Deleted Items — but no Archive, even though Archive is a standard JMAP role and
+ * every mail client offers an archive action.
+ *
+ * Without this, a migrated user whose source had an Archive folder ended up with
+ * one while a native signup did not, so the two never looked alike. Creating it up
+ * front means both start from the same six folders.
+ *
+ * Best-effort: a failure here must not fail account creation.
+ */
+export async function ensureArchiveMailbox(accountId: string): Promise<void> {
+  try {
+    const existing = await getMailboxes(accountId);
+    if (existing.some(m => m.role === 'archive' || m.name === 'Archive')) return;
+
+    const responses = await jmap([
+      ['Mailbox/set', { accountId, create: { archive: { name: 'Archive', role: 'archive' } } }, 'a'],
+    ]);
+    for (const [method, result] of responses as Array<[string, {
+      created?: Record<string, { id: string }>;
+      notCreated?: Record<string, unknown>;
+    }]>) {
+      if (method !== 'Mailbox/set') continue;
+      if (result.notCreated?.archive) {
+        console.warn(`[account-manager] could not create Archive for ${accountId}: ${JSON.stringify(result.notCreated.archive)}`);
+        return;
+      }
+      if (result.created?.archive) {
+        // The cached mailbox list for this account is now stale.
+        mailboxCache.delete(accountId);
+        console.log(`[account-manager] Created Archive mailbox for account ${accountId}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[account-manager] Archive provisioning failed for ${accountId}: ${err instanceof Error ? err.message : err}`);
+  }
+}
 
 /** Mailbox/get has no address filter, so fetch once per account and cache. */
 async function getMailboxes(accountId: string): Promise<MailboxRow[]> {
@@ -277,19 +373,33 @@ export async function resolveMailboxId(accountId: string, folderName: string, ro
   const byName = mailboxes.find(m => m.name === folderName || m.name === folderName.split('/').pop());
   if (byName) return byName.id;
 
-  // Create new mailbox
+  // Create new mailbox. Carry the role through when the source folder maps to one:
+  // resolveMailboxId matches on role first, so a role that Flux has no mailbox for
+  // yet (Archive, on a fresh account) fell through to creating a plain, role-less
+  // folder. It then looked like Archive but behaved like an ordinary folder.
   const createResponses = await jmap([
-    ['Mailbox/set', { accountId, create: { '1': { name: folderName } } }, 'b'],
+    ['Mailbox/set', {
+      accountId,
+      create: { '1': targetRole ? { name: folderName, role: targetRole } : { name: folderName } },
+    }, 'b'],
   ]);
-  const [, createResult] = (createResponses[0] ?? []) as [string, { created?: Record<string, { id: string }> }];
+  const [, createResult] = (createResponses[0] ?? []) as [string, {
+    created?: Record<string, { id: string }>;
+    notCreated?: Record<string, { type?: string; existingId?: string; description?: string }>;
+  }];
   const newId = createResult?.created?.['1']?.id;
   if (!newId) {
+    // alreadyExists: use the existingId returned by the server
+    const notCreatedErr = createResult?.notCreated?.['1'];
+    if (notCreatedErr?.type === 'alreadyExists' && notCreatedErr.existingId) {
+      return notCreatedErr.existingId;
+    }
     // Another worker may have created it concurrently — re-read before failing.
     mailboxCache.delete(accountId);
     const fresh = await getMailboxes(accountId);
     const raced = fresh.find(m => m.name === folderName || m.name === folderName.split('/').pop());
     if (raced) return raced.id;
-    throw new Error(`Failed to create mailbox ${folderName} for account ${accountId}`);
+    throw new Error(`Failed to create mailbox ${folderName} for account ${accountId}: ${JSON.stringify(notCreatedErr ?? 'no created id')}`);
   }
 
   mailboxes.push({ id: newId, name: folderName });

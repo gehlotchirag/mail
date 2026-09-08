@@ -14,6 +14,10 @@ export async function orchestratorProcessor(job: Job): Promise<void> {
 
   const dbJob = await getMigrationJob(jobId);
   if (!dbJob) throw new Error(`Job ${jobId} not found in DB`);
+  if (dbJob.status === 'cancelled') {
+    console.log(`[orchestrator] Job ${jobId} already cancelled — skipping`);
+    return;
+  }
 
   const creds = decryptCredentials(Buffer.from(dbJob.credentials_enc));
   await updateJobStatus(jobId, 'discovering', { started_at: new Date() });
@@ -22,6 +26,8 @@ export async function orchestratorProcessor(job: Job): Promise<void> {
   // For Zoho we also need the numeric accountId for subsequent API calls
   let sourceUsers: string[];
   const zohoAccountIdMap = new Map<string, string>(); // email → zoho accountId
+  const zohoIsPersonalMap = new Map<string, boolean>(); // email → isPersonal flag
+  const displayNameMap = new Map<string, string>(); // email → human name for the Flux profile
 
   try {
     switch (sourceType) {
@@ -30,7 +36,11 @@ export async function orchestratorProcessor(job: Job): Promise<void> {
       case 'zoho': {
         const accounts = await discoverZohoAccounts(creds as unknown as ZohoCreds);
         sourceUsers = accounts.map(a => a.email);
-        for (const a of accounts) zohoAccountIdMap.set(a.email, a.accountId);
+        for (const a of accounts) {
+          zohoAccountIdMap.set(a.email, a.accountId);
+          if (a.isPersonal) zohoIsPersonalMap.set(a.email, true);
+          if (a.displayName) displayNameMap.set(a.email, a.displayName);
+        }
         break;
       }
       case 'gsuite':  sourceUsers = await discoverGSuiteUsers(creds as never); break;
@@ -66,8 +76,11 @@ export async function orchestratorProcessor(job: Job): Promise<void> {
       targetEmail,
       sourceType,
       workspaceId,
+      // Human name for the created Flux account's profile (falls back downstream)
+      displayName: displayNameMap.get(sourceEmail),
       // Zoho-specific: numeric account ID needed for mailbox API calls
       zohoAccountId: zohoAccountIdMap.get(sourceEmail),
+      zohoIsPersonal: zohoIsPersonalMap.get(sourceEmail) ?? false,
     }, {
       attempts: 5,
       backoff: { type: 'exponential', delay: 30_000 },
