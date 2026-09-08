@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,7 +42,10 @@ export default function LoginPage() {
                 style={{ width: '100%', padding: '.7rem 1rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', outline: 'none' }} />
             </div>
             <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ display: 'block', color: '#7fa8d0', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.35rem' }}>Password</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '.35rem' }}>
+                <label style={{ color: '#7fa8d0', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>Password</label>
+                <Link href="/forgot-password" style={{ color: '#818cf8', fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none' }}>Forgot password?</Link>
+              </div>
               <input type="password" placeholder="Your password" required value={form.password}
                 onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
                 style={{ width: '100%', padding: '.7rem 1rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', outline: 'none' }} />

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { query, queryOne, ensureDb } from '@/lib/db';
 import { createSession } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
+import { issueVerificationEmail } from '@/lib/tokens';
 
 export async function POST(req: Request) {
   // 5 signups per hour per IP
@@ -39,8 +40,14 @@ export async function POST(req: Request) {
       VALUES ($1, 'trial', 3, 'trial')
     `, [org.id]);
 
+    // Confirm the address is real and reachable. Deliberately not fatal: the account
+    // and its subscription already exist, and losing a signup to a transient SMTP
+    // error would be far worse than an unconfirmed address the owner can resend from
+    // the dashboard. `emailSent: false` tells the client to say so plainly.
+    const emailSent = await issueVerificationEmail(org.id, email.toLowerCase(), name);
+
     const token = await createSession({ orgId: org.id, email: email.toLowerCase(), name });
-    const res = NextResponse.json({ ok: true }, { status: 201 });
+    const res = NextResponse.json({ ok: true, emailSent }, { status: 201 });
     res.cookies.set('console_token', token, {
       httpOnly: true, secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax', maxAge: 7 * 24 * 3600, path: '/',

@@ -123,4 +123,59 @@ export async function initDb(): Promise<void> {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      token TEXT UNIQUE NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token
+    ON password_reset_tokens (token) WHERE NOT used
+  `);
+
+  // Email ownership. Signups before this column existed were never asked to confirm
+  // an address, so they are grandfathered in below — flipping them to unverified
+  // would lock working tenants out of adding domains for something they were never
+  // given the chance to do.
+  await query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE`);
+  await query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ`);
+  await query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS verification_backfilled BOOLEAN NOT NULL DEFAULT FALSE`);
+  await query(`
+    UPDATE organizations
+       SET email_verified = TRUE, email_verified_at = NOW(), verification_backfilled = TRUE
+     WHERE NOT email_verified AND NOT verification_backfilled
+       AND created_at < NOW() - INTERVAL '1 minute'
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      token_hash TEXT UNIQUE NOT NULL,
+      email TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_hash
+    ON email_verification_tokens (token_hash) WHERE NOT used
+  `);
+
+  // Reset tokens are now stored as a SHA-256 digest, so a leaked database row is not
+  // itself a usable reset link. The plaintext column is kept for the (short-lived)
+  // tokens issued before this change; nothing writes to it any more.
+  await query(`ALTER TABLE password_reset_tokens ADD COLUMN IF NOT EXISTS token_hash TEXT`);
+  await query(`ALTER TABLE password_reset_tokens ALTER COLUMN token DROP NOT NULL`);
+  await query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_password_reset_tokens_hash
+    ON password_reset_tokens (token_hash)
+  `);
 }
