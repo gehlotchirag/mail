@@ -1,0 +1,8 @@
+node_modules/
+android/
+ios/
+dist/
+.env*
+*.env
+google-services.json
+GoogleService-Info.plist
