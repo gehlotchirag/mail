@@ -1,7 +1,16 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-interface Domain { id: string; domain: string; verified: boolean; verify_token: string; flux_domain_id?: string; }
+interface Domain {
+  id: string; domain: string; verified: boolean; verify_token: string; flux_domain_id?: string;
+  /**
+   * true: mail routes here. false: verified but MX points elsewhere — every
+   * message from outside the platform is still landing at the old provider.
+   * null: could not be checked (no MX, DNS lookup failed) — distinct from false
+   * so an unverified/new domain never gets accused of "mail not switched".
+   */
+  mxLive?: boolean | null;
+}
 
 const PROVIDER_META: Record<string, { label: string; color: string; logo: string }> = {
   cloudflare:   { label: 'Cloudflare',     color: '#f97316', logo: '🟠' },
@@ -51,6 +60,10 @@ export default function DomainsPage() {
   const [error, setError] = useState('');
   const [detected, setDetected] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
+  // Hitting a plan limit is not an error the user did something wrong — it is an
+  // upsell moment. Surfaced as a modal with a route to billing rather than a red
+  // banner that disappears after 5 seconds.
+  const [limitMsg, setLimitMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,15 +102,51 @@ export default function DomainsPage() {
         setMsg('Domain added! Click "Set up domain" to continue.'); setTimeout(() => setMsg(''), 6000);
       }
     } else {
-      const d = await res.json() as { error: string };
+      const d = await res.json() as { error?: string; limitReached?: boolean };
+      if (d.limitReached) {
+        setShowAdd(false);
+        setLimitMsg(d.error ?? 'You have reached the domain limit for your plan.');
+        return;
+      }
       setError(d.error ?? 'Failed'); setTimeout(() => setError(''), 5000);
     }
   }
 
-  async function deleteDomain(id: string, domain: string) {
-    if (!confirm(`Remove ${domain}? All email users under this domain will lose access.`)) return;
-    await fetch(`/api/domains/${id}`, { method: 'DELETE' });
-    load();
+  async function deleteDomain(id: string, domain: string, force = false) {
+    if (!force && !confirm(`Remove ${domain}? All email users under this domain will lose access.`)) return;
+
+    let res: Response;
+    try {
+      res = await fetch(`/api/domains/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' });
+    } catch {
+      setError('Could not reach the server. Please try again.');
+      setTimeout(() => setError(''), 6000);
+      return;
+    }
+
+    if (res.ok) { setMsg(`${domain} removed.`); setTimeout(() => setMsg(''), 4000); load(); return; }
+
+    const d = await res.json().catch(() => ({})) as {
+      error?: string; requiresForce?: boolean; mailboxCount?: number; mailboxes?: string[];
+    };
+
+    // The server refuses to delete a domain that still has mailboxes, because that
+    // destroys their mail irrecoverably. Make the consequence explicit and let the
+    // user opt in, rather than silently doing nothing.
+    if (res.status === 409 && d.requiresForce) {
+      const list = (d.mailboxes ?? []).slice(0, 5).join('\n  ');
+      const more = (d.mailboxCount ?? 0) > 5 ? `\n  …and ${(d.mailboxCount ?? 0) - 5} more` : '';
+      const ok = confirm(
+        `${domain} still has ${d.mailboxCount} mailbox(es):\n  ${list}${more}\n\n` +
+        'Deleting the domain permanently destroys these mailboxes and all their mail. ' +
+        'This cannot be undone.\n\nDelete anyway?',
+      );
+      if (ok) await deleteDomain(id, domain, true);
+      return;
+    }
+
+    setError(d.error ?? `Could not remove ${domain}.`);
+    setTimeout(() => setError(''), 8000);
   }
 
   const meta = detected ? PROVIDER_META[detected] : null;
@@ -114,6 +163,31 @@ export default function DomainsPage() {
 
       {msg && <div style={{ background: 'rgba(22,163,74,.1)', border: '1px solid rgba(22,163,74,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#16a34a', marginBottom: '1rem', fontSize: '0.85rem' }}>{msg}</div>}
       {error && <div style={{ background: 'rgba(220,38,38,.1)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#dc2626', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
+
+      {limitMsg && (
+        <div
+          onClick={() => setLimitMsg(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,32,64,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 50 }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ ...S.card, maxWidth: 420, width: '100%', textAlign: 'center' }}>
+            <div style={{ fontSize: '2.25rem', marginBottom: '.75rem' }}>🚀</div>
+            <h2 style={{ fontWeight: 800, color: '#0f2040', fontSize: '1.1rem', marginBottom: '.5rem' }}>
+              You&apos;ve reached your plan&apos;s domain limit
+            </h2>
+            <p style={{ color: '#3b5f8a', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+              {limitMsg}
+            </p>
+            <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <a href="/dashboard/billing" style={{ ...S.btn(), textDecoration: 'none', display: 'inline-block' }}>
+                Upgrade plan →
+              </a>
+              <button onClick={() => setLimitMsg(null)} style={{ ...S.btn('#e2e8f0'), color: '#1e3a5f' }}>
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAdd && (
         <div style={{ ...S.card, marginBottom: '1.5rem' }}>
@@ -164,16 +238,33 @@ export default function DomainsPage() {
                     <span style={{ fontSize: '0.72rem', padding: '.2rem .6rem', borderRadius: 5, background: d.verified ? 'rgba(22,163,74,.12)' : 'rgba(251,191,36,.12)', color: d.verified ? '#16a34a' : '#d97706', fontWeight: 700 }}>
                       {d.verified ? '✓ Verified' : '⏳ Setup required'}
                     </span>
+                    {/* "Verified" only proves ownership — it says nothing about
+                        whether mail actually reaches this platform. Without this,
+                        a domain could sit green-checkmarked indefinitely while
+                        every inbound message still landed at the old provider,
+                        with nothing anywhere telling the operator to look. */}
+                    {d.verified && d.mxLive === false && (
+                      <span style={{ fontSize: '0.72rem', padding: '.2rem .6rem', borderRadius: 5, background: 'rgba(220,38,38,.1)', color: '#dc2626', fontWeight: 700 }}>
+                        ⚠ Mail not switched here
+                      </span>
+                    )}
                   </div>
                   {!d.verified && (
                     <p style={{ color: '#7fa8d0', fontSize: '0.8rem', marginTop: '.35rem' }}>
                       Verify ownership and configure DNS to activate email.
                     </p>
                   )}
+                  {d.verified && d.mxLive === false && (
+                    <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '.35rem' }}>
+                      Incoming mail from outside this platform is still being delivered to your old provider, not here.
+                    </p>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: '.5rem', flexShrink: 0 }}>
                   {!d.verified
                     ? <a href={`/dashboard/domains/${d.id}`} style={{ ...S.btn('#2563eb'), display: 'inline-flex', alignItems: 'center', gap: '.35rem', textDecoration: 'none' }}>Set up domain →</a>
+                    : d.mxLive === false
+                    ? <a href={`/dashboard/domains/${d.id}`} style={{ ...S.btn('#dc2626'), display: 'inline-flex', textDecoration: 'none' }}>Switch mail here →</a>
                     : <a href={`/dashboard/domains/${d.id}`} style={{ ...S.btn('#1d4ed8'), display: 'inline-flex', textDecoration: 'none' }}>DNS Settings</a>
                   }
                   <button onClick={() => deleteDomain(d.id, d.domain)} style={{ ...S.btn('#991b1b'), fontSize: '0.78rem', padding: '.55rem .9rem' }}>Remove</button>

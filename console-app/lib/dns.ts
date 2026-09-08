@@ -29,15 +29,109 @@ export function getRequiredDnsRecords(domain: string): DnsSetupRecord[] {
       value: `v=DMARC1; p=none; rua=mailto:postmaster@${domain}`,
       description: 'DMARC policy — enables email delivery reports',
     },
-    {
-      type: 'CNAME', host: `autoconfig.${domain}`, value: MAIL_HOST,
-      description: 'Thunderbird/Outlook auto-configuration',
-    },
-    {
-      type: 'CNAME', host: `autodiscover.${domain}`, value: MAIL_HOST,
-      description: 'Outlook auto-discovery',
-    },
+    // NOTE: no autoconfig./autodiscover. CNAMEs.
+    //
+    // They used to be here, pointing at MAIL_HOST. A client resolving
+    // autoconfig.<customer-domain> connects with that name in SNI, and our
+    // certificate only covers our own hostnames — so the TLS handshake fails and
+    // the client shows a certificate warning instead of configuring itself.
+    // Publishing a record that guarantees a warning is worse than publishing none.
+    //
+    // Verified 2026-09-01: autoconfig.livcure.co.in and autodiscover.livcure.co.in
+    // both returned HTTP 000 (handshake failure) while the equivalents on
+    // arhamworkspace.tech, which the cert does cover, returned 200.
+    //
+    // Issuing a certificate per customer domain would fix it, but no major provider
+    // does that — Zoho, Google and Microsoft all publish autoconfig under their OWN
+    // hostnames and let clients find it indirectly:
+    //   - Thunderbird: MX lookup -> provider domain -> Mozilla's ISPDB entry.
+    //     Requires registering this service in the ISPDB (one-time, external).
+    //   - Outlook: an SRV record, _autodiscover._tcp.<domain>, pointing at our
+    //     hostname so SNI matches our certificate.
+    //
+    // The SRV record is not emitted yet because none of the four DNS publishers
+    // (Cloudflare/GoDaddy/Porkbun/DigitalOcean) can write SRV records — each needs
+    // a different payload shape for priority/weight/port, and planDnsRecord compares
+    // records by a single string value. Emitting it before that lands would hand the
+    // publisher a record it would mangle or reject.
   ];
+}
+
+/**
+ * The three Easy-DKIM CNAMEs SES hands back when a domain is registered. Until these
+ * resolve, SES treats the domain as unverified and rejects everything it sends with
+ * "Email address is not verified" — so they belong in the required set, not as an
+ * optional extra. Pass the tokens from `ensureSesIdentity()`.
+ */
+export function getSesDkimRecords(
+  tokens: Array<{ host: string; value: string }>,
+): DnsSetupRecord[] {
+  return tokens.map((t, i) => ({
+    type: 'CNAME', host: t.host, value: t.value,
+    description: `DKIM key ${i + 1} of ${tokens.length} — authenticates mail you send (required)`,
+  }));
+}
+
+/**
+ * The complete record set to publish for a domain — ownership proof, mail routing,
+ * and the SES DKIM CNAMEs.
+ *
+ * Every DNS provider route must use this rather than composing its own list. The
+ * DKIM CNAMEs come from SES at runtime, so a route that calls
+ * `getRequiredDnsRecords()` directly silently omits them and the domain ends up
+ * publishing perfect-looking DNS that still cannot send. Centralising it here means
+ * a fifth provider cannot reintroduce that bug.
+ *
+ * SES failures degrade rather than throw: the mail records still get published and
+ * the DKIM CNAMEs appear on the next run once SES is reachable.
+ */
+export async function getPublishableRecords(
+  domain: string,
+  opts: { verified: boolean; verifyToken: string; verifyOnly?: boolean },
+): Promise<DnsSetupRecord[]> {
+  const verifyRecord = getVerifyRecord(domain, opts.verifyToken);
+  if (opts.verifyOnly) return [verifyRecord];
+
+  const { ensureSesIdentity } = await import('./ses');
+  const ses = await ensureSesIdentity(domain);
+  if (ses.error) {
+    console.error(`[dns] SES identity unavailable for "${domain}" — publishing without DKIM: ${ses.error}`);
+  }
+
+  return [
+    ...(opts.verified ? [] : [verifyRecord]),
+    ...getRequiredDnsRecords(domain),
+    ...getSesDkimRecords(ses.tokens),
+  ];
+}
+
+/**
+ * Whether mail for this domain is actually routed to us right now — a live MX
+ * lookup, not the stored `verified` flag.
+ *
+ * `verified` only proves the customer owns the domain (the TXT record check);
+ * it says nothing about whether mail gets here. A domain can sit "✓ Verified" in
+ * the UI indefinitely while its MX still points at Zoho or Google — this is
+ * exactly what happened to a live tenant domain: verified early on, mail records
+ * never published, and nothing in the product ever surfaced the gap. That
+ * customer's inbound mail (from anyone outside the platform) kept landing at
+ * their old provider for over a week with no warning.
+ *
+ * Best-effort and bounded: a domain with a broken/slow zone must not hang the
+ * page that displays it.
+ */
+export async function checkMxLive(domain: string, timeoutMs = 4000): Promise<boolean | null> {
+  try {
+    const records = await Promise.race([
+      dns.resolveMx(domain),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+    ]);
+    const host = MAIL_HOST.replace(/\.$/, '').toLowerCase();
+    return records.some(r => r.exchange.replace(/\.$/, '').toLowerCase() === host);
+  } catch {
+    // No MX at all, resolution failure, or timeout — cannot claim mail is live.
+    return null;
+  }
 }
 
 export function getVerifyRecord(domain: string, token: string): DnsSetupRecord {
@@ -48,9 +142,40 @@ export function getVerifyRecord(domain: string, token: string): DnsSetupRecord {
 }
 
 export async function verifyDomainOwnership(domain: string, token: string): Promise<boolean> {
+  const host = `_arham-verify.${domain}`;
+  const matches = (records: string[][]) => records.flat().some(r => r.trim() === token);
+
+  // Ask the zone's OWN nameservers first.
+  //
+  // When the verification record was just written through a provider API
+  // (DigitalOcean/Cloudflare/GoDaddy/Porkbun), the authoritative server already
+  // has it — there is nothing to propagate — so this succeeds immediately.
+  //
+  // Going through the system's recursive resolver instead is what made
+  // verification feel broken: the UI published the record and checked 2 seconds
+  // later, the resolver cached the NXDOMAIN, and every retry kept returning that
+  // cached negative answer for the SOA minimum TTL. The user saw "TXT record not
+  // found yet, DNS can take up to 48 hours" for a record that existed already.
   try {
-    const records = await dns.resolveTxt(`_arham-verify.${domain}`);
-    return records.flat().some(r => r === token);
+    const nsNames = await dns.resolveNs(domain);
+    const ips = (await Promise.all(
+      nsNames.map(async n => { try { return await dns.resolve4(n); } catch { return []; } }),
+    )).flat();
+
+    if (ips.length > 0) {
+      const resolver = new dns.Resolver({ timeout: 3000, tries: 1 });
+      resolver.setServers(ips);
+      if (matches(await resolver.resolveTxt(host))) return true;
+    }
+  } catch {
+    // Unreachable/firewalled nameservers, or no record there yet — fall through
+    // rather than treating it as a definitive "not verified".
+  }
+
+  // Fall back to the default resolver. Covers zones whose nameservers we cannot
+  // query directly, and records a customer added by hand somewhere we do not see.
+  try {
+    return matches(await dns.resolveTxt(host));
   } catch {
     return false;
   }

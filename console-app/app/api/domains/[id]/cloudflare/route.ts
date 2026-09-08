@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import {
-  getRequiredDnsRecords, getVerifyRecord, planDnsRecord,
+  getPublishableRecords, planDnsRecord,
   isFailureStatus, type ProviderRecord, type PublishResult,
 } from '@/lib/dns';
 
@@ -111,9 +111,13 @@ export async function POST(req: Request, { params }: Params) {
 
   if (!zoneId) return NextResponse.json({ error: 'zoneId is required' }, { status: 400 });
 
-  const records = verifyOnly
-    ? [getVerifyRecord(domain.domain, domain.verify_token)]
-    : [...(!domain.verified ? [getVerifyRecord(domain.domain, domain.verify_token)] : []), ...getRequiredDnsRecords(domain.domain)];
+  // Single source of truth for what a domain must publish — includes the SES DKIM
+  // CNAMEs, without which the domain resolves correctly but still cannot send.
+  const records = await getPublishableRecords(domain.domain, {
+    verified: domain.verified,
+    verifyToken: domain.verify_token,
+    verifyOnly,
+  });
 
   // Read the whole zone up-front. If we cannot, abort: publishing blind would
   // duplicate or overwrite the customer's records.

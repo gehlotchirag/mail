@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 
 interface DomainDetail {
   id: string; domain: string; verified: boolean; verify_token: string; dnsProvider: string | null;
+  /** true = mail routes here; false = verified but MX still points elsewhere; null = could not check. */
+  mxLive?: boolean | null;
 }
 interface DnsRecord { type: string; host: string; value: string; priority?: number; description: string; }
 interface DnsResult { record: string; status: string; error?: string; }
@@ -27,6 +29,7 @@ const PROVIDERS: Record<string, { label: string; color: string; logo: string; au
   godaddy:      { label: 'GoDaddy',        color: '#1aad1a', logo: '🟢', autoSupport: true  },
   digitalocean: { label: 'DigitalOcean',   color: '#0069ff', logo: '🔵', autoSupport: true  },
   porkbun:      { label: 'Porkbun',        color: '#ef4444', logo: '🐷', autoSupport: true  },
+  bluehost:     { label: 'Bluehost',       color: '#0072c6', logo: '🔵', autoSupport: false },
   namecheap:    { label: 'Namecheap',      color: '#de3723', logo: '🔴', autoSupport: false },
   route53:      { label: 'AWS Route 53',   color: '#ff9900', logo: '🟡', autoSupport: false },
   squarespace:  { label: 'Squarespace',    color: '#555555', logo: '⬛', autoSupport: false },
@@ -37,7 +40,9 @@ const AUTO_PROVIDERS = ['cloudflare', 'godaddy', 'digitalocean', 'porkbun'];
 
 // Provider portal URLs + step-by-step instructions
 const PORTAL: Record<string, { url: string; host: string; steps: string[] }> = {
-  godaddy:      { url: 'https://developer.godaddy.com/en/personal-access-token', host: 'developer.godaddy.com/en/personal-access-token', steps: ['Log in with your GoDaddy account', 'Click Create New API Key', 'Choose Production environment', 'Copy the Key and Secret → paste below'] },
+  // GoDaddy replaced the old API Key + Secret pair with a single Personal Access
+  // Token (gd_pat_…). The steps below match the page they actually land on.
+  godaddy:      { url: 'https://developer.godaddy.com/en/personal-access-token', host: 'developer.godaddy.com/en/personal-access-token', steps: ['Log in with your GoDaddy account', 'Click Create Personal Access Token', 'Give it Domains read + write access', 'Copy the token (shown once) → paste below', 'Already have an API Key + Secret? Use those fields instead'] },
   digitalocean: { url: 'https://cloud.digitalocean.com/account/api/tokens', host: 'cloud.digitalocean.com/account/api/tokens', steps: ['Click Generate New Token', 'Enable Read + Write access', 'Copy the token → paste below'] },
   porkbun:      { url: 'https://porkbun.com/account/api',                  host: 'porkbun.com/account/api',                  steps: ['Enable API Access for your domain', 'Copy the API Key and Secret Key → paste below'] },
 };
@@ -52,12 +57,17 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
   const [verifyResult, setVerifyResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const [activeProvider, setActiveProvider] = useState<string | null>(null);
+  // GoDaddy now issues one Personal Access Token instead of a key/secret pair.
+  const [gdToken, setGdToken] = useState('');
+  // GoDaddy issues a single Personal Access Token to new developer accounts, but
+  // existing accounts still hold an API Key + Secret pair and both remain valid.
+  // Offer both rather than forcing anyone to mint a new credential.
+  const [gdKey, setGdKey]       = useState('');
+  const [gdSecret, setGdSecret] = useState('');
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   // Credentials — shared across steps so user only enters once
   const [cfToken, setCfToken]   = useState('');
-  const [gdKey, setGdKey]       = useState('');
-  const [gdSecret, setGdSecret] = useState('');
   const [doToken, setDoToken]   = useState('');
   const [pbKey, setPbKey]       = useState('');
   const [pbSecret, setPbSecret] = useState('');
@@ -100,7 +110,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
   // any proxy in between.
   function providerRequest(extra: object = {}): [string, object] {
     if (activeProvider === 'cloudflare')   return [`/api/domains/${domainId}/cloudflare`,   { cfToken, zoneId: autoZoneId, ...extra }];
-    if (activeProvider === 'godaddy')      return [`/api/domains/${domainId}/godaddy`,      { gdKey, gdSecret, zoneDomain: autoZoneId, ...extra }];
+    if (activeProvider === 'godaddy')      return [`/api/domains/${domainId}/godaddy`,      { gdToken, gdKey, gdSecret, zoneDomain: autoZoneId, ...extra }];
     if (activeProvider === 'digitalocean') return [`/api/domains/${domainId}/digitalocean`, { doToken, zoneDomain: autoZoneId, ...extra }];
     if (activeProvider === 'porkbun')      return [`/api/domains/${domainId}/porkbun`,      { pbKey, pbSecret, zoneDomain: autoZoneId, ...extra }];
     return ['', {}];
@@ -123,7 +133,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
 
   // canConnect — true when the user has entered enough credentials
   const canConnect = activeProvider === 'cloudflare'   ? !!cfToken
-    : activeProvider === 'godaddy'      ? (!!gdKey && !!gdSecret)
+    : activeProvider === 'godaddy'      ? (!!gdToken || (!!gdKey && !!gdSecret))
     : activeProvider === 'digitalocean' ? !!doToken
     : activeProvider === 'porkbun'      ? (!!pbKey && !!pbSecret)
     : false;
@@ -163,14 +173,76 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
     setAutoLoading(true); setAutoResult(null);
     const d = toAutoResult(await postProvider<Partial<AutoResult> & { error?: string }>({ verifyOnly: true }));
     setAutoLoading(false); setAutoResult(d);
-    if (d.ok) setTimeout(triggerVerify, 2000);
+    if (d.ok) pollVerify();
+  }
+
+  // We just wrote the TXT through the provider's own API, so the record exists —
+  // the only question is when a resolver will admit it. A single check 2 seconds
+  // later almost always lost that race and told the customer "DNS can take up to
+  // 48 hours" for a record that was already live, leaving them to retry by hand.
+  // Back off over ~1 minute instead; the server checks the zone's authoritative
+  // nameservers first, so this normally succeeds on the first attempt.
+  async function pollVerify() {
+    const delays = [1000, 2000, 3000, 5000, 8000, 12000, 15000, 15000];
+    setVerifying(true);
+    setVerifyResult({ ok: true, message: 'Record added — confirming with your DNS provider…' });
+
+    for (let i = 0; i < delays.length; i++) {
+      await new Promise(r => setTimeout(r, delays[i]));
+      let verified = false;
+      try {
+        const d = await fetch(`/api/domains/${domainId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'verify' }),
+        }).then(r => r.json() as Promise<{ verified?: boolean }>);
+        verified = Boolean(d.verified);
+      } catch {
+        // transient network error — keep polling rather than failing the run
+      }
+      if (verified) {
+        setVerifying(false);
+        setVerifyResult({ ok: true, message: 'Verified! Proceeding to DNS setup…' });
+        setDomain(p => p ? { ...p, verified: true } : p);
+        setTimeout(() => setStep(1), 900);
+        return;
+      }
+    }
+
+    setVerifying(false);
+    setVerifyResult({
+      ok: false,
+      message: 'The record was added, but it has not propagated yet. This is normal — click Verify again in a minute.',
+    });
   }
 
   async function applyRecords() {
     if (!autoZoneId) return;
+
+    // Switching MX affects EVERY address on this domain, not just the ones
+    // already migrated — anyone who exists in the old system but has no mailbox
+    // here yet starts bouncing the instant this takes effect. Checking this by
+    // hand, once, is how a real cutover got done safely earlier; it should not
+    // take a manual investigation every time.
+    try {
+      const r = await fetch(`/api/domains/${domainId}/migration-readiness`);
+      if (r.ok) {
+        const g = await r.json() as { checked: boolean; missing?: string[]; sourceTotal?: number; hereTotal?: number };
+        if (g.checked && g.missing && g.missing.length > 0) {
+          const names = g.missing.slice(0, 8).join('\n  ');
+          if (!confirm(
+            `${g.missing.length} of ${g.sourceTotal} address(es) on this domain in your source mailbox `
+            + `do not have a mailbox here yet:\n\n  ${names}`
+            + (g.missing.length > 8 ? `\n  …and ${g.missing.length - 8} more` : '')
+            + '\n\nSwitching mail here now means new messages to those addresses will bounce until they are '
+            + 'migrated.\n\nSwitch anyway?')) return;
+        }
+      }
+    } catch { /* best-effort — do not block the publish on this check failing */ }
+
     setAutoLoading(true); setAutoResult(null);
     const d = toAutoResult(await postProvider<Partial<AutoResult> & { error?: string }>());
     setAutoLoading(false); setAutoResult(d);
+    if (d.ok) setDomain(p => p ? { ...p, mxLive: true } : p);
   }
 
   function copy(text: string, idx: number) {
@@ -223,13 +295,16 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
           provider={activeProvider}
           fields={
             activeProvider === 'digitalocean' ? [
-              { id: 'do-token', placeholder: 'DigitalOcean Personal Access Token', value: doToken, onChange: (v: string) => { setDoToken(v); setAutoZones([]); } },
+              { id: 'do-token', placeholder: 'DigitalOcean Personal Access Token', value: doToken, onChange: (v: string) => { setDoToken(cleanCredential(v)); setAutoZones([]); } },
             ] : activeProvider === 'porkbun' ? [
-              { id: 'pb-key',    placeholder: 'Porkbun API Key',    value: pbKey,    onChange: (v: string) => { setPbKey(v); setAutoZones([]); }    },
-              { id: 'pb-secret', placeholder: 'Porkbun API Secret', value: pbSecret, onChange: (v: string) => { setPbSecret(v); setAutoZones([]); } },
+              { id: 'pb-key',    placeholder: 'Porkbun API Key',    value: pbKey,    onChange: (v: string) => { setPbKey(cleanCredential(v)); setAutoZones([]); }    },
+              { id: 'pb-secret', placeholder: 'Porkbun API Secret', value: pbSecret, onChange: (v: string) => { setPbSecret(cleanCredential(v)); setAutoZones([]); } },
             ] : [
-              { id: 'gd-key',    placeholder: 'GoDaddy API Key',    value: gdKey,    onChange: (v: string) => { setGdKey(v); setAutoZones([]); }    },
-              { id: 'gd-secret', placeholder: 'GoDaddy API Secret', value: gdSecret, onChange: (v: string) => { setGdSecret(v); setAutoZones([]); } },
+              // Either the new single token OR the legacy pair. The API route picks
+              // the right Authorization scheme from whichever arrives.
+              { id: 'gd-token',  placeholder: 'GoDaddy Personal Access Token (gd_pat_…)', value: gdToken,  onChange: (v: string) => { setGdToken(cleanCredential(v)); setAutoZones([]); } },
+              { id: 'gd-key',    placeholder: '…or legacy API Key',                       value: gdKey,    onChange: (v: string) => { setGdKey(cleanCredential(v)); setAutoZones([]); } },
+              { id: 'gd-secret', placeholder: '…and API Secret',                          value: gdSecret, onChange: (v: string) => { setGdSecret(cleanCredential(v)); setAutoZones([]); } },
             ]
           }
         />
@@ -253,6 +328,24 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
           </span>
         )}
       </div>
+
+      {/* Visible regardless of which step is open. "Verified" only proves
+          ownership — it says nothing about whether mail actually arrives here,
+          and nothing else in the product ever surfaced that gap. A domain sat
+          fully verified for over a week with every inbound message still
+          landing at the old provider before anyone noticed. */}
+      {domain.verified && domain.mxLive === false && (
+        <div style={{ background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.25)', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.9rem' }}>⚠ Mail is not routed here yet</div>
+            <div style={{ color: '#78350f', fontSize: '0.82rem', marginTop: '.2rem' }}>
+              This domain is verified, but its MX records still point somewhere else. Every message sent to it
+              from outside this platform is being delivered to your old provider, not to Arham.
+            </div>
+          </div>
+          <button onClick={() => setStep(1)} style={{ ...btn(), background: '#dc2626', borderColor: '#dc2626', whiteSpace: 'nowrap' }}>Switch mail here →</button>
+        </div>
+      )}
 
       {/* Step bar */}
       <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1px solid #dbeafe', marginBottom: '2rem' }}>
@@ -306,7 +399,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
             </div>
             <p style={{ color: '#7fa8d0', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
               MX, SPF, DMARC, and autoconfig — added in one click.
-              {(cfToken || doToken || (gdKey && gdSecret) || (pbKey && pbSecret)) ? ' Your credentials are already filled in.' : ''}
+              {(cfToken || doToken || gdToken || (gdKey && gdSecret) || (pbKey && pbSecret)) ? ' Your credentials are already filled in.' : ''}
             </p>
             <ProviderTabs detected={detected} providers={providerList} active={activeProvider} onSwitch={switchProvider} />
             {renderProviderPanel('dns')}
@@ -369,6 +462,16 @@ function ProviderTabs({ detected, providers, active, onSwitch }: {
 }
 
 /* ── Popup key connect (GoDaddy / DO / Porkbun) ─────────────────────────── */
+/**
+ * Credentials are copied out of provider consoles that wrap long values, so a
+ * pasted key routinely arrives with an embedded newline or space. Every provider
+ * here rejects that as a bad credential, which sends people off re-issuing keys
+ * that were fine. None of these tokens legitimately contain whitespace.
+ */
+function cleanCredential(v: string): string {
+  return v.replace(/\s+/g, '');
+}
+
 function PopupKeyConnect({ provider, fields }: {
   provider: string;
   fields: { id: string; placeholder: string; value: string; onChange: (v: string) => void }[];
@@ -445,9 +548,17 @@ function ManualPanel({ provider, domain }: { provider: string; domain: string })
     namecheap:   { label: 'Namecheap Advanced DNS',  href: `https://ap.www.namecheap.com/Domains/DomainControlPanel/${domain}/advancedns` },
     route53:     { label: 'AWS Route 53',            href: 'https://console.aws.amazon.com/route53/v2/hostedzones' },
     squarespace: { label: 'Squarespace DNS settings', href: 'https://account.squarespace.com/domains' },
+    bluehost:    { label: 'Bluehost Domain Manager', href: 'https://my.bluehost.com/hosting/app#/domains' },
   };
   const link = links[provider];
-  const p = PROVIDERS[provider];
+  // detectDnsProvider can return a provider this map has not caught up with yet;
+  // render it generically rather than crashing the whole domain page on undefined.
+  const p = PROVIDERS[provider] ?? {
+    label: provider.charAt(0).toUpperCase() + provider.slice(1),
+    color: '#64748b',
+    logo: '📋',
+    autoSupport: false,
+  };
   return (
     <div style={{ borderTop: '1px solid #dbeafe', paddingTop: '1.25rem' }}>
       <div style={{ background: `${p.color}0d`, border: `1px solid ${p.color}33`, borderRadius: 9, padding: '1rem 1.25rem', marginBottom: '.75rem' }}>

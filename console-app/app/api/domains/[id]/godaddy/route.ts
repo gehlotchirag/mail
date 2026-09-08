@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import {
-  getRequiredDnsRecords, getVerifyRecord, planDnsRecord, toRelativeName,
+  getPublishableRecords, planDnsRecord, toRelativeName,
   isFailureStatus, type ProviderRecord, type PublishResult,
 } from '@/lib/dns';
 
@@ -27,6 +27,9 @@ type GdRecord = {
 /** Credentials arrive in the POST body only — never in a query string. */
 type Body = {
   action?: 'zones' | 'publish';
+  /** New GoDaddy Personal Access Token (`gd_pat_…`). Preferred. */
+  gdToken?: string;
+  /** Legacy API Key + Secret pair. Still accepted for anyone holding one. */
   gdKey?: string;
   gdSecret?: string;
   zoneDomain?: string;
@@ -41,19 +44,68 @@ class GdError extends Error {
   }
 }
 
-function gdHeaders(key: string, secret: string) {
-  return { Authorization: `sso-key ${key}:${secret}`, 'Content-Type': 'application/json' };
+/**
+ * GoDaddy's developer platform replaced the old API Key + Secret pair with a single
+ * Personal Access Token (`gd_pat_…`), so the credential a customer can obtain today
+ * no longer fits the `sso-key <key>:<secret>` header this route used to hard-code.
+ *
+ * Rather than bet on one header form, carry an ordered list of candidates and keep
+ * whichever the API accepts. A key/secret pair has exactly one candidate; a PAT is
+ * tried as a bearer credential first and then in the sso-key form, because GoDaddy
+ * has shipped both during this transition and an account can be on either.
+ */
+type GdAuth = { candidates: string[]; chosen?: string };
+
+/**
+ * Strip ALL whitespace, not just the ends.
+ *
+ * GoDaddy's console wraps a long key across two lines, and copying it brings the
+ * line break along as a space. `.trim()` leaves that space in the middle, the
+ * header goes out malformed, and GoDaddy answers 401 — indistinguishable from a
+ * wrong credential, so the customer re-issues keys that were never the problem.
+ * No provider credential legitimately contains whitespace.
+ */
+function clean(v?: string): string {
+  return (v ?? '').replace(/\s+/g, '');
 }
 
-async function gdFetch<T>(path: string, key: string, secret: string, method = 'GET', body?: object): Promise<T> {
-  let res: Response;
+function buildAuth(token?: string, key?: string, secret?: string): GdAuth | null {
+  const k = clean(key), sec = clean(secret);
+  if (k && sec) {
+    return { candidates: [`sso-key ${k}:${sec}`] };
+  }
+  const t = clean(token);
+  if (!t) return null;
+  // Someone may paste "key:secret" into the single field — that is the legacy form.
+  if (t.includes(':')) return { candidates: [`sso-key ${t}`] };
+  return { candidates: [`Bearer ${t}`, `sso-key ${t}`] };
+}
+
+async function gdRequest(path: string, authValue: string, method: string, body?: object): Promise<Response> {
   try {
-    res = await fetch(`https://api.godaddy.com${path}`, {
-      method, headers: gdHeaders(key, secret),
+    return await fetch(`https://api.godaddy.com${path}`, {
+      method,
+      headers: { Authorization: authValue, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
     throw new GdError('Could not reach the GoDaddy API', 0);
+  }
+}
+
+async function gdFetch<T>(path: string, auth: GdAuth, method = 'GET', body?: object): Promise<T> {
+  const tries = auth.chosen ? [auth.chosen] : auth.candidates;
+  let res!: Response;
+
+  for (let i = 0; i < tries.length; i++) {
+    res = await gdRequest(path, tries[i], method, body);
+    // Only an auth rejection is worth re-trying with a different header form;
+    // a 404 or 422 means we are talking to the right API with the right credential.
+    const authRejected = res.status === 401 || res.status === 403;
+    if (!authRejected || i === tries.length - 1) {
+      if (!authRejected) auth.chosen = tries[i];
+      break;
+    }
   }
 
   const text = await res.text();
@@ -63,6 +115,10 @@ async function gdFetch<T>(path: string, key: string, secret: string, method = 'G
       const err = JSON.parse(text) as { message?: string; fields?: { message?: string }[] };
       message = err.message ?? err.fields?.[0]?.message ?? message;
     } catch { /* non-JSON error body — keep the generic message */ }
+    if (res.status === 401 || res.status === 403) {
+      message = 'GoDaddy rejected the credential. Check the token was copied in full, '
+              + 'and that it was created for the Production environment.';
+    }
     throw new GdError(message, res.status);
   }
   // GoDaddy PUT/DELETE return 200 with an empty body — handle gracefully.
@@ -78,11 +134,11 @@ function gdName(host: string, zone: string): string {
  * The record set GoDaddy currently holds for one type+name — exactly the set a
  * PUT to that path would replace. A 404 means "no such record set", not failure.
  */
-async function gdRecordSet(zone: string, key: string, secret: string, type: string, name: string): Promise<GdRecord[]> {
+async function gdRecordSet(zone: string, auth: GdAuth, type: string, name: string): Promise<GdRecord[]> {
   try {
     const rows = await gdFetch<GdRecord[]>(
       `/v1/domains/${encodeURIComponent(zone)}/records/${encodeURIComponent(type)}/${encodeURIComponent(name)}`,
-      key, secret,
+      auth,
     );
     return Array.isArray(rows) ? rows : [];
   } catch (err) {
@@ -116,9 +172,13 @@ export async function POST(req: Request, { params }: Params) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
-  const { action = 'publish', gdKey, gdSecret, zoneDomain, verifyOnly } = body;
-  if (!gdKey || !gdSecret) {
-    return NextResponse.json({ error: 'gdKey and gdSecret are required' }, { status: 400 });
+  const { action = 'publish', gdToken, gdKey, gdSecret, zoneDomain, verifyOnly } = body;
+  const auth = buildAuth(gdToken, gdKey, gdSecret);
+  if (!auth) {
+    return NextResponse.json(
+      { error: 'Provide a GoDaddy Personal Access Token, or an API Key and Secret.' },
+      { status: 400 },
+    );
   }
 
   const domain = await queryOne<{ id: string; domain: string; verify_token: string; verified: boolean }>(
@@ -130,7 +190,7 @@ export async function POST(req: Request, { params }: Params) {
   // ── List matching zones in the account (was a GET with the key+secret in the URL)
   if (action === 'zones') {
     try {
-      const all = await gdFetch<{ domain: string }[]>('/v1/domains?limit=100&status=ACTIVE', gdKey, gdSecret);
+      const all = await gdFetch<{ domain: string }[]>('/v1/domains?limit=100&status=ACTIVE', auth);
       const matching = (Array.isArray(all) ? all : [])
         .filter(d => domain.domain === d.domain || domain.domain.endsWith(`.${d.domain}`));
       return NextResponse.json({ zones: matching.map(d => ({ id: d.domain, name: d.domain })) });
@@ -143,9 +203,13 @@ export async function POST(req: Request, { params }: Params) {
 
   if (!zoneDomain) return NextResponse.json({ error: 'zoneDomain is required' }, { status: 400 });
 
-  const records = verifyOnly
-    ? [getVerifyRecord(domain.domain, domain.verify_token)]
-    : [...(!domain.verified ? [getVerifyRecord(domain.domain, domain.verify_token)] : []), ...getRequiredDnsRecords(domain.domain)];
+  // Single source of truth for what a domain must publish — includes the SES DKIM
+  // CNAMEs, without which the domain resolves correctly but still cannot send.
+  const records = await getPublishableRecords(domain.domain, {
+    verified: domain.verified,
+    verifyToken: domain.verify_token,
+    verifyOnly,
+  });
 
   const results: PublishResult[] = [];
 
@@ -157,7 +221,7 @@ export async function POST(req: Request, { params }: Params) {
       // GoDaddy's PUT /records/{type}/{name} REPLACES the whole record set for
       // that type+name. Read it first, merge our record into it, and PUT the
       // union — otherwise the customer's other TXT/MX records are destroyed.
-      const current = await gdRecordSet(zoneDomain, gdKey, gdSecret, rec.type, name);
+      const current = await gdRecordSet(zoneDomain, auth, rec.type, name);
 
       const existing: ProviderRecord[] = current.map((r, i) => ({
         id: String(i),
@@ -192,7 +256,7 @@ export async function POST(req: Request, { params }: Params) {
 
       await gdFetch(
         `/v1/domains/${encodeURIComponent(zoneDomain)}/records/${encodeURIComponent(rec.type)}/${encodeURIComponent(name)}`,
-        gdKey, gdSecret, 'PUT', merged,
+        auth, 'PUT', merged,
       );
       results.push({ record: label, status: plan.kind === 'update' ? 'updated' : 'created' });
     } catch (err) {

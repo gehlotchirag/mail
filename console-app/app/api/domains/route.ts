@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { query, queryOne } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { addDomain } from '@/lib/flux';
+import { provisionDomain } from '@/lib/domain-provisioning';
+import { getSesDkimRecords } from '@/lib/dns';
 import { getActiveSub, subErrorResponse, limitErrorResponse } from '@/lib/subscription';
 import { resolvePlanLimits } from '@/lib/plans';
 
@@ -10,16 +10,47 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const domains = await query(
+  const domains = await query<{ id: string; domain: string; verified: boolean }>(
     'SELECT * FROM domains WHERE org_id = $1 ORDER BY created_at',
     [session.orgId]
   );
-  return NextResponse.json({ domains });
+
+  // A domain can be "verified" (ownership proven) while its MX still points
+  // somewhere else entirely — nothing before this checked, so a customer's mail
+  // kept landing at their old provider with the console showing a green
+  // checkmark. Only worth checking for domains that are otherwise done; bounded
+  // and best-effort so one slow zone cannot hang the whole list.
+  const { checkMxLive } = await import('@/lib/dns');
+  const withMx = await Promise.all(domains.map(async d => ({
+    ...d,
+    mxLive: d.verified ? await checkMxLive(d.domain) : null,
+  })));
+
+  return NextResponse.json({ domains: withMx });
 }
 
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Adding a domain provisions a mail server, an SES identity and DNS records, and
+  // starts sending mail with this account's address on it. Requiring a confirmed
+  // address first is what stops a mistyped or borrowed email from doing that. Login
+  // is deliberately NOT gated — accounts that predate confirmation are grandfathered
+  // in by the migration, and locking anyone out of their own dashboard to enforce
+  // this would cost more than it protects.
+  const owner = await queryOne<{ email_verified: boolean; owner_email: string }>(
+    'SELECT email_verified, owner_email FROM organizations WHERE id = $1',
+    [session.orgId]
+  );
+  if (owner && !owner.email_verified) {
+    return NextResponse.json({
+      error: `Confirm ${owner.owner_email} before adding a domain. We sent you a link when you signed up — `
+           + 'check your inbox, or send it again.',
+      emailUnverified: true,
+      ownerEmail: owner.owner_email,
+    }, { status: 403 });
+  }
 
   // Check subscription is active
   const sub = await getActiveSub(session.orgId);
@@ -54,17 +85,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const verifyToken = `arham-verify-${crypto.randomBytes(12).toString('hex')}`;
+  // Same provisioning path the migration pre-flight uses, so adding a domain by
+  // hand and importing a multi-domain organisation cannot drift apart.
+  let provisioned;
+  try {
+    provisioned = await provisionDomain(session.orgId, clean);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[domains] provisioning failed for "${clean}": ${reason}`);
+    return NextResponse.json({ error: reason }, { status: 502 });
+  }
 
-  // Add to Flux
-  const fluxResult = await addDomain(clean);
-  const fluxDomainId = 'error' in fluxResult ? null : fluxResult.id;
-
-  const row = await queryOne<{ id: string }>(
-    `INSERT INTO domains (org_id, domain, flux_domain_id, verify_token)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [session.orgId, clean, fluxDomainId, verifyToken]
-  );
-
-  return NextResponse.json({ id: row?.id, domain: clean, verifyToken }, { status: 201 });
+  return NextResponse.json({
+    id: provisioned.id,
+    domain: provisioned.domain,
+    verifyToken: provisioned.verifyToken,
+    // The SES DKIM CNAMEs are part of the required DNS set; the domain page and the
+    // provider auto-publisher both read them from here.
+    sesDkimRecords: getSesDkimRecords(provisioned.sesTokens),
+    sesVerified: provisioned.sesVerified,
+    ...(provisioned.warnings.length ? { warnings: provisioned.warnings } : {}),
+  }, { status: 201 });
 }

@@ -19,6 +19,10 @@ export interface FluxUser {
   emailAddress: string;
   description?: string;
   domainId?: string;
+  /** Bytes currently stored by this mailbox. */
+  usedDiskQuota?: number;
+  /** Per-account limits; `maxDiskQuota` is the storage cap in bytes when set. */
+  quotas?: { maxDiskQuota?: number };
 }
 
 /**
@@ -129,7 +133,108 @@ export async function addDomain(domain: string): Promise<{ id: string } | { erro
   return { error: 'Unexpected response' };
 }
 
+/**
+ * Flux provisions a NEW domain with both DKIM algorithms enabled, and signs once
+ * per *active key* — producing two `DKIM-Signature` headers. That is legal under
+ * RFC 6376 but Amazon SES rejects it outright:
+ *
+ *   554 Transaction failed: Duplicate header 'DKIM-Signature'
+ *
+ * ...which bounces every outbound message for that domain. Since we relay through
+ * SES, every domain must end up with exactly one signature.
+ *
+ * Turning the algorithm flag off only stops future rotation — the key generated at
+ * creation stays `stage: active` and keeps signing — so we must ALSO destroy the
+ * Ed25519 keys. RSA/SHA-256 is kept: it is universally supported.
+ *
+ * Safe to call repeatedly; it is a no-op once a domain is already single-signature.
+ */
+export async function enforceSingleDkimSignature(
+  fluxDomainId: string,
+): Promise<{ disabled: boolean; destroyed: string[]; error?: string }> {
+  const destroyed: string[] = [];
+  let disabled = false;
+  try {
+    // 1. stop regeneration on the next rotation
+    const domainRes = await jmap([
+      ['x:Domain/get', { ids: [fluxDomainId], properties: ['id', 'dkimManagement'] }, 'g'],
+    ]);
+    let dkim: { algorithms?: Record<string, boolean> } | undefined;
+    for (const [method, result] of domainRes as Array<[string, { list?: Array<{ dkimManagement?: typeof dkim }> }]>) {
+      if (method === 'x:Domain/get') dkim = result.list?.[0]?.dkimManagement;
+    }
+    if (dkim?.algorithms?.Dkim1Ed25519Sha256) {
+      await jmap([
+        ['x:Domain/set', {
+          update: {
+            [fluxDomainId]: {
+              dkimManagement: { ...dkim, algorithms: { ...dkim.algorithms, Dkim1Ed25519Sha256: false } },
+            },
+          },
+        }, 's'],
+      ]);
+      disabled = true;
+    }
+
+    // 2. destroy the Ed25519 key(s) already generated for this domain
+    const keyRes = await jmap([
+      ['x:DkimSignature/query', {}, 'q'],
+      ['x:DkimSignature/get', {
+        '#ids': { resultOf: 'q', name: 'x:DkimSignature/query', path: '/ids' },
+        properties: ['id', 'domainId', '@type'],
+      }, 'g'],
+    ]);
+    const doomed: string[] = [];
+    for (const [method, result] of keyRes as Array<[string, { list?: Array<{ id: string; domainId?: string; '@type'?: string }> }]>) {
+      if (method !== 'x:DkimSignature/get') continue;
+      for (const k of result.list ?? []) {
+        if (k.domainId === fluxDomainId && k['@type'] === 'Dkim1Ed25519Sha256') doomed.push(k.id);
+      }
+    }
+    if (doomed.length) {
+      const delRes = await jmap([['x:DkimSignature/set', { destroy: doomed }, 'x']]);
+      for (const [method, result] of delRes as Array<[string, { destroyed?: string[] }]>) {
+        if (method === 'x:DkimSignature/set') destroyed.push(...(result.destroyed ?? []));
+      }
+    }
+    return { disabled, destroyed };
+  } catch (err) {
+    // Never block domain creation on this — report it so the caller can warn.
+    return { disabled, destroyed, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function removeDomain(fluxDomainId: string): Promise<{ error?: string }> {
+  // Flux auto-generates a DKIM signing key for every new domain, and that key holds
+  // a reference back to it — so destroying the domain first fails with
+  // `objectIsLinked` even when the domain has no mailboxes at all. Clear the keys we
+  // provisioned, then remove the domain.
+  //
+  // Deliberately narrow: only DKIM keys, and only ones belonging to THIS domain. If
+  // anything else still references it (accounts, lists), the destroy below is left to
+  // fail and report why, rather than this quietly bulldozing linked objects.
+  try {
+    const keyRes = await jmap([
+      ['x:DkimSignature/query', {}, 'q'],
+      ['x:DkimSignature/get', {
+        '#ids': { resultOf: 'q', name: 'x:DkimSignature/query', path: '/ids' },
+        properties: ['id', 'domainId'],
+      }, 'g'],
+    ]);
+    const doomed: string[] = [];
+    for (const [method, result] of keyRes as Array<[string, { list?: Array<{ id: string; domainId?: string }> }]>) {
+      if (method !== 'x:DkimSignature/get') continue;
+      for (const k of result.list ?? []) if (k.domainId === fluxDomainId) doomed.push(k.id);
+    }
+    if (doomed.length) {
+      await jmap([['x:DkimSignature/set', { destroy: doomed }, 'k']]);
+      console.log(`[flux] removed ${doomed.length} DKIM key(s) linked to domain ${fluxDomainId}`);
+    }
+  } catch (err) {
+    // Not fatal on its own — let the domain destroy report the real blocker.
+    console.warn(`[flux] could not clear DKIM keys for ${fluxDomainId}: ${err instanceof Error ? err.message : err}`);
+  }
+
   const responses = await jmap([
     ['x:Domain/set', { destroy: [fluxDomainId] }, 'd'],
   ]);
@@ -157,7 +262,11 @@ async function getDomainId(domain: string): Promise<string | null> {
   return null;
 }
 
-const ACCOUNT_PROPERTIES = ['id', 'name', 'emailAddress', 'description', 'domainId'];
+// `usedDiskQuota` is what the account is actually consuming and `quotas` holds its
+// limit (`maxDiskQuota`) when one is set. Both come back from the same
+// x:Account/get we already make, so showing storage per mailbox costs no extra
+// round-trip — it was simply never requested.
+const ACCOUNT_PROPERTIES = ['id', 'name', 'emailAddress', 'description', 'domainId', 'usedDiskQuota', 'quotas'];
 
 /**
  * Every account on the server, fetched in a single round-trip using a
@@ -305,7 +414,10 @@ export async function createUser(
   const wantsQuota = !!quotaBytes && quotaBytes > 0;
 
   const result = await createAccount(name, domainId, password, desc, quotaBytes);
-  if (!('error' in result)) return { id: result.id, quotaApplied: wantsQuota };
+  if (!('error' in result)) {
+    await ensureArchiveMailbox(result.id);
+    return { id: result.id, quotaApplied: wantsQuota };
+  }
 
   // Only retry if the server rejected the quota property itself — anything else
   // (duplicate account, bad domain, forbidden) is a real error.
@@ -317,12 +429,45 @@ export async function createUser(
   const retry = await createAccount(name, domainId, password, desc);
   if ('error' in retry) return { error: retry.error };
 
+  await ensureArchiveMailbox(retry.id);
+
   const quota = await setAccountQuota(retry.id, quotaBytes!);
   if (quota.error) {
     console.error(`[flux] Could not set disk quota on account ${retry.id}: ${quota.error}`);
     return { id: retry.id, quotaApplied: false };
   }
   return { id: retry.id, quotaApplied: true };
+}
+
+/**
+ * Flux creates a new account with Inbox, Drafts, Sent Items, Junk Mail and Deleted
+ * Items — but no Archive, despite it being a standard JMAP role that every mail
+ * client offers an archive action for. Migrated accounts inherited an Archive from
+ * their source while native signups did not, so the two never looked alike.
+ *
+ * Best-effort: never fail account creation over a mailbox.
+ */
+export async function ensureArchiveMailbox(accountId: string): Promise<void> {
+  try {
+    const existing = await jmap([
+      ['Mailbox/get', { accountId, ids: null, properties: ['id', 'name', 'role'] }, 'g'],
+    ]);
+    for (const [method, result] of existing as Array<[string, { list?: Array<{ name?: string; role?: string }> }]>) {
+      if (method !== 'Mailbox/get') continue;
+      if ((result.list ?? []).some(m => m.role === 'archive' || m.name === 'Archive')) return;
+    }
+
+    const created = await jmap([
+      ['Mailbox/set', { accountId, create: { archive: { name: 'Archive', role: 'archive' } } }, 'a'],
+    ]);
+    for (const [method, result] of created as Array<[string, { notCreated?: Record<string, unknown> }]>) {
+      if (method === 'Mailbox/set' && result.notCreated?.archive) {
+        console.warn(`[flux] could not create Archive for ${accountId}: ${JSON.stringify(result.notCreated.archive)}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[flux] Archive provisioning failed for ${accountId}: ${err instanceof Error ? err.message : err}`);
+  }
 }
 
 /**
