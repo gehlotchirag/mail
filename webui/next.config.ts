@@ -39,7 +39,16 @@ if (basePath && !basePath.startsWith("/")) {
 }
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // NOT "standalone". We deploy by rsyncing the source and building on the host,
+  // then running `next start` under PM2 — and Next refuses that combination:
+  //   ⚠ "next start" does not work with "output: standalone" configuration.
+  // It was logged on every boot, `.next/standalone/server.js` was never produced,
+  // and serving a standalone-shaped build through `next start` makes stale-asset
+  // and "Failed to find Server Action" errors after a deploy worse than they
+  // need to be. `standalone` exists to shrink container images, which is not how
+  // this is shipped. If that ever changes, switch the PM2 script to
+  // `node .next/standalone/server.js` and copy `.next/static` + `public` into the
+  // standalone tree on each deploy — do not re-add this alone.
   allowedDevOrigins: ["192.168.1.51"],
   basePath: basePath || undefined,
   // esbuild ships native binaries + a README the bundler can't parse; load
