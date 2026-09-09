@@ -169,6 +169,9 @@ export async function DELETE(req: Request, { params }: Params) {
   // account's identity quota and a re-add later collides with the stale entry.
   const sesDel = await deleteSesIdentity(domain.domain);
   if (sesDel.error) console.error(`[domains] could not delete SES identity "${domain.domain}": ${sesDel.error}`);
-  await query('DELETE FROM domains WHERE id = $1', [id]);
+  // Ownership was already proven above, but keep the org filter on the write so
+  // the guarantee lives in the statement rather than in the reader's memory of
+  // what happened 90 lines earlier.
+  await query('DELETE FROM domains WHERE id = $1 AND org_id = $2', [id, session.orgId]);
   return NextResponse.json({ ok: true });
 }

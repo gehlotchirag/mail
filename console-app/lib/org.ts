@@ -1,4 +1,5 @@
 import { query } from './db';
+import { getUser, type FluxUser } from './flux';
 import { getActiveSub, subErrorResponse, limitErrorResponse } from './subscription';
 import { resolvePlanLimits, planSupportsTeamAliases, MAX_LIST_RECIPIENTS } from './plans';
 
@@ -33,6 +34,32 @@ export async function getOrgDomains(orgId: string): Promise<OrgDomains> {
     byFluxId: new Map(rows.map(d => [d.flux_domain_id, d])),
     fluxIds: new Set(rows.map(d => d.flux_domain_id)),
   };
+}
+
+/**
+ * The mailbox behind a caller-supplied account id, but only when it sits on one
+ * of this organisation's Flux domains. Returns null otherwise so callers can
+ * answer 404 rather than confirm that another tenant's mailbox exists.
+ *
+ * Mailboxes live on the mail server, not in the console database, so ownership
+ * cannot be expressed as a `WHERE org_id = $1` clause the way it is for
+ * `domains` or migration jobs — it has to be established through the account's
+ * `domainId`. Account ids are a single global namespace shared by every tenant,
+ * so any route that accepts one from the client must go through here before
+ * touching the account.
+ *
+ * Deliberately not plan-gated: deleting a mailbox or resetting its password is
+ * basic account management available on every tier, unlike aliases.
+ */
+export async function requireOwnedMailbox(
+  orgId: string,
+  accountId: string
+): Promise<FluxUser | null> {
+  const [domains, user] = await Promise.all([getOrgDomains(orgId), getUser(accountId)]);
+  // `domainId` is optional on FluxUser. An account without one sits on no
+  // organisation's domain and must never match, so check it before the lookup.
+  if (!user?.domainId || !domains.fluxIds.has(user.domainId)) return null;
+  return user;
 }
 
 const LOCAL_PART = /^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/;

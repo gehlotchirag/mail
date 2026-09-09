@@ -329,6 +329,27 @@ export async function listAllUsers(): Promise<FluxUser[]> {
   return users;
 }
 
+/**
+ * A single account by id, or null when it does not exist.
+ *
+ * Deliberately a targeted x:Account/get rather than a filter over
+ * `listAllUsers`: this backs the ownership check that guards every mailbox
+ * mutation, and enumerating every account on the shared server to answer "which
+ * domain is this one on" would make each of those calls scale with the number
+ * of tenants on the platform.
+ */
+export async function getUser(id: string): Promise<FluxUser | null> {
+  try {
+    const responses = await jmap([
+      ['x:Account/get', { ids: [id], properties: ACCOUNT_PROPERTIES }, 'g'],
+    ]);
+    for (const [method, result] of responses as Array<[string, { list?: FluxUser[] }]>) {
+      if (method === 'x:Account/get' && result.list?.length) return result.list[0];
+    }
+  } catch { /* treat an unreadable account as not found */ }
+  return null;
+}
+
 export async function listUsersForDomain(fluxDomainId: string): Promise<FluxUser[]> {
   const users = await listAllUsers();
   return users.filter(u => u.domainId === fluxDomainId);
