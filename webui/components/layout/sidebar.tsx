@@ -645,6 +645,8 @@ export function Sidebar({
   const { appLogoLightUrl, appLogoDarkUrl, appName } = useConfig();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const logoUrl = resolvedTheme === 'dark' ? (appLogoDarkUrl || appLogoLightUrl) : (appLogoLightUrl || appLogoDarkUrl);
+  const [appNameBrand, ...appNameRestWords] = (appName || "Inbox Mail").split(" ");
+  const appNameRest = appNameRestWords.join(" ");
   const { supportsCalendar } = useCalendarStore();
   const client = useAuthStore((s) => s.client);
   const supportsContacts = client?.supportsContacts() ?? false;
@@ -876,8 +878,9 @@ export function Sidebar({
 
         {/* App name (hidden when collapsed) */}
         {!isCollapsed && (
-          <span className="text-sm font-semibold text-foreground flex-1 truncate">
-            {appName || "Mail"}
+          <span className="text-sm font-semibold flex-1 truncate">
+            <span className="text-info">{appNameBrand}</span>
+            {appNameRest && <span className="text-foreground"> {appNameRest}</span>}
           </span>
         )}
 

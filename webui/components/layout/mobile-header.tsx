@@ -29,6 +29,8 @@ export function MobileHeader({
   const { appLogoLightUrl, appLogoDarkUrl, appName } = useConfig();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const logoUrl = resolvedTheme === 'dark' ? (appLogoDarkUrl || appLogoLightUrl) : (appLogoLightUrl || appLogoDarkUrl);
+  const [appNameBrand, ...appNameRestWords] = (appName || "Inbox Mail").split(" ");
+  const appNameRest = appNameRestWords.join(" ");
 
   const handleLeftAction = () => {
     if (showBack && onBack) {
@@ -73,8 +75,9 @@ export function MobileHeader({
         {logoUrl && (
           <img src={logoUrl} alt="" className="w-6 h-6 object-contain flex-shrink-0" />
         )}
-        <span className="font-semibold text-base text-foreground truncate ml-1">
-          {appName || "Mail"}
+        <span className="font-semibold text-base truncate ml-1">
+          <span className="text-info">{appNameBrand}</span>
+          {appNameRest && <span className="text-foreground"> {appNameRest}</span>}
         </span>
       </div>
 
