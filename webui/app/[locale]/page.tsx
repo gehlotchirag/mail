@@ -1736,7 +1736,14 @@ export default function Home() {
   // which surfaced as the "Something went wrong" boundary on every cold load.
   // Every hook in this component has to be called before that return.
   useEffect(() => {
-    if (!showComposer || !conversationThread || !selectedEmail || !client || conversationEmails.length < 1) {
+    // Opening a NEW message must not inherit whatever conversation happened to be
+    // on screen. Compose leaves selectedEmail and conversationThread untouched, so
+    // without this the previously-read thread was resolved into threadHistory and
+    // quoted into an unrelated outgoing mail. Mirrors the mode the composer is
+    // actually given below (a restored draft carries its own).
+    const effectiveMode = pendingDraft?.mode ?? composerMode;
+    if (effectiveMode === 'compose'
+        || !showComposer || !conversationThread || !selectedEmail || !client || conversationEmails.length < 1) {
       setResolvedThreadHistoryHtml(undefined);
       return;
     }
@@ -1790,7 +1797,7 @@ export default function Home() {
 
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showComposer, conversationThread?.threadId, selectedEmail?.id]);
+  }, [showComposer, composerMode, pendingDraft?.mode, conversationThread?.threadId, selectedEmail?.id]);
 
   // Show loading state while checking auth
   if (!initialCheckDone || authLoading || (!isAuthenticated || !client)) {

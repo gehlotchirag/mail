@@ -1285,10 +1285,20 @@ export function EmailComposer({
       ? (signatureAlreadyInBody ? body : appendPlainTextSignature(body, signatureIdentity, signatureOpts))
       : (signatureAlreadyInBody ? htmlToPlainText(body) : appendPlainTextSignature(htmlToPlainText(body), signatureIdentity, signatureOpts));
 
+    // The quoted chain belongs to a reply or a forward — never to a new message.
+    // Opening the composer while a conversation was on screen left that thread in
+    // `threadHistory`, and it was appended here regardless of mode: a brand-new mail
+    // went out with an unrelated correspondent's thread quoted underneath it, to
+    // recipients who were never part of it. Gated the same way as threadingHeaders
+    // directly above, which already got this right.
+    const quotedThread = (mode === 'reply' || mode === 'replyAll' || mode === 'forward')
+      ? threadHistory
+      : undefined;
+
     const rewritten = plainTextMode ? null : rewriteInlineImages(body);
     const finalHtmlBody = plainTextMode
       ? undefined
-      : `<div>${rewritten!.html}</div>${buildSignatureHtml()}${threadHistory ? `<div class="gmail_quote" style="margin:0 0 0 0.8ex;border-left:2px solid #ccc;padding-left:1ex">${threadHistory}</div>` : ''}`;
+      : `<div>${rewritten!.html}</div>${buildSignatureHtml()}${quotedThread ? `<div class="gmail_quote" style="margin:0 0 0 0.8ex;border-left:2px solid #ccc;padding-left:1ex">${quotedThread}</div>` : ''}`;
     const inlineAttachments = rewritten?.attachments ?? [];
 
     try {
