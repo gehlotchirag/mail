@@ -84,7 +84,20 @@ export async function getSesIdentity(domain: string): Promise<SesIdentityStatus>
  */
 export async function ensureSesIdentity(domain: string): Promise<SesIdentityStatus> {
   const existing = await getSesIdentity(domain);
-  if (existing.exists || existing.error) return existing;
+  if (existing.error) return existing;
+
+  // A FAILED identity never recovers on its own. SES stops looking for the DKIM
+  // CNAMEs after 72 hours and stays FAILED from then on — including when the records
+  // are published correctly a day later. That is not hypothetical: a live domain sat
+  // with perfect DNS and a FAILED identity, and every message it sent bounced, for as
+  // long as it took a user to complain. Deleting and recreating restarts the check.
+  // Easy DKIM reissues the same tokens for a given domain and account, so CNAMEs
+  // already published stay valid; callers publish whatever comes back regardless.
+  if (existing.exists && existing.dkimStatus !== 'FAILED') return existing;
+  if (existing.exists) {
+    const del = await deleteSesIdentity(domain);
+    if (del.error) return { ...existing, error: del.error };
+  }
 
   try {
     const res = await client().send(new CreateEmailIdentityCommand({

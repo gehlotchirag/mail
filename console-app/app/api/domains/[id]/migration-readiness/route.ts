@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import { runPool } from '@/lib/run-pool';
+import { getSesIdentity, getSesAccountStatus } from '@/lib/ses';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -31,6 +32,21 @@ export async function GET(_req: Request, { params }: Params) {
   );
   if (!domain) return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
 
+  // Receiving and sending are verified independently, and only receiving was ever
+  // checked here. A domain can pass every mailbox check, take over its MX, and still
+  // be unable to send a single message because its SES identity is unverified — which
+  // is exactly what happened, unnoticed, for a week. Read-only: this is a pre-flight
+  // check, so it reports the state rather than repairing it.
+  const [sesId, sesAccount] = await Promise.all([
+    getSesIdentity(domain.domain),
+    getSesAccountStatus(),
+  ]);
+  const sending = {
+    ready: sesId.verified && !sesAccount.sandbox,
+    dkimStatus: sesId.dkimStatus ?? null,
+    sandbox: sesAccount.sandbox,
+  };
+
   try {
     const cached = await runPool().query<{ mailboxes: Array<{ email: string; domain: string }> }>(
       `SELECT mailboxes FROM zoho_discovery_cache
@@ -39,12 +55,12 @@ export async function GET(_req: Request, { params }: Params) {
       [session.orgId],
     );
     const listing = cached.rows[0]?.mailboxes;
-    if (!listing) return NextResponse.json({ checked: false });
+    if (!listing) return NextResponse.json({ checked: false, sending });
 
     const sourceEmails = listing
       .filter(m => m.domain === domain.domain)
       .map(m => m.email.toLowerCase());
-    if (sourceEmails.length === 0) return NextResponse.json({ checked: false });
+    if (sourceEmails.length === 0) return NextResponse.json({ checked: false, sending });
 
     const { listAllUsers } = await import('@/lib/flux');
     const here = new Set((await listAllUsers()).map(u => u.emailAddress.toLowerCase()));
@@ -55,11 +71,12 @@ export async function GET(_req: Request, { params }: Params) {
       sourceTotal: sourceEmails.length,
       hereTotal: sourceEmails.length - missing.length,
       missing,
+      sending,
     });
   } catch (e) {
     // A failed check must never block the publish outright — it degrades to "not
     // checked", the same as no Zoho connection ever having existed.
     console.warn('[migration-readiness] check failed:', e instanceof Error ? e.message : e);
-    return NextResponse.json({ checked: false });
+    return NextResponse.json({ checked: false, sending });
   }
 }

@@ -5,6 +5,15 @@ interface DomainDetail {
   id: string; domain: string; verified: boolean; verify_token: string; dnsProvider: string | null;
   /** true = mail routes here; false = verified but MX still points elsewhere; null = could not check. */
   mxLive?: boolean | null;
+  /** Whether this domain can SEND — a separate failure from where its mail arrives. */
+  sending?: {
+    ready: boolean;
+    sesIdentityExists: boolean;
+    sesVerified: boolean;
+    dkimStatus: string | null;
+    sandbox: boolean;
+    error?: string;
+  };
 }
 interface DnsRecord { type: string; host: string; value: string; priority?: number; description: string; }
 interface DnsResult { record: string; status: string; error?: string; }
@@ -226,16 +235,33 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
     try {
       const r = await fetch(`/api/domains/${domainId}/migration-readiness`);
       if (r.ok) {
-        const g = await r.json() as { checked: boolean; missing?: string[]; sourceTotal?: number; hereTotal?: number };
+        const g = await r.json() as {
+          checked: boolean; missing?: string[]; sourceTotal?: number; hereTotal?: number;
+          sending?: { ready: boolean; dkimStatus: string | null; sandbox: boolean };
+        };
+        const warnings: string[] = [];
         if (g.checked && g.missing && g.missing.length > 0) {
           const names = g.missing.slice(0, 8).join('\n  ');
-          if (!confirm(
+          warnings.push(
             `${g.missing.length} of ${g.sourceTotal} address(es) on this domain in your source mailbox `
             + `do not have a mailbox here yet:\n\n  ${names}`
             + (g.missing.length > 8 ? `\n  …and ${g.missing.length - 8} more` : '')
             + '\n\nSwitching mail here now means new messages to those addresses will bounce until they are '
-            + 'migrated.\n\nSwitch anyway?')) return;
+            + 'migrated.');
         }
+        // Taking over MX only settles where mail ARRIVES. A domain whose sending
+        // identity is unverified can receive everything and reply to none of it, with
+        // every outbound message bouncing back to the sender — silently, because
+        // nothing failed on our side. Say so before the cutover, not after.
+        if (g.sending && !g.sending.ready) {
+          warnings.push(g.sending.sandbox
+            ? 'Our sending provider is still in sandbox mode, so outbound mail from this domain will only '
+              + 'reach pre-approved recipients until that is lifted.'
+            : `Outbound mail from this domain is not verified yet (DKIM status: ${g.sending.dkimStatus ?? 'unknown'}). `
+              + 'Until it verifies, people on this domain can receive mail but cannot send any. Publishing the '
+              + 'DKIM records below is what starts that check.');
+        }
+        if (warnings.length && !confirm(warnings.join('\n\n———\n\n') + '\n\nSwitch anyway?')) return;
       }
     } catch { /* best-effort — do not block the publish on this check failing */ }
 
@@ -344,6 +370,24 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
           <button onClick={() => setStep(1)} style={{ ...btn(), background: '#dc2626', borderColor: '#dc2626', whiteSpace: 'nowrap' }}>Switch mail here →</button>
+        </div>
+      )}
+
+      {/* Receiving and sending fail independently. This domain's SES identity sat in
+          FAILED for over a week with correct DNS: every outbound message bounced,
+          the API already knew, and no screen showed it. Loading this page now
+          repairs a failed identity, so the banner also tells the customer to reload. */}
+      {domain.verified && domain.sending && !domain.sending.ready && (
+        <div style={{ background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.25)', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ color: '#dc2626', fontWeight: 700, fontSize: '0.9rem' }}>⚠ This domain cannot send mail</div>
+          <div style={{ color: '#78350f', fontSize: '0.82rem', marginTop: '.2rem' }}>
+            {domain.sending.sandbox
+              ? 'Our sending provider is still in sandbox mode, so messages only reach pre-approved recipients. '
+                + 'This is a platform-level limit and not something you can fix from here — contact support.'
+              : 'Mail sent from this domain is being rejected by the sending provider'
+                + (domain.sending.dkimStatus ? ` (DKIM status: ${domain.sending.dkimStatus})` : '')
+                + '. Publish the DKIM records below, then reload this page — verification restarts automatically.'}
+          </div>
         </div>
       )}
 

@@ -21,10 +21,19 @@ export async function GET() {
   // checkmark. Only worth checking for domains that are otherwise done; bounded
   // and best-effort so one slow zone cannot hang the whole list.
   const { checkMxLive } = await import('@/lib/dns');
-  const withMx = await Promise.all(domains.map(async d => ({
-    ...d,
-    mxLive: d.verified ? await checkMxLive(d.domain) : null,
-  })));
+  const { getSesIdentity } = await import('@/lib/ses');
+  const withMx = await Promise.all(domains.map(async d => {
+    const [mxLive, ses] = await Promise.all([
+      d.verified ? checkMxLive(d.domain) : Promise.resolve(null),
+      // Whether the domain can SEND is a separate failure from where its mail
+      // arrives, and it failed silently for a week: SES had marked the identity
+      // FAILED, every outbound message bounced, and no screen said so.
+      // Deliberately the read-only call — a list request must never create or
+      // recreate an identity as a side effect. Repair belongs to the detail route.
+      getSesIdentity(d.domain),
+    ]);
+    return { ...d, mxLive, sendingReady: ses.error ? null : ses.verified };
+  }));
 
   return NextResponse.json({ domains: withMx });
 }

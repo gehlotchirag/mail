@@ -10,6 +10,8 @@ interface Domain {
    * so an unverified/new domain never gets accused of "mail not switched".
    */
   mxLive?: boolean | null;
+  /** true = SES will accept mail from this domain; false = outbound bounces; null = unknown. */
+  sendingReady?: boolean | null;
 }
 
 const PROVIDER_META: Record<string, { label: string; color: string; logo: string }> = {
@@ -248,6 +250,11 @@ export default function DomainsPage() {
                         ⚠ Mail not switched here
                       </span>
                     )}
+                    {d.verified && d.sendingReady === false && (
+                      <span style={{ fontSize: '0.72rem', padding: '.2rem .6rem', borderRadius: 5, background: 'rgba(220,38,38,.1)', color: '#dc2626', fontWeight: 700 }}>
+                        ⚠ Cannot send mail
+                      </span>
+                    )}
                   </div>
                   {!d.verified && (
                     <p style={{ color: '#7fa8d0', fontSize: '0.8rem', marginTop: '.35rem' }}>
@@ -257,6 +264,11 @@ export default function DomainsPage() {
                   {d.verified && d.mxLive === false && (
                     <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '.35rem' }}>
                       Incoming mail from outside this platform is still being delivered to your old provider, not here.
+                    </p>
+                  )}
+                  {d.verified && d.sendingReady === false && (
+                    <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '.35rem' }}>
+                      Outbound mail from this domain is being rejected by the sending provider. Open the domain to fix it.
                     </p>
                   )}
                 </div>
