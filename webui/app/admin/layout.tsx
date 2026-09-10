@@ -359,23 +359,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         aria-label="Admin navigation"
         aria-hidden={!mobileNavOpen}
       >
-        <div className="h-14 flex items-center justify-between px-3 border-b border-border shrink-0">
-          <div className="flex items-center min-w-0">
-            {logoUrl ? (
-              <img src={logoUrl} alt="" className="w-5 h-5 object-contain mr-2" />
-            ) : (
-              <Shield className="w-5 h-5 text-primary mr-2" />
-            )}
-            <span className="font-semibold text-sm text-foreground truncate">Admin Panel</span>
+        {/* h-14 below is a hard height — padding on it would shrink the
+            content instead of growing the box (border-box), so the inset
+            goes on this wrapper instead, which has no height of its own to
+            fight with. Same fixed-overlay-escapes-body-padding cause as the
+            two headers above. */}
+        <div className="pt-[env(safe-area-inset-top,0px)] border-b border-border shrink-0">
+          <div className="h-14 flex items-center justify-between px-3">
+            <div className="flex items-center min-w-0">
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="w-5 h-5 object-contain mr-2" />
+              ) : (
+                <Shield className="w-5 h-5 text-primary mr-2" />
+              )}
+              <span className="font-semibold text-sm text-foreground truncate">Admin Panel</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(false)}
+              className="flex items-center justify-center w-9 h-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Close navigation"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen(false)}
-            className="flex items-center justify-center w-9 h-9 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            aria-label="Close navigation"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
         {navContent}
       </aside>
@@ -383,22 +390,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Main content */}
       <main className="flex-1 min-w-0 overflow-x-hidden">
         {/* Mobile header */}
-        <div className="md:hidden sticky top-0 z-30 h-14 flex items-center gap-2 px-3 border-b border-border bg-background">
-          <button
-            type="button"
-            onClick={() => setMobileNavOpen(true)}
-            className="flex items-center justify-center w-9 h-9 rounded-md text-foreground hover:bg-muted transition-colors"
-            aria-label="Open navigation"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <div className="flex items-center min-w-0">
-            {logoUrl ? (
-              <img src={logoUrl} alt="" className="w-5 h-5 object-contain mr-2" />
-            ) : (
-              <Shield className="w-5 h-5 text-primary mr-2" />
-            )}
-            <span className="font-semibold text-sm text-foreground truncate">Admin Panel</span>
+        {/* Same wrapper-split as the mobile drawer's own header above: h-14
+            is a hard height, so the inset lives on this sticky outer div
+            instead, which is unconstrained. */}
+        <div className="md:hidden sticky top-0 z-30 pt-[env(safe-area-inset-top,0px)] border-b border-border bg-background">
+          <div className="h-14 flex items-center gap-2 px-3">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="flex items-center justify-center w-9 h-9 rounded-md text-foreground hover:bg-muted transition-colors"
+              aria-label="Open navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center min-w-0">
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="w-5 h-5 object-contain mr-2" />
+              ) : (
+                <Shield className="w-5 h-5 text-primary mr-2" />
+              )}
+              <span className="font-semibold text-sm text-foreground truncate">Admin Panel</span>
+            </div>
           </div>
         </div>
 

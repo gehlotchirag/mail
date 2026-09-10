@@ -61,7 +61,7 @@ export function PWAInstallPrompt() {
   const logoSrc = appLogoLightUrl || faviconUrl;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 bg-white dark:bg-neutral-900 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-800 p-4 max-w-sm animate-in slide-in-from-bottom-4">
+    <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] right-4 z-50 bg-white dark:bg-neutral-900 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-800 p-4 max-w-sm animate-in slide-in-from-bottom-4">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-start gap-3">
           {logoSrc ? (

@@ -5,6 +5,7 @@ import { getLocale } from "next-intl/server";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
 import { CapacitorPushRegistration } from "@/components/capacitor-push-registration";
+import { CapacitorBackButton } from "@/components/capacitor-back-button";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -97,6 +98,7 @@ export default async function RootLayout({
       >
         <ServiceWorkerRegistration />
         <CapacitorPushRegistration />
+        <CapacitorBackButton />
         {children}
         <PWAInstallPrompt />
       </body>

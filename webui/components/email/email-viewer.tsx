@@ -3788,7 +3788,9 @@ export function EmailViewer({
         "flex flex-col",
         moreMenuOpen ? "translate-x-0" : "translate-x-full"
       )}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        {/* Same fixed-overlay-escapes-body-padding issue as the main mobile
+            sidebar — pt- adds to py-3 rather than risk losing to it. */}
+        <div className="flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b border-border">
           {moreMenuSub ? (
             <button
               onClick={() => setMoreMenuSub(null)}
@@ -5310,7 +5312,10 @@ export function EmailViewer({
 
     {/* Mobile bottom action bar */}
     {isMobile && (
-      <nav className="fixed bottom-0 left-0 right-0 z-[50] bg-background border-t border-border sm:hidden overflow-hidden">
+      /* fixed bottom-0 resolves against the true viewport bottom, past
+         Android's gesture bar/3-button nav — same pattern already correct
+         in app/admin/layout.tsx's bottom nav, copied here. */
+      <nav className="fixed bottom-0 left-0 right-0 z-[50] bg-background border-t border-border sm:hidden overflow-hidden pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center overflow-x-auto mobile-scroll-hidden">
           <button
             onClick={onNavigatePrev}

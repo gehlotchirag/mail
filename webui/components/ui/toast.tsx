@@ -182,7 +182,7 @@ export function ToastContainer({ toasts, onClose }: { toasts: Toast[]; onClose: 
 
   return createPortal(
     <div
-      className="fixed bottom-5 right-5 z-[99999] flex flex-col-reverse gap-2.5"
+      className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))] right-5 z-[99999] flex flex-col-reverse gap-2.5"
       role="status"
       aria-live="polite"
       style={{ pointerEvents: "none" }}

@@ -856,9 +856,17 @@ export function Sidebar({
       )}
     >
       {/* Header — logo + app name + collapse toggle */}
+      {/* This is the mobile drawer's own top edge (rendered inside a `fixed`
+          overlay in page.tsx, escaping body's safe-area padding entirely),
+          with its close (X) button right here — pt- replaces py-3's top half
+          with an addition on top of it rather than a plain class stacked
+          alongside py-3, which would risk losing to it on specificity/order.
+          Inert on desktop/web: env() is 0 there. */}
       <div className={cn(
         "flex items-center border-b border-border flex-shrink-0",
-        isCollapsed ? "justify-center px-2 py-3" : "gap-2 px-3 py-3"
+        isCollapsed
+          ? "justify-center px-2 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))]"
+          : "gap-2 px-3 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))]"
       )}>
         {/* Mobile close */}
         <Button
