@@ -1,8 +1,21 @@
 node_modules/
-android/
-ios/
 dist/
 .env*
 *.env
 google-services.json
 GoogleService-Info.plist
+
+# The release signing key and its password, in plaintext — permanent app
+# identity, never committed. android/app/build.gradle's release signingConfig
+# reads keystore.properties from here (see its comment for why the path is
+# what it is).
+credentials/
+
+# android/ and ios/ are intentionally NOT blanket-ignored: they hold hand-
+# maintained native code (AppDelegate.swift, Info.plist, build.gradle) that
+# has to be committed for anyone else's checkout — or CI — to build the app,
+# same as any other Capacitor project. Each has its own nested .gitignore
+# (android/.gitignore, ios/.gitignore) scoped to their generated build
+# artifacts (Pods/, build/, .gradle/, xcuserdata, copied web assets) — that's
+# what actually keeps the noise out, and a parent-level blanket ignore here
+# would silently defeat it by never letting git walk into either directory.

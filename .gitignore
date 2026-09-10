@@ -17,3 +17,8 @@ mail/webui-flux.zip
 mail/target/
 mail/*.zip
 console-app/.env.production.secrets
+
+# Local-only credentials staged here before a deploy (e.g. the Firebase Admin
+# SDK service account key for webui's mobile push relay). Never committed —
+# see infra/scripts/deploy-apps.sh's FIREBASE_SERVICE_ACCOUNT_FILE.
+/secrets/

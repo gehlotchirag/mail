@@ -1,3 +1,13 @@
+// DEAD CODE in the current build: capacitor.config.ts runs the app in
+// remote-URL mode (server.url), so the WebView navigates straight to the live
+// webui and this bundle never executes — Capacitor only ships it into
+// www/index.html/index.js, which nothing loads. The real, running copy of
+// this logic is webui/components/capacitor-push-registration.tsx.
+//
+// Kept as reference for what a bundled-assets (webDir) build would need, and
+// because deleting it would silently drop the file this comment points at
+// back to unexplained. Don't debug push issues here — check the webui
+// component and its server routes under webui/app/api/push/mobile/ instead.
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Preferences } from '@capacitor/preferences';
 import { Capacitor } from '@capacitor/core';

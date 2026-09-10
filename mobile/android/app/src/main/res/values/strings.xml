@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Arham Inbox</string>
+    <string name="title_activity_main">Arham Inbox</string>
+    <string name="package_name">tech.arhamworkspace.inbox</string>
+    <string name="custom_url_scheme">tech.arhamworkspace.inbox</string>
+</resources>

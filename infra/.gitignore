@@ -7,3 +7,7 @@ node_modules/
 Pulumi.*.yaml
 !Pulumi.yaml
 dist/
+
+# Timestamped backups a RESTORE.sh writes before overwriting an existing
+# secret file — same sensitivity as what they're a backup of.
+*.bak-*
