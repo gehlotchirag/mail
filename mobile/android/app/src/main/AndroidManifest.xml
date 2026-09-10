@@ -33,6 +33,18 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Fallback for any FCM message that doesn't set its own android
+             .notification.icon (see fcm-sender.ts, which does set one
+             explicitly — this is the belt-and-suspenders default). Without
+             either, Android falls back to a generic system icon, not the
+             app's own — which is why push notifications had no logo. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher_monochrome" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_icon_color" />
     </application>
 
     <!-- Permissions -->

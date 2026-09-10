@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches PWA_THEME_COLOR in webui/.env.production — same brand accent
+         used for the web push notification icon tint (see public/sw.js),
+         kept consistent here for the native push icon. Notification small
+         icons are always rendered as a flat silhouette from the source
+         image's alpha channel (Android 5.0+), so this color is what actually
+         determines what shows, not whatever colors are in the icon file
+         itself. -->
+    <color name="notification_icon_color">#FF6584</color>
+</resources>

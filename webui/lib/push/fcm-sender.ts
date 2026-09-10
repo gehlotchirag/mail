@@ -79,6 +79,16 @@ export async function sendFcmNotification(fcmToken: string, payload: FcmPayload)
               title: payload.title,
               body: payload.body,
               tag: payload.tag,
+              // Explicit rather than relying solely on AndroidManifest's
+              // default_notification_icon/_color meta-data — belt-and-
+              // suspenders, and keeps this file self-describing. Without
+              // either, Android shows a generic system icon, not the app's:
+              // status-bar/notification icons are always rendered as a flat
+              // white silhouette cut from the image's alpha channel (Android
+              // 5.0+), colored by `color` — never the source file's own
+              // colors, regardless of what's set here.
+              icon: 'ic_launcher_monochrome',
+              color: '#FF6584',
             },
           }
         : {}),

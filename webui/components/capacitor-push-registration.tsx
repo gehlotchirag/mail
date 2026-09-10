@@ -121,7 +121,18 @@ async function showNotificationFor(data: PushNotificationSchema["data"]): Promis
   }
 
   await LocalNotifications.schedule({
-    notifications: [{ id, title, body, extra }],
+    // Without smallIcon, LocalNotifications' Android implementation falls
+    // back to a built-in system icon (android.R.drawable.ic_dialog_info,
+    // verified from its source before relying on it — see the earlier
+    // comment on why that's safe), not the app's own. iconColor matches the
+    // tint fcm-sender.ts's android.notification.color uses for the same
+    // notification arriving via the other path (background/killed), so the
+    // two look the same regardless of which one actually fired — status bar
+    // icons are always rendered as a flat silhouette either way, so the
+    // source PNG's own colors never show through regardless.
+    notifications: [
+      { id, title, body, extra, smallIcon: "ic_launcher_monochrome", iconColor: "#FF6584" },
+    ],
   });
 }
 
