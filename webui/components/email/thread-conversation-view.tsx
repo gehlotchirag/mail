@@ -128,7 +128,15 @@ export function ThreadConversationView({
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10" style={{ paddingBlock: 'var(--density-header-py)' }}>
+      {/* This is the actual top-of-screen header on mobile (it replaces
+          MobileHeader while an email is open), but it's `sticky` inside this
+          pane's own scrollable message list — not a direct child of body —
+          so body's safe-area padding doesn't reach it the way it does
+          MobileHeader. Add the inset directly rather than depend on that
+          cascade holding across whatever scroll container ends up between
+          them. paddingBlock (shorthand) is split into top/bottom so the
+          inset only affects the top, not the existing bottom spacing. */}
+      <div className="flex items-center gap-3 px-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10" style={{ paddingTop: 'calc(var(--density-header-py) + env(safe-area-inset-top, 0px))', paddingBottom: 'var(--density-header-py)' }}>
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors flex-shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </button>

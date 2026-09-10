@@ -3954,7 +3954,12 @@ export function EmailViewer({
       {toolbarPosition === 'top' && (
         <div className={cn(
           "bg-background border-b border-border",
-          "max-lg:sticky max-lg:top-0 max-lg:z-10"
+          // Sticks to the top of its own scroll pane below lg, which on
+          // mobile is the real top of the screen — but that pane's scroll
+          // boundary never got body's safe-area padding, so the inset is
+          // added directly here. All existing padding lives on the child
+          // below, so this is a pure addition, not a resize of anything.
+          "max-lg:sticky max-lg:top-0 max-lg:z-10 max-lg:pt-[env(safe-area-inset-top,0px)]"
         )}>
           <div className="px-2 sm:px-4 lg:px-6 py-1 sm:py-2">
             <div ref={toolbarRef} className="flex items-center justify-between gap-0.5 sm:gap-2">
@@ -3967,7 +3972,10 @@ export function EmailViewer({
       {/* === SUBJECT BLOCK === */}
       <div className={cn(
         "bg-background border-b border-border",
-        toolbarPosition === 'below-subject' && "max-lg:sticky max-lg:top-0 max-lg:z-10"
+        // Same safe-area reasoning as the 'top' toolbar above — only actually
+        // becomes the screen's top edge (and only then needs the inset) when
+        // it's the sticky one, i.e. in 'below-subject' mode.
+        toolbarPosition === 'below-subject' && "max-lg:sticky max-lg:top-0 max-lg:z-10 max-lg:pt-[env(safe-area-inset-top,0px)]"
       )}>
         <div className="px-4 lg:px-6" style={{ paddingBlock: 'var(--density-header-py)' }}>
           <div className="flex items-start justify-between gap-2 lg:gap-4">
