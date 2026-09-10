@@ -523,7 +523,7 @@ export function EventModal({
     const participants = getParticipantList(event);
 
     return (
-      <div ref={modalRef} role="dialog" aria-modal={isMobile || undefined} aria-label={event.title || t("events.no_title")} className={isMobile ? "fixed inset-0 z-50 flex flex-col bg-background" : "flex flex-col h-full bg-background"}>
+      <div ref={modalRef} role="dialog" aria-modal={isMobile || undefined} aria-label={event.title || t("events.no_title")} className={isMobile ? "fixed inset-0 z-50 flex flex-col bg-background safe-area-sheet" : "flex flex-col h-full bg-background"}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
           <h2 className="text-lg font-semibold truncate">{event.title || t("events.no_title")}</h2>
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-muted transition-colors duration-150 text-muted-foreground hover:text-foreground" aria-label={t("form.cancel")}>
@@ -639,7 +639,7 @@ export function EventModal({
     const color = getEventColor(event, eventCalendar);
 
     return (
-      <div ref={modalRef} role="dialog" aria-modal={isMobile || undefined} aria-label={event.title || t("events.no_title")} className={isMobile ? "fixed inset-0 z-50 flex flex-col bg-background" : "flex flex-col h-full bg-background"}>
+      <div ref={modalRef} role="dialog" aria-modal={isMobile || undefined} aria-label={event.title || t("events.no_title")} className={isMobile ? "fixed inset-0 z-50 flex flex-col bg-background safe-area-sheet" : "flex flex-col h-full bg-background"}>
         {/* Color accent bar */}
         <div className="h-1 w-full flex-shrink-0" style={{ backgroundColor: color }} />
 
@@ -795,7 +795,7 @@ export function EventModal({
   }
 
   return (
-    <div ref={modalRef} role="dialog" aria-modal={isMobile || undefined} aria-label={isEdit ? t("events.edit") : t("events.create")} data-tour="event-modal" className={isMobile ? "fixed inset-0 z-50 flex flex-col bg-background" : "flex flex-col h-full bg-background"}>
+    <div ref={modalRef} role="dialog" aria-modal={isMobile || undefined} aria-label={isEdit ? t("events.edit") : t("events.create")} data-tour="event-modal" className={isMobile ? "fixed inset-0 z-50 flex flex-col bg-background safe-area-sheet" : "flex flex-col h-full bg-background"}>
       <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
         <h2 className="text-lg font-semibold">
           {isEdit ? t("events.edit") : t("events.create")}

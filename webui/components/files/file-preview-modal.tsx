@@ -169,7 +169,7 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
   }, [onClose]);
 
   return (
-    <div role="dialog" aria-label={name} className="fixed inset-0 z-50 flex flex-col bg-black/80" onClick={onClose}>
+    <div role="dialog" aria-label={name} className="fixed inset-0 z-50 flex flex-col bg-black/80 safe-area-sheet" onClick={onClose}>
       <div className="flex items-center justify-between px-4 py-3 bg-background/90 backdrop-blur border-b border-border" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-sm font-medium truncate">{name}</h3>
         <div className="flex items-center gap-2">

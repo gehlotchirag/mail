@@ -491,6 +491,61 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* ── Edge-to-edge system bars ──────────────────────────────────────────────
+   The Capacitor shell loads this app in a WebView laid out behind the system
+   bars: Android 15 (targetSdk 35) enforces edge-to-edge whether we ask for it
+   or not, and iOS draws under the notch and the home indicator. Left alone the
+   mobile header sits under the status bar and the compose button sits under the
+   navigation pill.
+
+   Padding body insets every full-height shell at once, which is what we want
+   with six of them across mail, settings, calendar, contacts and files. The
+   viewport units those shells size themselves with still measure the whole
+   screen though, inset strips included, so the height utilities have to hand
+   back exactly what body now reserves — otherwise each shell overflows by the
+   inset and the page scrolls by a few pixels.
+
+   These rules follow `@import "tailwindcss"` and are therefore unlayered, which
+   is what lets them override the layered .h-dvh / .h-screen utilities without
+   !important. Every inset resolves to 0 in a desktop browser, so on the web the
+   whole block is inert. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+body {
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+.h-dvh {
+  height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+}
+
+.h-screen {
+  height: calc(100vh - var(--safe-top) - var(--safe-bottom));
+}
+
+.min-h-screen {
+  min-height: calc(100vh - var(--safe-top) - var(--safe-bottom));
+}
+
+/* Full-screen sheets are position:fixed, so they resolve against the viewport
+   and escape the padding on body entirely. They carry their own insets. The
+   background still paints the padding box, so a sheet's backdrop keeps covering
+   the bars — only its content moves clear of them. */
+.safe-area-sheet {
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
 /* Minimum touch targets (44x44px recommended by Apple HIG) */
 .touch-target {
   min-height: 44px;

@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { getLocale } from "next-intl/server";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
+import { CapacitorPushRegistration } from "@/components/capacitor-push-registration";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +16,19 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+// Without an explicit viewport Next.js emits `width=device-width, initial-scale=1`
+// and nothing else, so `viewport-fit` stays at its `auto` default — and under
+// `auto` every env(safe-area-inset-*) resolves to 0. The insets the layout needs
+// only start reporting real values once the page opts into drawing edge to edge,
+// which is what `cover` does. Required on both platforms: Android 15 (targetSdk
+// 35) lays the WebView out behind the system bars whether we ask for it or not,
+// and iOS puts it under the notch and the home indicator.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const faviconUrl = process.env.FAVICON_URL;
@@ -82,6 +96,7 @@ export default async function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ServiceWorkerRegistration />
+        <CapacitorPushRegistration />
         {children}
         <PWAInstallPrompt />
       </body>
