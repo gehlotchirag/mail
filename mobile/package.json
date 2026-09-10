@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.0.0",
     "@capacitor/ios": "^7.0.0",
     "@capacitor/local-notifications": "^7.0.7",
