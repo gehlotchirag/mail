@@ -177,6 +177,92 @@ export function OverviewStyles() {
         .overviewpage .o-thead { display: none; }
         .overviewpage .o-row { grid-template-columns: 1fr; gap: 8px; }
       }
+
+      /* two-column workflow grid (mailboxes/migration, deliverability/billing) */
+      .overviewpage .o-grid2 { display: grid; grid-template-columns: 7fr 5fr; gap: 20px; margin-top: 20px; align-items: start; }
+      @media (max-width: 980px) {
+        .overviewpage .o-grid2 { grid-template-columns: 1fr; }
+      }
+
+      .overviewpage .o-panel { background: var(--o-surface); border: 1px solid var(--o-border); border-radius: 16px; box-shadow: var(--o-shadow-s); overflow: hidden; display: flex; flex-direction: column; }
+      .overviewpage .o-panelhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--o-border); flex-wrap: wrap; }
+      .overviewpage .o-paneltitle { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14.5px; font-weight: 800; color: var(--o-ink); }
+      .overviewpage .o-panelsub { font-size: 12px; color: var(--o-muted); margin-top: 3px; }
+      .overviewpage .o-panelfoot { padding: 11px 18px; background: var(--o-surface2); border-top: 1px solid var(--o-border); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--o-muted); }
+      .overviewpage .o-panelfoot a { color: var(--o-accent); font-weight: 700; text-decoration: none; }
+      .overviewpage .o-panelfoot a:hover { text-decoration: underline; }
+
+      /* mini mailbox table (mailboxes panel) */
+      .overviewpage .o-mtable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      .overviewpage .o-mtable thead tr { background: var(--o-surface2); }
+      .overviewpage .o-mtable th { text-align: left; padding: 9px 14px; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--o-muted); border-bottom: 1px solid var(--o-border); }
+      .overviewpage .o-mtable td { padding: 10px 14px; border-bottom: 1px solid #EEF2FA; vertical-align: middle; }
+      .overviewpage .o-mtable tr:last-child td { border-bottom: none; }
+      .overviewpage .o-mname { font-weight: 600; color: var(--o-ink); }
+      .overviewpage .o-mmail { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--o-accent); }
+      .overviewpage .o-mdomain { font-family: 'JetBrains Mono', ui-monospace, monospace; color: var(--o-ink2); }
+      .overviewpage .o-musagewrap { display: flex; align-items: center; gap: 8px; min-width: 90px; }
+      .overviewpage .o-musagebar { flex: 1; height: 5px; border-radius: 99px; background: var(--o-surface2); overflow: hidden; }
+      .overviewpage .o-musagebar i { display: block; height: 100%; border-radius: 99px; }
+      .overviewpage .o-musagepct { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 700; width: 32px; text-align: right; flex: none; }
+
+      /* migration panel */
+      .overviewpage .o-migbody { padding: 16px 18px; }
+      .overviewpage .o-migrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+      .overviewpage .o-migsrc-label { font-size: 11px; font-weight: 600; color: var(--o-muted); }
+      .overviewpage .o-migsrc { display: flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 700; color: var(--o-ink); margin-top: 2px; }
+      .overviewpage .o-migsrc svg { width: 13px; height: 13px; color: var(--o-muted); }
+      .overviewpage .o-migprogtitle { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+      .overviewpage .o-migprogtitle b { color: var(--o-accent); font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .overviewpage .o-migbar { height: 7px; border-radius: 99px; background: var(--o-surface2); overflow: hidden; margin-bottom: 14px; }
+      .overviewpage .o-migbar i { display: block; height: 100%; border-radius: 99px; background: var(--o-accent); }
+      .overviewpage .o-migmetrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 12px; border-top: 1px solid #EEF2FA; text-align: center; }
+      .overviewpage .o-migmetric { background: var(--o-surface2); border-radius: 8px; padding: 8px 4px; }
+      .overviewpage .o-migmetric b { display: block; font-size: 13px; font-weight: 800; color: var(--o-ink); font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .overviewpage .o-migmetric span { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--o-muted); }
+      .overviewpage .o-migempty { padding: 22px 18px; text-align: center; color: var(--o-muted); font-size: 13px; }
+      .overviewpage .o-migempty a { color: var(--o-accent); font-weight: 700; }
+      .overviewpage .o-livepill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--o-green-soft); color: var(--o-green); }
+      .overviewpage .o-livepill i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: o-pulse 2s cubic-bezier(.4,0,.6,1) infinite; }
+      @keyframes o-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .55; } }
+
+      .overviewpage .o-recentmig { padding: 0 18px 14px; }
+      .overviewpage .o-recentmig-label { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--o-muted); margin-bottom: 6px; }
+      .overviewpage .o-recentmig-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-top: 1px solid #EEF2FA; font-size: 12px; }
+      .overviewpage .o-recentmig-row:first-of-type { border-top: none; }
+      .overviewpage .o-recentmig-src { font-weight: 600; color: var(--o-ink); }
+      .overviewpage .o-recentmig-status { font-weight: 700; }
+      .overviewpage .o-recentmig-status.ok { color: var(--o-green); }
+      .overviewpage .o-recentmig-status.fail { color: var(--o-red); }
+      .overviewpage .o-recentmig-date { color: var(--o-muted); font-size: 11px; }
+
+      /* deliverability / suppressions panel */
+      .overviewpage .o-suppr-row { display: grid; grid-template-columns: 1.6fr 1fr .8fr 1fr; gap: 10px; align-items: center; padding: 11px 18px; border-bottom: 1px solid #EEF2FA; font-size: 12.5px; }
+      .overviewpage .o-suppr-row:last-child { border-bottom: none; }
+      .overviewpage .o-suppr-email { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 600; color: var(--o-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .overviewpage .o-suppr-badge { display: inline-flex; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--o-red-soft); color: var(--o-red); width: fit-content; }
+      .overviewpage .o-suppr-count { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 700; color: var(--o-ink2); }
+      .overviewpage .o-suppr-time { color: var(--o-muted); font-size: 11.5px; }
+
+      /* billing summary card */
+      .overviewpage .o-billrow { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #EEF2FA; font-size: 12.5px; }
+      .overviewpage .o-billrow:last-child { border-bottom: none; }
+      .overviewpage .o-billrow span:first-child { color: var(--o-muted); }
+      .overviewpage .o-billrow span:last-child { font-weight: 700; color: var(--o-ink); }
+
+      /* quick actions grid */
+      .overviewpage .o-qa-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 16px 18px; }
+      .overviewpage .o-qa { display: block; text-align: left; padding: 12px; border: 1px solid var(--o-border); border-radius: 10px; text-decoration: none; transition: border-color .15s, background .15s; }
+      .overviewpage .o-qa:hover { border-color: var(--o-accent); background: var(--o-accent-soft); }
+      .overviewpage .o-qa-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--o-accent-soft); color: var(--o-accent); display: grid; place-items: center; margin-bottom: 8px; }
+      .overviewpage .o-qa-icon svg { width: 15px; height: 15px; }
+      .overviewpage .o-qa-title { font-size: 12.5px; font-weight: 700; color: var(--o-ink); }
+      .overviewpage .o-qa-hint { font-size: 10.5px; color: var(--o-muted); margin-top: 2px; }
+
+      @media (max-width: 640px) {
+        .overviewpage .o-migmetrics { grid-template-columns: repeat(3, 1fr); }
+        .overviewpage .o-suppr-row { grid-template-columns: 1fr; gap: 3px; }
+      }
     `}</style>
   );
 }

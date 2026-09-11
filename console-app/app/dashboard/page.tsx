@@ -1,10 +1,42 @@
 import { getSession } from '@/lib/auth';
 import { query, queryOne, initDb } from '@/lib/db';
-import { resolvePlanLimits, PLANS, type PlanKey } from '@/lib/plans';
+import { resolvePlanLimits, PLANS, PLAN_ORDER, type PlanKey } from '@/lib/plans';
 import { listAllUsers } from '@/lib/flux';
 import { checkMxLive, detectDnsProvider } from '@/lib/dns';
 import { getSesIdentity, getSesAccountStatus } from '@/lib/ses';
+import { runPool } from '@/lib/run-pool';
 import { OverviewStyles } from './overview-theme';
+
+interface SuppressionRow {
+  email: string;
+  reason: string;
+  sub_type: string | null;
+  diagnostic: string | null;
+  occurrences: number;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+interface MigrationJobRow {
+  id: string;
+  source_type: string;
+  source_host: string | null;
+  status: string;
+  total_users: number | null;
+  completed_users: number;
+  failed_users: number;
+  imported_messages: number;
+  imported_bytes: number;
+  created_at: string;
+  completed_at: string | null;
+}
+
+const MIGRATION_PROVIDER_LABEL: Record<string, string> = {
+  zoho: 'Zoho Mail',
+  gsuite: 'Google Workspace',
+  cpanel: 'cPanel / WHM',
+  dovecot: 'Dovecot / IMAP',
+};
+const MIGRATION_ACTIVE_STATUSES = new Set(['pending', 'discovering', 'migrating', 'running']);
 
 interface DomainRow {
   id: string;
@@ -53,6 +85,35 @@ const ArrowIcon = () => (
 const RefreshIcon = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" /></svg>
 );
+const GlobeIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" /></svg>
+);
+const MailIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
+);
+const ImportIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+);
+const CardIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>
+);
+
+function fmtRelDate(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 3600000) return `${Math.max(1, Math.round(diff / 60000))}m ago`;
+  if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+  return new Date(iso).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+}
+
+/** Human label for a suppression's `reason` column (email_suppressions.reason). */
+function suppressionReasonLabel(reason: string): string {
+  switch (reason) {
+    case 'bounce': return 'Hard Bounce';
+    case 'transient_bounce': return 'Transient Bounce';
+    case 'complaint': return 'Spam Complaint';
+    default: return reason;
+  }
+}
 
 /** Human label for an SES DKIM status. `undefined` covers "no identity yet". */
 function dkimLabel(status: string | null | undefined): { text: string; detail?: string; ok: boolean | null } {
@@ -74,7 +135,7 @@ export default async function DashboardPage() {
   if (!session) return null;
   await initDb();
 
-  const [domainRows, sub, org] = await Promise.all([
+  const [domainRows, sub, org, suppressions, suppressionCount, migrationJobs] = await Promise.all([
     query<DomainRow>(
       'SELECT id, domain, verified, flux_domain_id, created_at FROM domains WHERE org_id = $1 ORDER BY created_at',
       [session.orgId]
@@ -84,6 +145,26 @@ export default async function DashboardPage() {
       [session.orgId]
     ),
     queryOne<{ name: string }>('SELECT name FROM organizations WHERE id = $1', [session.orgId]),
+    query<SuppressionRow>(
+      `SELECT email, reason, sub_type, diagnostic, occurrences, first_seen_at, last_seen_at
+       FROM email_suppressions WHERE org_id = $1 AND suppressed = TRUE
+       ORDER BY last_seen_at DESC LIMIT 3`,
+      [session.orgId]
+    ),
+    // The full count — the list above is capped at 3 for the panel, but the
+    // badge next to "Deliverability" should reflect every suppressed address.
+    queryOne<{ count: string }>(
+      'SELECT COUNT(*) FROM email_suppressions WHERE org_id = $1 AND suppressed = TRUE',
+      [session.orgId]
+    ),
+    // Migration jobs live in a separate database (see lib/run-pool.ts) from
+    // everything else on this page — same table /dashboard/migration reads.
+    runPool().query<MigrationJobRow>(
+      `SELECT id, source_type, source_host, status, total_users, completed_users,
+              failed_users, imported_messages, imported_bytes, created_at, completed_at
+       FROM migration_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 5`,
+      [session.orgId]
+    ).then(r => r.rows).catch(() => [] as MigrationJobRow[]),
   ]);
 
   // Live per-domain sending status — the same calls /api/domains and the
@@ -119,6 +200,18 @@ export default async function DashboardPage() {
   for (const u of orgUsers) {
     if (u.domainId) mailboxesByDomain.set(u.domainId, (mailboxesByDomain.get(u.domainId) ?? 0) + 1);
   }
+  const domainNameByFluxId = new Map(domainRows.filter(d => d.flux_domain_id).map(d => [d.flux_domain_id as string, d.domain]));
+
+  // Busiest mailboxes by real usage — the same usedDiskQuota/quotas.maxDiskQuota
+  // fields /dashboard/users reads, just sorted and capped for a compact panel.
+  const topMailboxes = [...orgUsers]
+    .sort((a, b) => (b.usedDiskQuota ?? 0) - (a.usedDiskQuota ?? 0))
+    .slice(0, 4);
+
+  const totalSuppressed = Number(suppressionCount?.count ?? 0);
+
+  const activeMigration = migrationJobs.find(j => MIGRATION_ACTIVE_STATUSES.has(j.status));
+  const recentMigrations = migrationJobs.filter(j => j.id !== activeMigration?.id).slice(0, 2);
 
   const limits = sub ? resolvePlanLimits(sub) : null;
   const planKey = (limits?.plan ?? 'trial') as PlanKey;
@@ -134,6 +227,12 @@ export default async function DashboardPage() {
   const trialDays = sub?.trial_ends_at
     ? Math.max(0, Math.ceil((new Date(sub.trial_ends_at).getTime() - Date.now()) / 86400000))
     : 0;
+
+  // The next tier up from whatever is active now — a real, priced recommendation
+  // from PLANS, not a hardcoded "Business" suggestion that would drift the moment
+  // pricing or the tier list changes.
+  const planOrderIdx = PLAN_ORDER.indexOf(planKey);
+  const nextTierKey = planOrderIdx >= 0 && planOrderIdx < PLAN_ORDER.length - 1 ? PLAN_ORDER[planOrderIdx + 1] : null;
 
   const istHour = Number(
     new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date())
@@ -443,6 +542,222 @@ export default async function DashboardPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!isEmptyWorkspace && (
+        <div className="o-grid2">
+          {/* Mailboxes — same usedDiskQuota/quotas.maxDiskQuota fields as /dashboard/users, just capped to the busiest few. */}
+          <div className="o-panel">
+            <div className="o-panelhead">
+              <div>
+                <div className="o-paneltitle">
+                  Mailboxes
+                  <span className="o-stat-tag">{mailboxCount} of {seatsMax} seats</span>
+                </div>
+                <div className="o-panelsub">Live storage consumption from the mail server.</div>
+              </div>
+              <a className="o-btn" href="/dashboard/users"><UsersIcon /> Create mailbox</a>
+            </div>
+            {topMailboxes.length > 0 ? (
+              <table className="o-mtable">
+                <thead>
+                  <tr><th>Mailbox</th><th>Domain</th><th>Storage</th><th>Usage</th></tr>
+                </thead>
+                <tbody>
+                  {topMailboxes.map(u => {
+                    const quota = u.quotas?.maxDiskQuota ?? 0;
+                    const used = u.usedDiskQuota ?? 0;
+                    const pct = quota > 0 ? Math.min(100, Math.round((used / quota) * 100)) : null;
+                    return (
+                      <tr key={u.id}>
+                        <td>
+                          <div className="o-mname">{u.name || u.emailAddress}</div>
+                          <div className="o-mmail">{u.emailAddress}</div>
+                        </td>
+                        <td className="o-mdomain">{u.domainId ? (domainNameByFluxId.get(u.domainId) ?? '—') : '—'}</td>
+                        <td>
+                          {quota > 0
+                            ? <>{fmtBytes(used)} <span style={{ color: 'var(--o-muted)' }}>/ {fmtBytes(quota)}</span></>
+                            : fmtBytes(used)}
+                        </td>
+                        <td>
+                          {pct !== null ? (
+                            <div className="o-musagewrap">
+                              <div className="o-musagebar"><i style={{ width: `${pct}%`, background: pct >= 90 ? 'var(--o-red)' : pct >= 75 ? 'var(--o-amber)' : 'var(--o-accent)' }} /></div>
+                              <span className="o-musagepct" style={{ color: pct >= 90 ? 'var(--o-red)' : pct >= 75 ? 'var(--o-amber)' : 'var(--o-ink2)' }}>{pct}%</span>
+                            </div>
+                          ) : <span className="o-cell-muted">No quota</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div className="o-migempty">No mailboxes yet — <a href="/dashboard/users">create your first one</a>.</div>
+            )}
+            {mailboxCount > topMailboxes.length && (
+              <div className="o-panelfoot">
+                <span>Showing {topMailboxes.length} of {mailboxCount} mailboxes</span>
+                <a href="/dashboard/users">View all mailboxes &rarr;</a>
+              </div>
+            )}
+          </div>
+
+          {/* Migration — the same migration_jobs rows /dashboard/migration and its SSE progress stream read. */}
+          <div className="o-panel">
+            <div className="o-panelhead">
+              <div>
+                <div className="o-paneltitle">
+                  Migration
+                  {activeMigration && (
+                    <span className="o-livepill"><i /> Live</span>
+                  )}
+                </div>
+              </div>
+              <a href="/dashboard/migration" style={{ fontSize: 12, color: 'var(--o-accent)', fontWeight: 700, textDecoration: 'none' }}>View details &rarr;</a>
+            </div>
+
+            {activeMigration ? (
+              <div className="o-migbody">
+                <div className="o-migrow">
+                  <div>
+                    <div className="o-migsrc-label">Source</div>
+                    <div className="o-migsrc">
+                      <span>{MIGRATION_PROVIDER_LABEL[activeMigration.source_type] ?? activeMigration.source_type}</span>
+                      <ArrowIcon />
+                      <span style={{ color: 'var(--o-accent)' }}>INBOX</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="o-migsrc-label">Progress</div>
+                    <div className="o-mono" style={{ fontWeight: 800, color: 'var(--o-ink)' }}>
+                      {activeMigration.completed_users} / {activeMigration.total_users ?? '?'} mailboxes
+                    </div>
+                  </div>
+                </div>
+                {activeMigration.total_users != null && activeMigration.total_users > 0 && (
+                  <>
+                    <div className="o-migprogtitle">
+                      <span>Overall transfer</span>
+                      <b>{Math.round((activeMigration.completed_users / activeMigration.total_users) * 100)}% complete</b>
+                    </div>
+                    <div className="o-migbar"><i style={{ width: `${Math.min(100, Math.round((activeMigration.completed_users / activeMigration.total_users) * 100))}%` }} /></div>
+                  </>
+                )}
+                <div className="o-migmetrics">
+                  <div className="o-migmetric"><b>{activeMigration.imported_messages.toLocaleString()}</b><span>Imported</span></div>
+                  <div className="o-migmetric"><b>{fmtBytes(activeMigration.imported_bytes)}</b><span>Data</span></div>
+                  <div className="o-migmetric"><b style={{ color: activeMigration.failed_users > 0 ? 'var(--o-red)' : undefined }}>{activeMigration.failed_users} failed</b><span>Failed</span></div>
+                </div>
+              </div>
+            ) : (
+              <div className="o-migempty">No migration in progress — <a href="/dashboard/migration">import from Zoho, Google Workspace, or cPanel</a>.</div>
+            )}
+
+            {recentMigrations.length > 0 && (
+              <div className="o-recentmig">
+                <div className="o-recentmig-label">Recent migrations</div>
+                {recentMigrations.map(j => (
+                  <div key={j.id} className="o-recentmig-row">
+                    <span className="o-recentmig-src">{MIGRATION_PROVIDER_LABEL[j.source_type] ?? j.source_type}</span>
+                    <span className={`o-recentmig-status ${j.status === 'completed' ? 'ok' : j.status === 'failed' || j.status === 'cancelled' ? 'fail' : ''}`}>
+                      {j.status[0].toUpperCase() + j.status.slice(1)}
+                    </span>
+                    <span className="o-mono">{j.completed_users} user{j.completed_users !== 1 ? 's' : ''}</span>
+                    <span className="o-recentmig-date">{fmtRelDate(j.completed_at ?? j.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!isEmptyWorkspace && (
+        <div className="o-grid2">
+          {/* Deliverability — email_suppressions, written from real SES bounce/complaint notifications. */}
+          <div className="o-panel">
+            <div className="o-panelhead">
+              <div>
+                <div className="o-paneltitle">
+                  Deliverability
+                  {totalSuppressed > 0 && <span className="o-badge-count">{totalSuppressed} active suppression{totalSuppressed !== 1 ? 's' : ''}</span>}
+                </div>
+                <div className="o-panelsub">Addresses suppressed after a bounce or spam complaint, to protect your sender reputation.</div>
+              </div>
+            </div>
+            {suppressions.length > 0 ? (
+              <div>
+                {suppressions.map(s => (
+                  <div key={s.email} className="o-suppr-row">
+                    <span className="o-suppr-email">{s.email}</span>
+                    <span className="o-suppr-badge">{suppressionReasonLabel(s.reason)}</span>
+                    <span className="o-suppr-count">{s.occurrences}&times;</span>
+                    <span className="o-suppr-time">{fmtRelDate(s.last_seen_at)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="o-migempty">No suppressed addresses — every recipient on your list is currently sendable.</div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Billing summary — the same subscription/plan fields the stat tiles above draw from. */}
+            <div className="o-panel">
+              <div className="o-panelhead">
+                <div>
+                  <div className="o-paneltitle">
+                    Subscription &amp; tier
+                    {sub?.status === 'trial' && <span className="o-stat-tag">Trial</span>}
+                  </div>
+                </div>
+              </div>
+              <div style={{ padding: '14px 18px' }}>
+                <div className="o-billrow"><span>Seat quota</span><span>{seatsMax} seats</span></div>
+                <div className="o-billrow"><span>Active mailboxes</span><span>{mailboxCount} seats used</span></div>
+                {sub?.status === 'trial' && nextTierKey ? (
+                  <div className="o-billrow"><span>Suggested next tier</span><span>{PLANS[nextTierKey].name} (&#8377;{PLANS[nextTierKey].pricePerUser} / seat / mo)</span></div>
+                ) : (
+                  <div className="o-billrow"><span>Current tier</span><span>{PLANS[planKey].name}{PLANS[planKey].pricePerUser > 0 && <> (&#8377;{PLANS[planKey].pricePerUser} / seat / mo)</>}</span></div>
+                )}
+                <div className="o-billrow"><span>Billing provider</span><span>{sub?.razorpay_subscription_id ? 'Razorpay active' : 'Not set up'}</span></div>
+              </div>
+              <div className="o-panelfoot">
+                <span>{sub?.status === 'trial' ? `${trialDays} day${trialDays !== 1 ? 's' : ''} remaining` : sub?.status ?? 'No subscription'}</span>
+                <a href="/dashboard/billing">{sub?.status === 'trial' ? 'Upgrade plan' : 'Manage plan'} &rarr;</a>
+              </div>
+            </div>
+
+            {/* Quick actions — real routes only; no bulk/invite/report actions that don't exist. */}
+            <div className="o-panel">
+              <div className="o-panelhead"><div className="o-paneltitle">Quick actions</div></div>
+              <div className="o-qa-grid">
+                <a className="o-qa" href="/dashboard/domains">
+                  <div className="o-qa-icon"><GlobeIcon /></div>
+                  <div className="o-qa-title">Add domain</div>
+                  <div className="o-qa-hint">Verify DNS &amp; DKIM</div>
+                </a>
+                <a className="o-qa" href="/dashboard/users">
+                  <div className="o-qa-icon"><MailIcon /></div>
+                  <div className="o-qa-title">Create mailbox</div>
+                  <div className="o-qa-hint">Allocate a seat</div>
+                </a>
+                <a className="o-qa" href="/dashboard/migration">
+                  <div className="o-qa-icon"><ImportIcon /></div>
+                  <div className="o-qa-title">Start migration</div>
+                  <div className="o-qa-hint">Import from Zoho, Google</div>
+                </a>
+                <a className="o-qa" href="/dashboard/billing">
+                  <div className="o-qa-icon"><CardIcon /></div>
+                  <div className="o-qa-title">Manage billing</div>
+                  <div className="o-qa-hint">Plan &amp; payment details</div>
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
