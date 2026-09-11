@@ -315,7 +315,7 @@ export default async function DashboardPage() {
       <div className="o-head">
         <div>
           <div className="o-h1">Overview</div>
-          <div className="o-sub">Manage your {org?.name ?? 'workspace'}</div>
+          <div className="o-sub">Manage your Arham Workspace</div>
         </div>
         <div className="o-who">
           <div className="o-who-text">

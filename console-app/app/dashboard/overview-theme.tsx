@@ -41,7 +41,7 @@ export function OverviewStyles() {
       .overviewpage .o-who-name { font-size: 13.5px; font-weight: 700; color: var(--o-ink); }
       .overviewpage .o-who-email { font-size: 12px; color: var(--o-muted); }
       .overviewpage .o-avatar {
-        width: 36px; height: 36px; border-radius: 50%; background: var(--o-accent); color: #fff;
+        width: 36px; height: 36px; border-radius: 50%; background: #071A3D; color: #fff;
         display: grid; place-items: center; font-size: 13px; font-weight: 700; flex: none;
       }
 

@@ -70,16 +70,11 @@ const Icon = {
       <line x1="6" y1="6" x2="18" y2="18"/>
     </svg>
   ),
-  bolt: (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-    </svg>
-  ),
 };
 
 const NAV = [
   { section: 'Workspace', items: [
-    { href: '/dashboard',           label: 'Overview',    icon: Icon.home },
+    { href: '/dashboard',           label: 'Overview',    icon: Icon.home, badge: true },
     { href: '/dashboard/domains',   label: 'Domains',     icon: Icon.globe },
     { href: '/dashboard/users',     label: 'Mailboxes',   icon: Icon.users },
     { href: '/dashboard/migration', label: 'Migration',   icon: Icon.download },
@@ -90,7 +85,7 @@ const NAV = [
   ]},
 ];
 
-export default function SideNav({ orgName, email }: { orgName: string; email: string }) {
+export default function SideNav({ orgName, attentionCount = 0 }: { orgName: string; attentionCount?: number }) {
   const pathname = usePathname();
   const router   = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -109,7 +104,7 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
     router.push('/login');
   }
 
-  const navLink = (item: { href: string; label: string; icon: React.ReactNode }) => {
+  const navLink = (item: { href: string; label: string; icon: React.ReactNode; badge?: boolean }) => {
     const active = item.href === '/dashboard'
       ? pathname === '/dashboard'
       : pathname.startsWith(item.href);
@@ -128,6 +123,11 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
           {item.icon}
         </span>
         {item.label}
+        {item.badge && attentionCount > 0 && (
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700, background: '#fef3c7', color: '#92400e' }}>
+            {attentionCount}
+          </span>
+        )}
       </a>
     );
   };
@@ -140,8 +140,8 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
           {Icon.menu}
         </button>
         <div className="topbar-brand">
-          <span style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:7,background:'#2563eb',flexShrink:0 }}>
-            {Icon.bolt}
+          <span style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:7,background:'#2563eb',color:'#fff',flexShrink:0 }}>
+            {Icon.inbox}
           </span>
           <span>{orgName}</span>
         </div>
@@ -165,18 +165,21 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
         height: '100%',
         overflowY: 'auto',
       }}>
-        {/* Logo */}
+        {/* Logo — the real product identity (INBOX, by Arham Workspace). The
+            signed-in org/admin identity is shown once, in the page header
+            above the content, rather than duplicated here. */}
         <div style={{ padding: '1.25rem 1.25rem 1.1rem', borderBottom: '1px solid #edf2f7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem', minWidth: 0 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34, borderRadius: 9, background: '#2563eb', color: '#fff', flexShrink: 0 }}>
-              {Icon.bolt}
+              {Icon.inbox}
             </span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {orgName}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem' }}>
+                <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem', letterSpacing: '-.01em' }}>INBOX</span>
+                <span style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', color: '#2563eb', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 999, padding: '1px 6px' }}>Console</span>
               </div>
               <div style={{ color: '#64748b', fontSize: '0.7rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {email}
+                by Arham Workspace
               </div>
             </div>
           </div>
