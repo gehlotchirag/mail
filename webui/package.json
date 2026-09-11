@@ -34,9 +34,11 @@
   "dependencies": {
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.0.0",
+    "@capacitor/filesystem": "^7.1.8",
     "@capacitor/local-notifications": "^7.0.7",
     "@capacitor/preferences": "^7.0.0",
     "@capacitor/push-notifications": "^7.0.0",
+    "@capacitor/share": "^7.0.4",
     "@tanstack/react-virtual": "^3.13.24",
     "@tiptap/extension-color": "^3.22.4",
     "@tiptap/extension-image": "^3.22.4",

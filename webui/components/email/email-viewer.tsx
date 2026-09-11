@@ -10,6 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { formatFileSize, cn, buildMailboxTree, MailboxNode, formatDateTime, generateUUID } from "@/lib/utils";
 import { getSecurityStatus, extractListHeaders } from "@/lib/email-headers";
 import { emailToReadView } from "@/lib/plugin-projection";
+import { openOrSaveNative } from "@/lib/native-attachment";
 import {
   Reply,
   ReplyAll,
@@ -2561,8 +2562,17 @@ export function EmailViewer({
         attachment.tnefData.byteOffset + attachment.tnefData.byteLength,
       ) as ArrayBuffer;
       const blob = new Blob([buffer], { type: attachment.type || 'application/octet-stream' });
-      const objectUrl = URL.createObjectURL(blob);
 
+      // window.open and <a download> both need browser machinery the
+      // Capacitor mobile shell doesn't have — see native-attachment.ts.
+      // Route through the native share sheet there for view and download
+      // alike; it covers both ("Open with" / "Save to Files").
+      if (await openOrSaveNative(blob, attachment.name || 'download')) {
+        emailHooks.onAttachmentDownload.emit(info);
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
       if (opensPreview) {
         const transformed = await emailHooks.onAttachmentPreview.transform({ previewUrl: objectUrl } as AttachmentPreview, info);
         window.open(transformed.previewUrl || objectUrl, '_blank', 'noopener,noreferrer');
@@ -2591,8 +2601,13 @@ export function EmailViewer({
 
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const blob = new Blob([buffer], { type: attachment.type || 'application/octet-stream' });
-    const objectUrl = URL.createObjectURL(blob);
 
+    if (await openOrSaveNative(blob, attachment.name || 'download')) {
+      emailHooks.onAttachmentDownload.emit(info);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
     if (opensPreview) {
       const transformed = await emailHooks.onAttachmentPreview.transform({ previewUrl: objectUrl } as AttachmentPreview, info);
       window.open(transformed.previewUrl || objectUrl, '_blank', 'noopener,noreferrer');
@@ -2629,14 +2644,17 @@ export function EmailViewer({
         attachment.tnefData.byteOffset + attachment.tnefData.byteLength,
       ) as ArrayBuffer;
       const blob = new Blob([buffer], { type: attachment.type || 'application/octet-stream' });
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = attachment.name || 'download';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      void (async () => {
+        if (await openOrSaveNative(blob, attachment.name || 'download')) return;
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = attachment.name || 'download';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      })();
       return;
     }
 
@@ -2645,14 +2663,17 @@ export function EmailViewer({
     if (!bytes || bytes.byteLength === 0) return;
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const blob = new Blob([buffer], { type: attachment.type || 'application/octet-stream' });
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = attachment.name || 'download';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    void (async () => {
+      if (await openOrSaveNative(blob, attachment.name || 'download')) return;
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = attachment.name || 'download';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    })();
   }, [onDownloadAttachment, email?.id]);
 
   // Pre-fetch object URLs for image attachments so their actual contents can be
