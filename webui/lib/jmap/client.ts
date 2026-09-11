@@ -4,7 +4,7 @@ import type { IJMAPClient } from "./client-interface";
 import { toWildcardQuery } from "./search-utils";
 import { debug } from "@/lib/debug";
 import { normalizeCalendarEventLike } from "@/lib/calendar-event-normalization";
-import { openOrSaveNative } from "@/lib/native-attachment";
+import { saveNativeAs } from "@/lib/native-attachment";
 
 export class RateLimitError extends Error {
   retryAfterMs: number;
@@ -4865,9 +4865,10 @@ export class JMAPClient implements IJMAPClient {
 
     // In the Capacitor mobile app there is no download manager wired up to
     // blob: URLs, so the <a download> click below is a silent no-op there —
-    // see native-attachment.ts for why. Route through the native share sheet
-    // instead when running inside that shell; falls through unchanged on web.
-    if (await openOrSaveNative(blob, name || 'download')) return;
+    // see native-attachment.ts for why. Route through the native "Save As"
+    // picker instead when running inside that shell; falls through unchanged
+    // on web.
+    if (await saveNativeAs(blob, name || 'download')) return;
 
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');

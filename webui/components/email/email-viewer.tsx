@@ -10,7 +10,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { formatFileSize, cn, buildMailboxTree, MailboxNode, formatDateTime, generateUUID } from "@/lib/utils";
 import { getSecurityStatus, extractListHeaders } from "@/lib/email-headers";
 import { emailToReadView } from "@/lib/plugin-projection";
-import { openOrSaveNative } from "@/lib/native-attachment";
+import { shareNative, saveNativeAs } from "@/lib/native-attachment";
 import {
   Reply,
   ReplyAll,
@@ -2565,9 +2565,14 @@ export function EmailViewer({
 
       // window.open and <a download> both need browser machinery the
       // Capacitor mobile shell doesn't have — see native-attachment.ts.
-      // Route through the native share sheet there for view and download
-      // alike; it covers both ("Open with" / "Save to Files").
-      if (await openOrSaveNative(blob, attachment.name || 'download')) {
+      // Preview routes through the native share sheet ("Open with"); a real
+      // download routes through the native "Save As" picker instead.
+      if (opensPreview) {
+        if (await shareNative(blob, attachment.name || 'download')) {
+          emailHooks.onAttachmentDownload.emit(info);
+          return;
+        }
+      } else if (await saveNativeAs(blob, attachment.name || 'download')) {
         emailHooks.onAttachmentDownload.emit(info);
         return;
       }
@@ -2602,7 +2607,12 @@ export function EmailViewer({
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const blob = new Blob([buffer], { type: attachment.type || 'application/octet-stream' });
 
-    if (await openOrSaveNative(blob, attachment.name || 'download')) {
+    if (opensPreview) {
+      if (await shareNative(blob, attachment.name || 'download')) {
+        emailHooks.onAttachmentDownload.emit(info);
+        return;
+      }
+    } else if (await saveNativeAs(blob, attachment.name || 'download')) {
       emailHooks.onAttachmentDownload.emit(info);
       return;
     }
@@ -2645,7 +2655,7 @@ export function EmailViewer({
       ) as ArrayBuffer;
       const blob = new Blob([buffer], { type: attachment.type || 'application/octet-stream' });
       void (async () => {
-        if (await openOrSaveNative(blob, attachment.name || 'download')) return;
+        if (await saveNativeAs(blob, attachment.name || 'download')) return;
         const objectUrl = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = objectUrl;
@@ -2664,7 +2674,7 @@ export function EmailViewer({
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const blob = new Blob([buffer], { type: attachment.type || 'application/octet-stream' });
     void (async () => {
-      if (await openOrSaveNative(blob, attachment.name || 'download')) return;
+      if (await saveNativeAs(blob, attachment.name || 'download')) return;
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = objectUrl;
