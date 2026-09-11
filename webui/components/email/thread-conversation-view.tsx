@@ -152,7 +152,13 @@ export function ThreadConversationView({
       </div>
 
       {/* Thread emails */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      {/* Same reasoning as the header's top inset above, but for the bottom:
+          this pane sits inside the `fixed inset-0` mobile viewer/composer
+          shell (app/[locale]/page.tsx), so body's safe-area-bottom padding
+          never reaches it either. Without this, the last line of a message
+          — or the Reply/Forward pills below it — renders underneath
+          Android's on-screen navigation bar. */}
+      <div className="flex-1 overflow-y-auto min-h-0 pb-[env(safe-area-inset-bottom,0px)]">
         <div className="py-2">
           {(() => {
             const collapseMiddle = !showAllEmails && emails.length > 3;
@@ -454,10 +460,16 @@ function EmailCard({
               {toRecipients && (
                 <button
                   onClick={onToggleExpanded}
-                  className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+                  // Browsers default <button> to `text-align: center` in their
+                  // UA stylesheet; it's inherited by the <span> below and, once
+                  // the recipient list is long enough to wrap, centers every
+                  // wrapped line instead of the intended flush-left address
+                  // list. `text-left` overrides it — same fix the collapsed
+                  // thread-item button above already carries.
+                  className="flex items-start gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5 text-left"
                 >
                   <span>to {toRecipients}</span>
-                  <ChevronDown className="w-3 h-3" />
+                  <ChevronDown className="w-3 h-3 mt-0.5 flex-shrink-0" />
                 </button>
               )}
             </div>
