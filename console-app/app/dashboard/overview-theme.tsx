@@ -193,14 +193,18 @@ export function OverviewStyles() {
       .overviewpage .o-panelfoot a:hover { text-decoration: underline; }
 
       /* mini mailbox table (mailboxes panel) */
-      .overviewpage .o-mtable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      .overviewpage .o-mtable { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
       .overviewpage .o-mtable thead tr { background: var(--o-surface2); }
-      .overviewpage .o-mtable th { text-align: left; padding: 9px 14px; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--o-muted); border-bottom: 1px solid var(--o-border); }
-      .overviewpage .o-mtable td { padding: 10px 14px; border-bottom: 1px solid #EEF2FA; vertical-align: middle; }
+      .overviewpage .o-mtable th { text-align: left; padding: 9px 14px; font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--o-muted); border-bottom: 1px solid var(--o-border); white-space: nowrap; }
+      .overviewpage .o-mtable td { padding: 10px 14px; border-bottom: 1px solid #EEF2FA; vertical-align: middle; overflow: hidden; white-space: nowrap; }
       .overviewpage .o-mtable tr:last-child td { border-bottom: none; }
-      .overviewpage .o-mname { font-weight: 600; color: var(--o-ink); }
-      .overviewpage .o-mmail { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--o-accent); }
-      .overviewpage .o-mdomain { font-family: 'JetBrains Mono', ui-monospace, monospace; color: var(--o-ink2); }
+      .overviewpage .o-mtable th:nth-child(1), .overviewpage .o-mtable td:nth-child(1) { width: 40%; }
+      .overviewpage .o-mtable th:nth-child(2), .overviewpage .o-mtable td:nth-child(2) { width: 18%; }
+      .overviewpage .o-mtable th:nth-child(3), .overviewpage .o-mtable td:nth-child(3) { width: 22%; white-space: nowrap; }
+      .overviewpage .o-mtable th:nth-child(4), .overviewpage .o-mtable td:nth-child(4) { width: 20%; }
+      .overviewpage .o-mname { font-weight: 600; color: var(--o-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .overviewpage .o-mmail { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--o-accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .overviewpage .o-mdomain { font-family: 'JetBrains Mono', ui-monospace, monospace; color: var(--o-ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .overviewpage .o-musagewrap { display: flex; align-items: center; gap: 8px; min-width: 90px; }
       .overviewpage .o-musagebar { flex: 1; height: 5px; border-radius: 99px; background: var(--o-surface2); overflow: hidden; }
       .overviewpage .o-musagebar i { display: block; height: 100%; border-radius: 99px; }

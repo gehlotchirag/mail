@@ -162,7 +162,8 @@ export default function SideNav({ orgName, email }: { orgName: string; email: st
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
-        minHeight: '100vh',
+        height: '100%',
+        overflowY: 'auto',
       }}>
         {/* Logo */}
         <div style={{ padding: '1.25rem 1.25rem 1.1rem', borderBottom: '1px solid #edf2f7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

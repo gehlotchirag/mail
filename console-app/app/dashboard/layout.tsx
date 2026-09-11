@@ -18,10 +18,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   );
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <SideNav orgName={session.name} email={session.email} />
-      <main className="dash-main">
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: '2rem 2rem' }}>
+      <main className="dash-main" style={{ height: '100%' }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '2rem 2rem' }}>
           {owner && !owner.email_verified && <VerifyBanner email={owner.owner_email} />}
           {children}
         </div>
