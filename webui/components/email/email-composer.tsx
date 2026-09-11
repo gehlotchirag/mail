@@ -1577,8 +1577,14 @@ export function EmailComposer({
           </div>
         </div>
       )}
-      {/* Header - mobile: clean bar with close/send, desktop: title bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-background">
+      {/* Header - mobile: clean bar with close/send, desktop: title bar.
+          The mobile wrapper around this component is `fixed inset-0` (see
+          the "max-md:fixed max-md:inset-0" viewer/composer pane in
+          app/[locale]/page.tsx), so it resolves against the raw viewport and
+          never receives body's safe-area padding-top — same reasoning as
+          the email viewer's header just above. Without this, the close (X)
+          and Send buttons sit directly under the Android status bar. */}
+      <div className="flex items-center justify-between px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] border-b bg-background">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9 md:h-8 md:w-8">
             <X className="w-5 h-5 md:w-4 md:h-4" />
