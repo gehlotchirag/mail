@@ -149,7 +149,7 @@ export function LoginTopBar({ host, adminHref, children }: { host: string; admin
   return (
     <div className="il-topbar">
       <div className="il-topbrand">
-        <img src="/icon/web/icon-512.png" alt="" />
+        <img src="/icon-512x512.png" alt="" />
         INBOX <span className="il-sub">Business Mail</span>
         {host && <span className="il-sub">· <span className="il-host">{host}</span></span>}
       </div>
