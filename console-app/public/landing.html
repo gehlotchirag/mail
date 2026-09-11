@@ -8,6 +8,13 @@
 <meta property="og:title" content="INBOX — Business Email by Arham Workspace" />
 <meta property="og:description" content="you@yourcompany.com, hosted in India. One-click DNS via your registrar, free migration from Zoho, Google Workspace, cPanel and IMAP." />
 <meta property="og:type" content="website" />
+<!-- This page is served raw by app/route.ts, bypassing layout.tsx entirely
+     (see that file for why) — so layout.tsx's Metadata `icons` config never
+     reaches it. Icons need to be declared here directly instead. -->
+<link rel="icon" href="/favicon.ico" sizes="any" />
+<link rel="icon" href="/icon/web/icon-192.png" type="image/png" sizes="192x192" />
+<link rel="icon" href="/icon/web/icon-512.png" type="image/png" sizes="512x512" />
+<link rel="apple-touch-icon" href="/icon/web/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -110,11 +117,8 @@ h3 { font-size:19px; font-weight:700; letter-spacing:-0.015em; }
 #nav.scrolled { border-bottom-color:var(--border); }
 .nav-in { display:flex; align-items:center; gap:28px; height:66px; }
 .brand { display:flex; align-items:center; gap:9px; font-weight:800; font-size:17px; letter-spacing:-.02em; }
-.brand .mark {
-  width:26px; height:26px; border-radius:7px; background:var(--accent);
-  display:grid; place-items:center; color:#fff; flex:none;
-}
-.brand .mark svg { width:15px; height:15px; }
+.brand .mark { width:28px; height:28px; display:grid; place-items:center; flex:none; }
+.brand .mark img { width:100%; height:100%; object-fit:contain; }
 .brand small { font-weight:600; color:var(--muted); font-size:12px; letter-spacing:0; }
 .nav-links { display:flex; gap:26px; margin-left:auto; font-size:14.5px; font-weight:600; color:var(--ink2); }
 .nav-links a:hover { color:var(--ink); }
@@ -202,8 +206,8 @@ h3 { font-size:19px; font-weight:700; letter-spacing:-0.015em; }
 }
 .mock-topbar { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border-s); }
 .mock-brand { display:flex; align-items:center; gap:7px; font-weight:800; font-size:13px; flex:none; }
-.mock-brand .mark { width:20px; height:20px; border-radius:5px; background:var(--accent); display:grid; place-items:center; color:#fff; }
-.mock-brand .mark svg { width:11px; height:11px; }
+.mock-brand .mark { width:22px; height:22px; display:grid; place-items:center; }
+.mock-brand .mark img { width:100%; height:100%; object-fit:contain; }
 .mock-search {
   flex:1; display:flex; align-items:center; gap:7px; background:var(--surface2); border-radius:8px;
   padding:7px 12px; font-size:12.5px; color:var(--muted);
@@ -519,7 +523,7 @@ footer { border-top:1px solid var(--border); padding-block:52px 32px; background
 <div id="nav">
   <div class="wrap nav-in">
     <a href="/" class="brand">
-      <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 8l8 5 8-5"/></svg></span>
+      <span class="mark"><img src="/icon/web/icon-512.png" alt="INBOX" width="512" height="512" /></span>
       INBOX <small>by Arham Workspace</small>
     </a>
     <nav class="nav-links" aria-label="Sections">
@@ -597,7 +601,7 @@ footer { border-top:1px solid var(--border); padding-block:52px 32px; background
       <div class="mockcard">
         <div class="mock-topbar">
           <div class="mock-brand">
-            <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 8l8 5 8-5"/></svg></span>
+            <span class="mark"><img src="/icon/web/icon-512.png" alt="INBOX" width="512" height="512" /></span>
             INBOX
           </div>
           <div class="mock-search">
@@ -1050,7 +1054,7 @@ footer { border-top:1px solid var(--border); padding-block:52px 32px; background
     <div class="f-top">
       <div class="f-brand">
         <a href="/" class="brand">
-          <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 8l8 5 8-5"/></svg></span>
+          <span class="mark"><img src="/icon/web/icon-512.png" alt="INBOX" width="512" height="512" /></span>
           INBOX <small>by Arham</small>
         </a>
         <p>Business email for Indian companies. Hosted in Mumbai, built on open standards, no advertising.</p>

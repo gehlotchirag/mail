@@ -28,7 +28,13 @@ export async function middleware(req: NextRequest) {
   // narrow, explicit exception.
   if (pathname === '/') return NextResponse.next();
   if (PUBLIC.some(p => pathname.startsWith(p))) return NextResponse.next();
-  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) return NextResponse.next();
+  // /icon/ is the app icon set (favicons, apple-touch-icon, the logo the
+  // landing page and login screen both reference) — a public static asset
+  // like favicon.ico just below, not a route. Without this, the images
+  // 404-via-redirect for every visitor without a session, landing page
+  // included, since the matcher only excludes _next/static, _next/image and
+  // favicon.ico, not arbitrary public/ paths.
+  if (pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/icon/')) return NextResponse.next();
 
   const token = req.cookies.get('console_token')?.value;
   if (!token) {
