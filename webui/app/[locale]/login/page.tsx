@@ -592,11 +592,11 @@ export default function LoginPage() {
   // Demo-only mode: show only a large demo login button
   if (demoMode && !isAddAccountMode) {
     return (
-      <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4">
+      <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
         <LoginStyles />
         <LoginFonts />
         {/* Theme toggle */}
-        <div className="absolute top-5 right-5" ref={themeMenuRef} suppressHydrationWarning>
+        <div className="absolute right-5 top-[calc(1.25rem+env(safe-area-inset-top,0px))]" ref={themeMenuRef} suppressHydrationWarning>
           <button
             type="button"
             onClick={() => setShowThemeMenu(!showThemeMenu)}
@@ -743,11 +743,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4">
+    <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       <LoginStyles />
       <LoginFonts />
       {/* Theme toggle - top right, dropdown style */}
-      <div className="absolute top-5 right-5" ref={themeMenuRef} suppressHydrationWarning>
+      <div className="absolute right-5 top-[calc(1.25rem+env(safe-area-inset-top,0px))]" ref={themeMenuRef} suppressHydrationWarning>
         <button
           type="button"
           onClick={() => setShowThemeMenu(!showThemeMenu)}
@@ -955,9 +955,10 @@ export default function LoginPage() {
                         ))}
                       </select>
                       {domainAutoLocked && (
-                        <p className="text-[11px] text-muted-foreground leading-snug">
-                          {t("jmap_server_auto_picked")}
-                        </p>
+                        <div className="il-chip">
+                          <Check strokeWidth={3} />
+                          <span><b>{selectedServer?.label}</b> — {t("jmap_server_auto_picked")}</span>
+                        </div>
                       )}
                     </div>
                   )}
@@ -1162,14 +1163,14 @@ export default function LoginPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full h-11 font-medium text-[15px] rounded-xl border-border/60 hover:bg-muted/50"
+                      className="il-oauth"
                       onClick={handleOAuthLogin}
                       disabled={oauthLoading || isLoading}
                     >
                       {oauthLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        <Loader2 className="w-[18px] h-[18px] animate-spin" />
                       ) : (
-                        <LogIn className="w-4 h-4 mr-2" />
+                        <Shield className="w-[18px] h-[18px]" />
                       )}
                       {t("sign_in_sso")}
                     </Button>

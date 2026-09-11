@@ -44,6 +44,27 @@ export function LoginStyles() {
       :root.dark .inbox-login .il-card {
         box-shadow: 0 24px 64px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.3);
       }
+      .inbox-login .il-chip {
+        display: flex; align-items: center; gap: 8px; margin-top: 8px;
+        padding: 9px 12px; border-radius: 10px;
+        background: var(--il-accent-soft); border: 1px solid color-mix(in srgb, var(--il-accent) 22%, transparent);
+        font-size: 12.5px; color: var(--il-accent);
+      }
+      .inbox-login .il-chip svg {
+        width: 15px; height: 15px; flex: none; border-radius: 50%;
+        background: var(--il-accent); color: #fff; padding: 2px;
+      }
+      .inbox-login .il-chip b { font-weight: 700; }
+      .inbox-login .il-oauth {
+        width: 100%; height: 44px; border-radius: 0.75rem;
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        font-weight: 500; font-size: 15px;
+        border: 1px solid var(--color-border);
+        background: var(--color-background); color: var(--color-foreground);
+        transition: background-color .2s ease;
+      }
+      .inbox-login .il-oauth:hover:not(:disabled) { background: var(--color-muted); }
+      .inbox-login .il-oauth svg { width: 18px; height: 18px; flex: none; }
     `}</style>
   );
 }
