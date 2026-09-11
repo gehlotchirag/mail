@@ -19,6 +19,7 @@ import { generateCodeVerifier, generateCodeChallenge, generateState } from "@/li
 import { OAUTH_SCOPES } from "@/lib/oauth/tokens";
 import { useUpdateStore, selectBanner } from "@/stores/update-store";
 import type { PublicJmapServerEntry } from "@/lib/admin/jmap-servers";
+import { LoginStyles, LoginFonts } from "./login-theme";
 
 function findServerByDomain(servers: PublicJmapServerEntry[], email: string | undefined): PublicJmapServerEntry | undefined {
   if (!email || !email.includes("@")) return undefined;
@@ -591,7 +592,9 @@ export default function LoginPage() {
   // Demo-only mode: show only a large demo login button
   if (demoMode && !isAddAccountMode) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-muted/10 to-muted/30 relative px-4">
+      <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4">
+        <LoginStyles />
+        <LoginFonts />
         {/* Theme toggle */}
         <div className="absolute top-5 right-5" ref={themeMenuRef} suppressHydrationWarning>
           <button
@@ -645,7 +648,7 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-[440px] mx-auto">
-          <div className="rounded-2xl border border-border/60 bg-background/80 backdrop-blur-sm shadow-xl shadow-black/5 dark:shadow-black/20 overflow-hidden">
+          <div className="il-card rounded-2xl border border-border/60 bg-background/80 backdrop-blur-sm overflow-hidden">
             {/* Header with logo */}
             <div className="px-8 pt-12 pb-4 text-center">
               <div className="inline-flex items-center justify-center w-20 h-20 mb-6">
@@ -656,7 +659,7 @@ export default function LoginPage() {
                 />
               </div>
               <h1 className="text-3xl font-bold tracking-tight">
-                <span className="text-green-600 dark:text-green-400">{appName}</span>
+                <span className="il-wordmark">{appName}</span>
               </h1>
               <p className="text-base text-muted-foreground mt-2 max-w-xs mx-auto leading-relaxed">
                 {t("demo_tagline")}
@@ -740,7 +743,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-background via-muted/10 to-muted/30 relative px-4">
+    <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4">
+      <LoginStyles />
+      <LoginFonts />
       {/* Theme toggle - top right, dropdown style */}
       <div className="absolute top-5 right-5" ref={themeMenuRef} suppressHydrationWarning>
         <button
@@ -795,7 +800,7 @@ export default function LoginPage() {
 
       <div className="w-full max-w-[400px] mx-auto">
         {/* Card container */}
-        <div className="rounded-2xl border border-border/60 bg-background/80 backdrop-blur-sm shadow-xl shadow-black/5 dark:shadow-black/20 overflow-hidden">
+        <div className="il-card rounded-2xl border border-border/60 bg-background/80 backdrop-blur-sm overflow-hidden">
           {/* Header section with logo */}
           <div className="px-8 pt-10 pb-6 text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 mb-5">
@@ -809,7 +814,7 @@ export default function LoginPage() {
               {isAddAccountMode ? (
                 <span className="text-foreground">{t("add_account_title")}</span>
               ) : (
-                <span className="text-green-600 dark:text-green-400">{appName}</span>
+                <span className="il-wordmark">{appName}</span>
               )}
             </h1>
             <p className="text-sm text-muted-foreground mt-1.5">
