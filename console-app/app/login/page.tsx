@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { AuthStyles, AuthFonts, BackToHome } from '../auth-theme';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,45 +26,59 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#f0f6ff,#1a1f2e)', padding: '1rem' }}>
-      <div style={{ width: '100%', maxWidth: 400 }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', marginBottom: '1rem', fontSize: 24 }}>⚡</div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0f2040', letterSpacing: '-0.5px' }}>Welcome back</h1>
-          <p style={{ color: '#3b5f8a', marginTop: '.5rem' }}>Sign in to your Arham Console</p>
+    <div className="authpage">
+      <AuthStyles />
+      <AuthFonts />
+      <div className="a-wrap">
+        <BackToHome />
+
+        <div className="a-brand">
+          <img src="/icon/web/icon-512.png" alt="INBOX" />
+          <h1>Welcome back</h1>
+          <p>Sign in to your INBOX console</p>
         </div>
 
-        <div style={{ background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 16, padding: '2rem' }}>
-          {error && <div style={{ background: 'rgba(220,38,38,.1)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#dc2626', marginBottom: '1.25rem', fontSize: '0.85rem' }}>{error}</div>}
+        <div className="a-card">
+          {error && <div className="a-alert">{error}</div>}
+
           <form onSubmit={submit}>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', color: '#7fa8d0', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.35rem' }}>Email address</label>
-              <input type="email" placeholder="you@company.com" required value={form.email}
+            <div className="a-field">
+              <label className="a-label" htmlFor="email">Email address</label>
+              <input
+                id="email" type="email" className="a-input" placeholder="you@company.com" required
+                value={form.email}
                 onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                style={{ width: '100%', padding: '.7rem 1rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', outline: 'none' }} />
+                autoComplete="email"
+              />
             </div>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '.35rem' }}>
-                <label style={{ color: '#7fa8d0', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>Password</label>
-                <Link href="/forgot-password" style={{ color: '#818cf8', fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none' }}>Forgot password?</Link>
+
+            <div className="a-field">
+              <div className="a-row">
+                <label className="a-label" htmlFor="password">Password</label>
+                <Link href="/forgot-password" className="a-link">Forgot password?</Link>
               </div>
-              <div style={{ position: 'relative' }}>
-                <input type={showPassword ? 'text' : 'password'} placeholder="Your password" required value={form.password}
+              <div className="a-pwwrap">
+                <input
+                  id="password" type={showPassword ? 'text' : 'password'} className="a-input"
+                  placeholder="Your password" required
+                  value={form.password}
                   onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                  style={{ width: '100%', padding: '.7rem 2.9rem .7rem 1rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', outline: 'none' }} />
-                <button type="button" onClick={() => setShowPassword(v => !v)}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button" className="a-pwtoggle" onClick={() => setShowPassword(v => !v)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}
                   title={showPassword ? 'Hide password' : 'Show password'}
-                  style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: '2.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#7fa8d0' }}>
+                >
                   {showPassword ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
                       <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
                       <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
                       <line x1="2" y1="2" x2="22" y2="22" />
                     </svg>
                   ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
                       <circle cx="12" cy="12" r="3" />
                     </svg>
@@ -71,15 +86,19 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-            <button type="submit" disabled={loading}
-              style={{ width: '100%', padding: '.85rem', background: loading ? '#374151' : 'linear-gradient(135deg,#2563eb,#1d4ed8)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', fontSize: '0.95rem' }}>
-              {loading ? 'Signing in…' : 'Sign in →'}
+
+            <button type="submit" className="a-submit" disabled={loading}>
+              {loading ? 'Signing in…' : (
+                <>
+                  Sign in
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </>
+              )}
             </button>
           </form>
-          <p style={{ textAlign: 'center', marginTop: '1.25rem', color: '#3b5f8a', fontSize: '0.85rem' }}>
-            No account yet?{' '}
-            <a href="/signup" style={{ color: '#818cf8', fontWeight: 600 }}>Start free trial</a>
-          </p>
+
+          <div className="a-divider">or</div>
+          <p className="a-foot">No account yet? <a href="/signup">Start free trial</a></p>
         </div>
       </div>
     </div>

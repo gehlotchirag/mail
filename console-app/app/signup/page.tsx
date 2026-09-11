@@ -1,34 +1,34 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AuthStyles, AuthFonts, BackToHome } from '../auth-theme';
 
 /* ── Password strength ─────────────────────────────────────────────────────── */
 type Req = { label: string; met: (pw: string) => boolean };
 const PW_REQS: Req[] = [
-  { label: 'At least 8 characters',       met: pw => pw.length >= 8 },
-  { label: 'One uppercase letter (A–Z)',   met: pw => /[A-Z]/.test(pw) },
-  { label: 'One number (0–9)',             met: pw => /[0-9]/.test(pw) },
-  { label: 'One symbol (!@#$…)',           met: pw => /[^A-Za-z0-9]/.test(pw) },
+  { label: 'At least 8 characters',      met: pw => pw.length >= 8 },
+  { label: 'One uppercase letter (A–Z)', met: pw => /[A-Z]/.test(pw) },
+  { label: 'One number (0–9)',           met: pw => /[0-9]/.test(pw) },
+  { label: 'One symbol (!@#$…)',         met: pw => /[^A-Za-z0-9]/.test(pw) },
 ];
 
 function PasswordHints({ pw }: { pw: string }) {
   if (!pw) return null;
   return (
-    <div style={{ marginTop: '.6rem', display: 'flex', flexDirection: 'column', gap: '.3rem' }}>
-      {PW_REQS.map(r => (
-        <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: '.45rem', fontSize: '0.78rem', color: r.met(pw) ? '#16a34a' : '#64748b' }}>
-          {r.met(pw) ? (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          ) : (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9"/>
-            </svg>
-          )}
-          {r.label}
-        </div>
-      ))}
+    <div className="a-pwreqs">
+      {PW_REQS.map(r => {
+        const met = r.met(pw);
+        return (
+          <div key={r.label} className={`a-req ${met ? 'met' : 'unmet'}`}>
+            {met ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /></svg>
+            )}
+            {r.label}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -38,7 +38,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({ orgName: '', email: '', password: '' });
   const [showHints, setShowHints] = useState(false);
-  const [error, setError]     = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const pwValid = PW_REQS.every(r => r.met(form.password));
@@ -68,119 +68,78 @@ export default function SignupPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#f0f6ff 0%,#1a1f2e 100%)', padding: '2rem 1rem' }}>
-      <div style={{ width: '100%', maxWidth: 440 }}>
+    <div className="authpage">
+      <AuthStyles />
+      <AuthFonts />
+      <div className="a-wrap">
+        <BackToHome />
 
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <a href="https://arhamworkspace.tech" style={{ display: 'inline-flex', alignItems: 'center', gap: '.4rem', marginBottom: '1.75rem', color: '#3b5f8a', fontSize: '0.83rem', transition: 'color .15s' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-            </svg>
-            arhamworkspace.tech
-          </a>
-          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', marginBottom: '1rem' }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-          </div>
-          <h1 style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f2040', letterSpacing: '-0.5px' }}>
-            Create your workspace
-          </h1>
-          <p style={{ color: '#3b5f8a', marginTop: '.5rem', fontSize: '0.9rem' }}>
-            14-day free trial &mdash; no credit card required
-          </p>
+        <div className="a-brand">
+          <img src="/icon/web/icon-512.png" alt="INBOX" />
+          <h1>Create your workspace</h1>
+          <p>14-day free trial — no credit card required</p>
         </div>
 
-        {/* Card */}
-        <div style={{ background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 16, padding: '2rem' }}>
-
-          {error && (
-            <div className="alert-error">{error}</div>
-          )}
+        <div className="a-card">
+          {error && <div className="a-alert">{error}</div>}
 
           <form onSubmit={submit}>
-            {/* Organization name */}
-            <div className="field">
-              <label className="label" htmlFor="orgName">Organization name</label>
+            <div className="a-field">
+              <label className="a-label" htmlFor="orgName">Organization name</label>
               <input
-                id="orgName"
-                type="text"
-                className="inp"
-                placeholder="Acme Corp"
-                required
-                autoFocus
+                id="orgName" type="text" className="a-input" placeholder="Acme Corp" required autoFocus
                 value={form.orgName}
                 onChange={e => setForm(p => ({ ...p, orgName: e.target.value }))}
                 autoComplete="organization"
               />
-              <div style={{ fontSize: '0.75rem', color: '#3b5f8a', marginTop: '.3rem' }}>
-                This is how your workspace will appear to users.
-              </div>
+              <div className="a-hint">This is how your workspace will appear to users.</div>
             </div>
 
-            {/* Email */}
-            <div className="field">
-              <label className="label" htmlFor="email">Work email</label>
+            <div className="a-field">
+              <label className="a-label" htmlFor="email">Work email</label>
               <input
-                id="email"
-                type="email"
-                className="inp"
-                placeholder="you@company.com"
-                required
+                id="email" type="email" className="a-input" placeholder="you@company.com" required
                 value={form.email}
                 onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                 autoComplete="email"
               />
             </div>
 
-            {/* Password */}
-            <div className="field">
-              <label className="label" htmlFor="password">Password</label>
+            <div className="a-field">
+              <label className="a-label" htmlFor="password">Password</label>
               <input
-                id="password"
-                type="password"
-                className="inp"
-                placeholder="Create a strong password"
-                required
+                id="password" type="password" className="a-input" placeholder="Create a strong password" required
                 value={form.password}
                 onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
                 onFocus={() => setShowHints(true)}
                 autoComplete="new-password"
-                style={showHints && form.password && !pwValid ? { borderColor: '#dc2626' } : showHints && pwValid ? { borderColor: '#16a34a' } : {}}
+                style={
+                  showHints && form.password && !pwValid ? { borderColor: 'var(--danger)' } :
+                  showHints && pwValid ? { borderColor: 'var(--green)' } : undefined
+                }
               />
               {showHints && <PasswordHints pw={form.password} />}
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-full"
-              style={{ marginTop: '.75rem', background: loading ? '#374151' : 'linear-gradient(135deg,#2563eb,#1d4ed8)' }}
-            >
-              {loading ? 'Creating your workspace…' : 'Start free trial →'}
+            <button type="submit" className="a-submit" disabled={loading}>
+              {loading ? 'Creating your workspace…' : (
+                <>
+                  Start free trial
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </>
+              )}
             </button>
           </form>
 
-          {/* Divider + sign-in link */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem', margin: '1.5rem 0 1.25rem' }}>
-            <div style={{ flex: 1, borderTop: '1px solid #dbeafe' }} />
-            <span style={{ color: '#3b5f8a', fontSize: '0.78rem' }}>or</span>
-            <div style={{ flex: 1, borderTop: '1px solid #dbeafe' }} />
-          </div>
-
-          <p style={{ textAlign: 'center', color: '#3b5f8a', fontSize: '0.875rem' }}>
-            Already have an account?{' '}
-            <a href="/login" style={{ color: '#818cf8', fontWeight: 600 }}>Sign in →</a>
-          </p>
+          <div className="a-divider">or</div>
+          <p className="a-foot">Already have an account? <a href="/login">Sign in</a></p>
         </div>
 
-        {/* Footer note */}
-        <p style={{ textAlign: 'center', marginTop: '1.25rem', color: '#334155', fontSize: '0.78rem' }}>
+        <p className="a-legal">
           By signing up you agree to our{' '}
-          <a href="https://arhamworkspace.tech/terms" style={{ color: '#3b5f8a' }}>Terms of Service</a>
-          {' '}and{' '}
-          <a href="https://arhamworkspace.tech/privacy" style={{ color: '#3b5f8a' }}>Privacy Policy</a>.
+          <a href="https://arhamworkspace.tech/terms">Terms of Service</a>{' '}
+          and{' '}
+          <a href="https://arhamworkspace.tech/privacy">Privacy Policy</a>.
         </p>
       </div>
     </div>
