@@ -55,10 +55,14 @@ const RefreshIcon = () => (
 );
 
 /** Human label for an SES DKIM status. `undefined` covers "no identity yet". */
-function dkimLabel(status: string | null | undefined): { text: string; ok: boolean | null } {
+function dkimLabel(status: string | null | undefined): { text: string; detail?: string; ok: boolean | null } {
   switch (status) {
-    case 'SUCCESS': return { text: 'Verified', ok: true };
-    case 'PENDING': return { text: 'Propagating', ok: false };
+    // RSA-2048 isn't re-read per check — getSesIdentity's read path doesn't
+    // return a key length — but every domain here is provisioned with Easy
+    // DKIM's NextSigningKeyLength: 'RSA_2048_BIT' (see ses.ts), so it's a
+    // true constant for a SUCCESS domain, not a live-queried detail.
+    case 'SUCCESS': return { text: 'Verified', detail: 'RSA-2048', ok: true };
+    case 'PENDING': return { text: 'Pending CNAME', ok: false };
     case 'FAILED': return { text: 'Failed', ok: false };
     case 'TEMPORARY_FAILURE': return { text: 'Retry pending', ok: false };
     default: return { text: 'Not started', ok: null };
@@ -144,15 +148,22 @@ export default async function DashboardPage() {
   const attention: Attn[] = [];
 
   for (const d of brokenDomains) {
-    const reason = sesAccount.sandbox
-      ? 'Your sending account is sandboxed — mail can only reach verified test recipients until this is lifted.'
-      : !d.sesExists
-        ? 'Ownership is verified, but sending has not been set up for this domain yet.'
-        : d.dkim.text === 'Propagating'
-          ? 'Ownership is verified, but DKIM keys are still propagating.'
-          : d.mxLive === false
-            ? 'Ownership is verified, but MX records don’t point here yet — mail may still be routing to your old provider.'
+    let reason: string;
+    if (sesAccount.sandbox) {
+      reason = 'Your sending account is sandboxed — mail can only reach verified test recipients until this is lifted.';
+    } else if (!d.sesExists) {
+      reason = 'Ownership is verified, but sending has not been set up for this domain yet.';
+    } else {
+      const mxBroken = d.mxLive === false;
+      const dkimBroken = d.dkim.ok !== true;
+      reason = mxBroken && dkimBroken
+        ? 'Ownership is verified, but MX mail routing and DKIM keys are not resolved yet.'
+        : mxBroken
+          ? 'Ownership is verified, but MX records don’t point here yet — mail may still be routing to your old provider.'
+          : dkimBroken
+            ? `Ownership is verified, but DKIM keys are ${d.dkim.text.toLowerCase()}.`
             : 'Ownership is verified, but sending verification has not completed.';
+    }
     attention.push({
       kind: 'warn',
       title: 'A domain isn’t ready to send',
@@ -166,6 +177,11 @@ export default async function DashboardPage() {
     attention.push({
       kind: 'info',
       title: trialDays === 0 ? 'Your trial ends today' : `Your trial ends in ${trialDays} day${trialDays !== 1 ? 's' : ''}`,
+      // "Expires", not "renews" — trials don't auto-renew or charge anything
+      // in this app; they lapse to 'expired' unless manually upgraded.
+      chip: sub.trial_ends_at
+        ? `Expires ${new Date(sub.trial_ends_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}`
+        : undefined,
       desc: 'Upgrade to a paid plan to keep your mailboxes and domains active without interruption.',
       ctaLabel: 'View plans',
       ctaHref: '/dashboard/billing',
@@ -264,13 +280,23 @@ export default async function DashboardPage() {
               <span className="o-stat-label">Plan</span>
               {sub?.status === 'trial' && <span className="o-stat-tag">Trial</span>}
             </div>
-            <div className="o-stat-val">{PLANS[planKey].name}</div>
-            <div className="o-stat-meta">
-              {sub?.status === 'trial'
-                ? <span className={trialDays <= 7 ? 'warn' : ''}>{trialDays} day{trialDays !== 1 ? 's' : ''} left</span>
-                : <span>{sub?.razorpay_subscription_id ? 'Razorpay active' : sub?.status}</span>}
-            </div>
+            {sub?.status === 'trial' ? (
+              <>
+                <div className="o-stat-val">{trialDays} day{trialDays !== 1 ? 's' : ''} left</div>
+                <div className="o-stat-meta">
+                  {sub.trial_ends_at && <span>Expires {new Date(sub.trial_ends_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="o-stat-val">{PLANS[planKey].name}</div>
+                <div className="o-stat-meta">
+                  <span>{sub?.razorpay_subscription_id ? 'Razorpay active' : sub?.status}</span>
+                </div>
+              </>
+            )}
             <div className="o-stat-foot">
+              <span />
               <a href="/dashboard/billing">Manage plan <ArrowIcon /></a>
             </div>
           </div>
@@ -285,6 +311,10 @@ export default async function DashboardPage() {
               {brokenDomains.length > 0 && <span className="warn">&middot; {brokenDomains.length} needs attention</span>}
             </div>
             <div className="o-stat-foot">
+              {/* True, not a stored/cached timestamp: every domain here was
+                  MX- and DKIM-checked live during this exact page render
+                  (see the Promise.all above), so "just now" always holds. */}
+              <span>Checked just now</span>
               <a href="/dashboard/domains">Inspect <ArrowIcon /></a>
             </div>
           </div>
@@ -376,7 +406,14 @@ export default async function DashboardPage() {
               <div key={d.id} className="o-row">
                 <div className="o-domain-cell">
                   <div className="o-domain-name">{d.domain}</div>
-                  <div className="o-domain-meta">{d.dnsProvider ? d.dnsProvider[0].toUpperCase() + d.dnsProvider.slice(1) : 'DNS provider not detected'}</div>
+                  <div className="o-domain-meta">
+                    {d.dnsProvider ? d.dnsProvider[0].toUpperCase() + d.dnsProvider.slice(1) : 'DNS provider not detected'}
+                    {/* The real mail-server domain id, not a fabricated one —
+                        labelled plainly rather than "Flux ID": Flux is this
+                        platform's internal codename for the mail server, not
+                        something a customer should see as if it were a brand. */}
+                    {d.flux_domain_id && <> &middot; ID #{d.flux_domain_id}</>}
+                  </div>
                 </div>
                 {d.verified ? (
                   <span className="o-cell-ok"><CheckIcon /> Verified</span>
@@ -391,7 +428,7 @@ export default async function DashboardPage() {
                   <span className="o-cell-muted">&mdash;</span>
                 )}
                 {d.dkim.ok === true ? (
-                  <span className="o-cell-ok"><CheckIcon /> {d.dkim.text}</span>
+                  <span className="o-cell-ok"><CheckIcon /> {d.dkim.detail ?? d.dkim.text}</span>
                 ) : d.dkim.ok === false ? (
                   <span className="o-cell-warn"><WarnIcon /> {d.dkim.text}</span>
                 ) : (
