@@ -22,6 +22,11 @@ const PUBLIC = ['/login', '/signup', '/forgot-password', '/reset-password', '/ap
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // Exact match only — the marketing landing page, served by app/route.ts.
+  // PUBLIC's startsWith checks would treat '/' as a prefix of every path if
+  // it were added there instead, making the whole app public; this stays a
+  // narrow, explicit exception.
+  if (pathname === '/') return NextResponse.next();
   if (PUBLIC.some(p => pathname.startsWith(p))) return NextResponse.next();
   if (pathname.startsWith('/_next') || pathname.startsWith('/favicon')) return NextResponse.next();
 
