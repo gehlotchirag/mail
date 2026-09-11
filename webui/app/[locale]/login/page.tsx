@@ -13,13 +13,13 @@ import { useShallow } from "zustand/react/shallow";
 import { useConfig } from "@/hooks/use-config";
 import { apiFetch, getPathPrefix } from "@/lib/browser-navigation";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2, X, Info, Eye, EyeOff, LogIn, Sun, Moon, Monitor, Check, Shield, Play, Copy } from "lucide-react";
+import { AlertCircle, Loader2, X, Info, Eye, EyeOff, LogIn, Sun, Moon, Monitor, Check, Shield, Play, Copy, Mail, Lock } from "lucide-react";
 import { discoverOAuth, type OAuthMetadata } from "@/lib/oauth/discovery";
 import { generateCodeVerifier, generateCodeChallenge, generateState } from "@/lib/oauth/pkce";
 import { OAUTH_SCOPES } from "@/lib/oauth/tokens";
 import { useUpdateStore, selectBanner } from "@/stores/update-store";
 import type { PublicJmapServerEntry } from "@/lib/admin/jmap-servers";
-import { LoginStyles, LoginFonts } from "./login-theme";
+import { LoginStyles, LoginFonts, LoginTopBar } from "./login-theme";
 
 function findServerByDomain(servers: PublicJmapServerEntry[], email: string | undefined): PublicJmapServerEntry | undefined {
   if (!email || !email.includes("@")) return undefined;
@@ -136,6 +136,12 @@ export default function LoginPage() {
 
   // Effective values: per-server overrides win, then global config.
   const serverUrl = selectedServer?.url || configuredServerUrl;
+  const mailHost = (() => { try { return serverUrl ? new URL(serverUrl).host : ''; } catch { return ''; } })();
+  // The admin console is a separate app (console-app), not a route in this
+  // one — a real, existing cross-link rather than the Registration/Forgot
+  // Password tabs the reference mockup shows, which this app has no page
+  // for (see LoginTopBar's comment).
+  const adminHref = 'https://inbox.arhamworkspace.tech/dashboard';
   const effectiveOauthClientId = selectedServer?.oauth?.clientId || globalOauthClientId;
   const effectiveOauthIssuerUrl = selectedServer?.oauth?.issuerUrl || globalOauthIssuerUrl;
   const [totpCode, setTotpCode] = useState("");
@@ -592,61 +598,70 @@ export default function LoginPage() {
   // Demo-only mode: show only a large demo login button
   if (demoMode && !isAddAccountMode) {
     return (
-      <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
+      <div className="inbox-login min-h-screen flex flex-col bg-background relative pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
         <LoginStyles />
         <LoginFonts />
-        {/* Theme toggle */}
-        <div className="absolute right-5 top-[calc(1.25rem+env(safe-area-inset-top,0px))]" ref={themeMenuRef} suppressHydrationWarning>
-          <button
-            type="button"
-            onClick={() => setShowThemeMenu(!showThemeMenu)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200",
-              showThemeMenu
-                ? "bg-secondary border-border text-foreground shadow-md"
-                : "bg-background/60 backdrop-blur-sm border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/80 hover:border-border"
-            )}
-            aria-label={`Theme: ${currentThemeOption.label}`}
-            aria-expanded={showThemeMenu}
-            aria-haspopup="listbox"
-          >
-            <CurrentThemeIcon className="w-4 h-4" />
-            <span className="hidden sm:inline" suppressHydrationWarning>{currentThemeOption.label}</span>
-          </button>
 
-          {showThemeMenu && (
-            <div
-              className="absolute right-0 top-full mt-2 w-40 rounded-xl border border-border bg-background shadow-lg overflow-hidden animate-fade-in z-50"
-              role="listbox"
-              aria-label="Theme selection"
+        <LoginTopBar host={mailHost} adminHref={adminHref}>
+          <div className="relative" ref={themeMenuRef} suppressHydrationWarning>
+            <button
+              type="button"
+              onClick={() => setShowThemeMenu(!showThemeMenu)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200",
+                showThemeMenu
+                  ? "bg-secondary border-border text-foreground shadow-md"
+                  : "bg-background/60 backdrop-blur-sm border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/80 hover:border-border"
+              )}
+              aria-label={`Theme: ${currentThemeOption.label}`}
+              aria-expanded={showThemeMenu}
+              aria-haspopup="listbox"
             >
-              {THEME_OPTIONS.map((option) => {
-                const Icon = option.icon;
-                const isActive = theme === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="option"
-                    aria-selected={isActive}
-                    onClick={() => handleThemeSelect(option.value)}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors",
-                      isActive
-                        ? "bg-primary/10 text-foreground font-medium"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span className="flex-1 text-left">{option.label}</span>
-                    {isActive && <Check className="w-3.5 h-3.5 text-primary" />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+              <CurrentThemeIcon className="w-4 h-4" />
+              <span className="hidden sm:inline" suppressHydrationWarning>{currentThemeOption.label}</span>
+            </button>
+
+            {showThemeMenu && (
+              <div
+                className="absolute right-0 top-full mt-2 w-40 rounded-xl border border-border bg-background shadow-lg overflow-hidden animate-fade-in z-50"
+                role="listbox"
+                aria-label="Theme selection"
+              >
+                {THEME_OPTIONS.map((option) => {
+                  const Icon = option.icon;
+                  const isActive = theme === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isActive}
+                      onClick={() => handleThemeSelect(option.value)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors",
+                        isActive
+                          ? "bg-primary/10 text-foreground font-medium"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span className="flex-1 text-left">{option.label}</span>
+                      {isActive && <Check className="w-3.5 h-3.5 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </LoginTopBar>
+
+        <div className="il-backdrop" aria-hidden="true">
+          <div className="il-bd-row"><span className="il-bd-dot" /><span className="il-bd-line" style={{ width: '38%' }} /></div>
+          <div className="il-bd-row"><span className="il-bd-dot" /><span className="il-bd-line" style={{ width: '52%' }} /></div>
+          <div className="il-bd-row"><span className="il-bd-dot" /><span className="il-bd-line" style={{ width: '30%' }} /></div>
         </div>
 
+        <div className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-[440px] mx-auto">
           <div className="il-card rounded-2xl border border-border/60 bg-background/80 backdrop-blur-sm overflow-hidden">
             {/* Header with logo */}
@@ -738,66 +753,76 @@ export default function LoginPage() {
             <VersionBadge />
           </div>
         </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="inbox-login min-h-screen flex flex-col items-center justify-center bg-background relative px-4 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
+    <div className="inbox-login min-h-screen flex flex-col bg-background relative pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       <LoginStyles />
       <LoginFonts />
-      {/* Theme toggle - top right, dropdown style */}
-      <div className="absolute right-5 top-[calc(1.25rem+env(safe-area-inset-top,0px))]" ref={themeMenuRef} suppressHydrationWarning>
-        <button
-          type="button"
-          onClick={() => setShowThemeMenu(!showThemeMenu)}
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200",
-            showThemeMenu
-              ? "bg-secondary border-border text-foreground shadow-md"
-              : "bg-background/60 backdrop-blur-sm border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/80 hover:border-border"
-          )}
-          aria-label={`Theme: ${currentThemeOption.label}`}
-          aria-expanded={showThemeMenu}
-          aria-haspopup="listbox"
-        >
-          <CurrentThemeIcon className="w-4 h-4" />
-          <span className="hidden sm:inline" suppressHydrationWarning>{currentThemeOption.label}</span>
-        </button>
 
-        {showThemeMenu && (
-          <div
-            className="absolute right-0 top-full mt-2 w-40 rounded-xl border border-border bg-background shadow-lg overflow-hidden animate-fade-in z-50"
-            role="listbox"
-            aria-label="Theme selection"
+      <LoginTopBar host={mailHost} adminHref={adminHref}>
+        <div className="relative" ref={themeMenuRef} suppressHydrationWarning>
+          <button
+            type="button"
+            onClick={() => setShowThemeMenu(!showThemeMenu)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all duration-200",
+              showThemeMenu
+                ? "bg-secondary border-border text-foreground shadow-md"
+                : "bg-background/60 backdrop-blur-sm border-border/50 text-muted-foreground hover:text-foreground hover:bg-secondary/80 hover:border-border"
+            )}
+            aria-label={`Theme: ${currentThemeOption.label}`}
+            aria-expanded={showThemeMenu}
+            aria-haspopup="listbox"
           >
-            {THEME_OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const isActive = theme === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isActive}
-                  onClick={() => handleThemeSelect(option.value)}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors",
-                    isActive
-                      ? "bg-primary/10 text-foreground font-medium"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="flex-1 text-left">{option.label}</span>
-                  {isActive && <Check className="w-3.5 h-3.5 text-primary" />}
-                </button>
-              );
-            })}
-          </div>
-        )}
+            <CurrentThemeIcon className="w-4 h-4" />
+            <span className="hidden sm:inline" suppressHydrationWarning>{currentThemeOption.label}</span>
+          </button>
+
+          {showThemeMenu && (
+            <div
+              className="absolute right-0 top-full mt-2 w-40 rounded-xl border border-border bg-background shadow-lg overflow-hidden animate-fade-in z-50"
+              role="listbox"
+              aria-label="Theme selection"
+            >
+              {THEME_OPTIONS.map((option) => {
+                const Icon = option.icon;
+                const isActive = theme === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={isActive}
+                    onClick={() => handleThemeSelect(option.value)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3.5 py-2.5 text-sm transition-colors",
+                      isActive
+                        ? "bg-primary/10 text-foreground font-medium"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span className="flex-1 text-left">{option.label}</span>
+                    {isActive && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </LoginTopBar>
+
+      <div className="il-backdrop" aria-hidden="true">
+        <div className="il-bd-row"><span className="il-bd-dot" /><span className="il-bd-line" style={{ width: '38%' }} /></div>
+        <div className="il-bd-row"><span className="il-bd-dot" /><span className="il-bd-line" style={{ width: '52%' }} /></div>
+        <div className="il-bd-row"><span className="il-bd-dot" /><span className="il-bd-line" style={{ width: '30%' }} /></div>
       </div>
 
+      <div className="flex-1 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-[400px] mx-auto">
         {/* Card container */}
         <div className="il-card rounded-2xl border border-border/60 bg-background/80 backdrop-blur-sm overflow-hidden">
@@ -814,11 +839,14 @@ export default function LoginPage() {
               {isAddAccountMode ? (
                 <span className="text-foreground">{t("add_account_title")}</span>
               ) : (
-                <span className="il-wordmark">{appName}</span>
+                <>
+                  <span className="il-wordmark">{appName}</span>
+                  <span className="il-badge">Business Email</span>
+                </>
               )}
             </h1>
             <p className="text-sm text-muted-foreground mt-1.5">
-              {isAddAccountMode ? t("add_account_subtitle") : "Sign in to your account"}
+              {isAddAccountMode ? t("add_account_subtitle") : "Sign in to your business inbox"}
             </p>
           </div>
 
@@ -988,7 +1016,8 @@ export default function LoginPage() {
                     <label htmlFor="username" className="block text-sm font-medium text-foreground">
                       {t("username_label")}
                     </label>
-                    <div className="relative">
+                    <div className="relative il-inputwrap">
+                      <Mail className="il-inputicon" />
                       <Input
                         ref={inputRef}
                         id="username"
@@ -1042,7 +1071,8 @@ export default function LoginPage() {
                     <label htmlFor="password" className="block text-sm font-medium text-foreground">
                       {t("password_label")}
                     </label>
-                    <div className="relative">
+                    <div className="relative il-inputwrap">
+                      <Lock className="il-inputicon" />
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
@@ -1235,6 +1265,25 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* New trust line, real fallback links when the admin hasn't set
+            loginPrivacyPolicyUrl/loginImprintUrl — matches the reference's
+            footer content without duplicating what the block below already
+            renders once those are actually configured. */}
+        <p className="il-foot">
+          <span>India-hosted</span>
+          <span className="il-dot">·</span>
+          <span>End-to-end encrypted</span>
+          <span className="il-dot">·</span>
+          <a href={loginPrivacyPolicyUrl || 'https://arhamworkspace.tech/privacy'} target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+          <span className="il-dot">·</span>
+          {/* No admin-configurable Terms URL exists (only Imprint/Privacy/
+              Website) — this is a static link, not a fallback for one of
+              those, since loginImprintUrl means something different (a
+              legal-notice page, not Terms) and mislabeling it would be
+              wrong even when the admin has set it. */}
+          <a href="https://arhamworkspace.tech/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+        </p>
+
         {/* Company name & links - below card */}
         <div className="mt-6 flex flex-col items-center gap-2">
           {loginCompanyName && (
@@ -1278,6 +1327,7 @@ export default function LoginPage() {
           )}
           <VersionBadge />
         </div>
+      </div>
       </div>
     </div>
   );
