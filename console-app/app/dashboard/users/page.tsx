@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { UsersStyles, avatarColor, initials } from './users-theme';
 
 interface User {
   id: string;
@@ -21,35 +22,27 @@ function fmtBytes(b: number): string {
 
 /** Usage for one mailbox: a bar only when a quota exists to measure against. */
 function StorageCell({ used, limit }: { used?: number; limit?: number }) {
-  if (used == null) return <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>—</span>;
+  if (used == null) return <span className="u-nodata">—</span>;
   if (!limit) {
-    return (
-      <span style={{ color: '#3b5f8a', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}>
-        {fmtBytes(used)}
-      </span>
-    );
+    return <div className="u-usage-num"><b>{fmtBytes(used)}</b></div>;
   }
   const pct = Math.min(100, Math.round((used / limit) * 100));
-  const bar = pct >= 90 ? '#dc2626' : pct >= 75 ? '#d97706' : '#2563eb';
+  const barColor = pct >= 90 ? 'var(--u-red)' : pct >= 75 ? 'var(--u-amber)' : 'var(--u-accent)';
   return (
-    <div style={{ minWidth: 130 }}>
-      <div style={{ color: '#3b5f8a', fontSize: '0.78rem', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>
-        {fmtBytes(used)} <span style={{ color: '#94a3b8' }}>of {fmtBytes(limit)} · {pct}%</span>
-      </div>
-      <div style={{ background: '#dbeafe', borderRadius: 99, height: 5 }}>
-        <div style={{ background: bar, borderRadius: 99, height: 5, width: `${pct}%`, transition: 'width .4s ease' }} />
-      </div>
+    <div>
+      <div className="u-usage-num"><b>{fmtBytes(used)}</b> <span className="u-of">of {fmtBytes(limit)} · {pct}%</span></div>
+      <div className="u-usage-bar"><i style={{ width: `${pct}%`, background: barColor }} /></div>
     </div>
   );
 }
+
 interface DomainGroup { domainId: string; domain: string; users: User[]; }
 
-const S = {
-  card: { background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 12, padding: '1.5rem' } as React.CSSProperties,
-  inp: { width: '100%', padding: '.65rem .9rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', outline: 'none' } as React.CSSProperties,
-  btn: (c = '#2563eb') => ({ padding: '.55rem 1.1rem', background: c, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }) as React.CSSProperties,
-  label: { display: 'block', color: '#7fa8d0', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.5px', marginBottom: '.3rem' },
-};
+function matchesSearch(u: User, q: string): boolean {
+  if (!q) return true;
+  const hay = `${u.emailAddress} ${u.name ?? ''} ${u.description ?? ''}`.toLowerCase();
+  return hay.includes(q);
+}
 
 export default function UsersPage() {
   const [groups, setGroups] = useState<DomainGroup[]>([]);
@@ -61,6 +54,8 @@ export default function UsersPage() {
   const [error, setError] = useState('');
   const [resetModal, setResetModal] = useState<{ id: string; email: string } | null>(null);
   const [newPw, setNewPw] = useState('');
+  // Client-side only — filters what's already loaded, doesn't touch data fetching.
+  const [search, setSearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +68,18 @@ export default function UsersPage() {
 
   const allDomains = groups.map(g => ({ id: g.domainId, domain: g.domain }));
   const totalUsers = groups.reduce((n, g) => n + g.users.length, 0);
+
+  const allUsers = useMemo(() => groups.flatMap(g => g.users), [groups]);
+  const usersWithUsage = allUsers.filter(u => u.usedDiskQuota != null);
+  const totalUsedBytes = usersWithUsage.reduce((n, u) => n + (u.usedDiskQuota ?? 0), 0);
+  const usersWithQuota = allUsers.filter(u => u.quotas?.maxDiskQuota != null);
+  const totalQuotaBytes = usersWithQuota.reduce((n, u) => n + (u.quotas!.maxDiskQuota ?? 0), 0);
+  const usagePct = totalQuotaBytes > 0 ? Math.min(100, Math.round((totalUsedBytes / totalQuotaBytes) * 100)) : null;
+
+  const q = search.trim().toLowerCase();
+  const filteredGroups = q
+    ? groups.map(g => ({ ...g, users: g.users.filter(u => matchesSearch(u, q)) })).filter(g => g.users.length > 0)
+    : groups;
 
   async function addUser(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setError('');
@@ -102,109 +109,203 @@ export default function UsersPage() {
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+    <div className="userspage">
+      <UsersStyles />
+
+      <div className="u-head">
         <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f2040',  letterSpacing: '-0.5px' }}>Email Users</h1>
-          <p style={{ color: '#3b5f8a', marginTop: '.25rem', fontSize: '0.875rem' }}>{totalUsers} user{totalUsers !== 1 ? 's' : ''} across {groups.length} domain{groups.length !== 1 ? 's' : ''}</p>
+          <div className="u-h1row">
+            <h1>Email Users</h1>
+            {!loading && totalUsers > 0 && <span className="u-count">{totalUsers} provisioned</span>}
+          </div>
+          <p className="u-sub">
+            {loading ? 'Loading…' : totalUsers === 0 ? 'No mailboxes yet' : (
+              <>
+                {totalUsers} user{totalUsers !== 1 ? 's' : ''} across {groups.length} domain{groups.length !== 1 ? 's' : ''}
+                {usersWithUsage.length > 0 && <> · {fmtBytes(totalUsedBytes)}{totalQuotaBytes > 0 && <> of {fmtBytes(totalQuotaBytes)}</>} storage used</>}
+              </>
+            )}
+          </p>
         </div>
-        {allDomains.length > 0 && <button style={S.btn()} onClick={() => setShowAdd(!showAdd)}>+ Add user</button>}
+        <div className="u-headbtns">
+          {allDomains.length > 0 && (
+            <a href="/dashboard/migration" className="u-btn u-btn-ghost">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+              Import
+            </a>
+          )}
+          {allDomains.length > 0 && (
+            <button className="u-btn u-btn-primary" onClick={() => setShowAdd(!showAdd)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              Add user
+            </button>
+          )}
+        </div>
       </div>
 
-      {msg && <div style={{ background: 'rgba(22,163,74,.1)', border: '1px solid rgba(22,163,74,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#16a34a', marginBottom: '1rem', fontSize: '0.85rem' }}>{msg}</div>}
-      {error && <div style={{ background: 'rgba(220,38,38,.1)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#dc2626', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
+      {msg && (
+        <div className="u-alert u-alert-ok">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          {msg}
+        </div>
+      )}
+      {error && (
+        <div className="u-alert u-alert-err">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+          {error}
+        </div>
+      )}
+
+      {!loading && totalUsers > 0 && (
+        <div className="u-stats">
+          <div className="u-stat">
+            <div className="u-slabel">Mailboxes</div>
+            <div className="u-sval">{totalUsers}</div>
+          </div>
+          <div className="u-stat">
+            <div className="u-slabel">Domains</div>
+            <div className="u-sval">{groups.length}</div>
+          </div>
+          {usersWithUsage.length > 0 && (
+            <div className="u-stat">
+              <div className="u-slabel">Storage used</div>
+              <div className="u-sval">
+                {fmtBytes(totalUsedBytes)}
+                {totalQuotaBytes > 0 && <span>of {fmtBytes(totalQuotaBytes)}</span>}
+              </div>
+              {usagePct != null && (
+                <div className="u-sbar"><i style={{ width: `${usagePct}%` }} /></div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {showAdd && (
-        <div style={{ ...S.card, marginBottom: '1.5rem' }}>
-          <h2 style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: '1.25rem' }}>Create email user</h2>
+        <div className="u-card">
+          <h2>Create email user</h2>
           <form onSubmit={addUser}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-              <div>
-                <label style={S.label}>Username</label>
-                <input style={S.inp} placeholder="john" value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} required />
+            <div className="u-grid2">
+              <div className="u-field">
+                <label className="u-label" htmlFor="add-username">Username</label>
+                <input id="add-username" className="u-input" placeholder="john" value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} required />
               </div>
-              <div>
-                <label style={S.label}>Domain</label>
-                <select style={{ ...S.inp, cursor: 'pointer' }} value={form.domainId} onChange={e => setForm(p => ({ ...p, domainId: e.target.value }))} required>
+              <div className="u-field">
+                <label className="u-label" htmlFor="add-domain">Domain</label>
+                <select id="add-domain" className="u-input" value={form.domainId} onChange={e => setForm(p => ({ ...p, domainId: e.target.value }))} required>
                   <option value="">Select domain…</option>
                   {allDomains.map(d => <option key={d.id} value={d.id}>{d.domain}</option>)}
                 </select>
               </div>
-              <div>
-                <label style={S.label}>Password</label>
-                <input style={S.inp} type="password" placeholder="Secure password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} required minLength={8} />
+              <div className="u-field">
+                <label className="u-label" htmlFor="add-password">Password</label>
+                <input id="add-password" className="u-input" type="password" placeholder="Secure password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} required minLength={8} />
               </div>
-              <div>
-                <label style={S.label}>Display name (optional)</label>
-                <input style={S.inp} placeholder="John Smith" value={form.displayName} onChange={e => setForm(p => ({ ...p, displayName: e.target.value }))} />
+              <div className="u-field">
+                <label className="u-label" htmlFor="add-displayname">Display name (optional)</label>
+                <input id="add-displayname" className="u-input" placeholder="John Smith" value={form.displayName} onChange={e => setForm(p => ({ ...p, displayName: e.target.value }))} />
               </div>
             </div>
             {form.username && form.domainId && (
-              <p style={{ color: '#3b5f8a', fontSize: '0.82rem', marginBottom: '1rem' }}>
-                Email address: <strong style={{ color: '#2563eb' }}>{form.username}@{allDomains.find(d => d.id === form.domainId)?.domain ?? '…'}</strong>
+              <p className="u-preview">
+                Email address: <b>{form.username}@{allDomains.find(d => d.id === form.domainId)?.domain ?? '…'}</b>
               </p>
             )}
-            <div style={{ display: 'flex', gap: '.75rem' }}>
-              <button type="submit" style={S.btn()} disabled={saving}>{saving ? 'Creating…' : 'Create user'}</button>
-              <button type="button" style={S.btn('#374151')} onClick={() => setShowAdd(false)}>Cancel</button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="submit" className="u-btn u-btn-primary" disabled={saving}>{saving ? 'Creating…' : 'Create user'}</button>
+              <button type="button" className="u-btn u-btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
             </div>
           </form>
         </div>
       )}
 
       {loading ? (
-        <div style={{ ...S.card, textAlign: 'center', color: '#3b5f8a' }}>Loading users…</div>
+        <div className="u-group"><div className="u-empty">Loading users…</div></div>
       ) : allDomains.length === 0 ? (
-        <div style={{ ...S.card, textAlign: 'center', padding: '3rem', color: '#3b5f8a' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>👥</div>
-          <div style={{ fontWeight: 600, color: '#7fa8d0', marginBottom: '.5rem' }}>No domains configured</div>
-          <a href="/dashboard/domains" style={{ color: '#2563eb', fontSize: '0.875rem' }}>Add a domain first →</a>
+        <div className="u-group">
+          <div className="u-empty">
+            No domains configured yet.{' '}
+            <a href="/dashboard/domains" style={{ color: 'var(--u-accent)', fontWeight: 700 }}>Add a domain first →</a>
+          </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {groups.map(g => (
-            <div key={g.domainId} style={S.card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <div style={{ fontWeight: 700, color: '#1e3a5f' }}>@{g.domain}</div>
-                <span style={{ color: '#3b5f8a', fontSize: '0.8rem' }}>
-                  {g.users.length} user{g.users.length !== 1 ? 's' : ''}
-                  {g.users.some(u => u.usedDiskQuota != null) && (
-                    <> · {fmtBytes(g.users.reduce((n, u) => n + (u.usedDiskQuota ?? 0), 0))} used</>
-                  )}
-                </span>
+        <>
+          {groups.some(g => g.users.length > 0) && (
+            <div className="u-searchrow">
+              <div className="u-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                <input
+                  type="text" placeholder="Search by name, email or address…"
+                  value={search} onChange={e => setSearch(e.target.value)}
+                  aria-label="Search users"
+                />
               </div>
-              {g.users.length === 0 ? (
-                <p style={{ color: '#3b5f8a', fontSize: '0.875rem' }}>No users yet for this domain.</p>
-              ) : (
-                g.users.map(u => (
-                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '.75rem 0', borderBottom: '1px solid #dbeafe', flexWrap: 'wrap', gap: '.75rem' }}>
-                    <div>
-                      <div style={{ color: '#1e3a5f', fontWeight: 500 }}>{u.emailAddress}</div>
-                      {u.description && <div style={{ color: '#3b5f8a', fontSize: '0.78rem' }}>{u.description}</div>}
-                    </div>
-                    <StorageCell used={u.usedDiskQuota} limit={u.quotas?.maxDiskQuota} />
-                    <div style={{ display: 'flex', gap: '.5rem' }}>
-                      <button onClick={() => { setResetModal({ id: u.id, email: u.emailAddress }); setNewPw(''); }} style={{ ...S.btn('#334155'), fontSize: '0.75rem' }}>🔑 Reset password</button>
-                      <button onClick={() => deleteUser(u.id, u.emailAddress)} style={{ ...S.btn('#7f1d1d'), fontSize: '0.75rem' }}>🗑 Delete</button>
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
-          ))}
-        </div>
+          )}
+
+          {filteredGroups.length === 0 ? (
+            <div className="u-group"><div className="u-empty">No users match &quot;{search}&quot;.</div></div>
+          ) : (
+            filteredGroups.map(g => (
+              <div key={g.domainId} className="u-group">
+                <div className="u-grouphead">
+                  <div className="u-domain">@{g.domain}</div>
+                  <div className="u-groupmeta">
+                    {g.users.length} user{g.users.length !== 1 ? 's' : ''}
+                    {g.users.some(u => u.usedDiskQuota != null) && (
+                      <> · {fmtBytes(g.users.reduce((n, u) => n + (u.usedDiskQuota ?? 0), 0))} used</>
+                    )}
+                  </div>
+                </div>
+
+                {g.users.length === 0 ? (
+                  <div className="u-empty">No users yet for this domain.</div>
+                ) : (
+                  <>
+                    <div className="u-thead">
+                      <span>User &amp; address</span>
+                      <span>Storage</span>
+                      <span style={{ textAlign: 'right' }}>Actions</span>
+                    </div>
+                    {g.users.map(u => (
+                      <div key={u.id} className="u-row">
+                        <div className="u-who">
+                          <span className="u-avatar" style={{ background: avatarColor(u.emailAddress) }}>{initials(u.name || u.emailAddress)}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="u-addr">{u.emailAddress}</div>
+                            {u.description && <div className="u-desc">{u.description}</div>}
+                          </div>
+                        </div>
+                        <StorageCell used={u.usedDiskQuota} limit={u.quotas?.maxDiskQuota} />
+                        <div className="u-actions">
+                          <button className="u-btn u-btn-ghost u-btn-sm" onClick={() => { setResetModal({ id: u.id, email: u.emailAddress }); setNewPw(''); }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4" /><path d="M10.5 12.5L20 3M20 3v5M20 3h-5" /></svg>
+                            Reset
+                          </button>
+                          <button className="u-iconbtn" title={`Delete ${u.emailAddress}`} aria-label={`Delete ${u.emailAddress}`} onClick={() => deleteUser(u.id, u.emailAddress)}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" /><path d="M10 11v6M14 11v6" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ))
+          )}
+        </>
       )}
 
       {resetModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '1rem' }}>
-          <div style={{ background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 14, padding: '2rem', width: '100%', maxWidth: 400 }}>
-            <h3 style={{ color: '#0f2040', fontWeight: 700, marginBottom: '.5rem' }}>Reset password</h3>
-            <p style={{ color: '#3b5f8a', fontSize: '0.85rem', marginBottom: '1.25rem' }}>{resetModal.email}</p>
-            <label style={S.label}>New password</label>
-            <input style={{ ...S.inp, marginBottom: '1.25rem' }} type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="New secure password" autoFocus minLength={8} />
-            <div style={{ display: 'flex', gap: '.75rem' }}>
-              <button onClick={doReset} style={S.btn()}>Reset password</button>
-              <button onClick={() => setResetModal(null)} style={S.btn('#374151')}>Cancel</button>
+        <div className="u-modalbg">
+          <div className="u-modal">
+            <h3>Reset password</h3>
+            <p className="u-modalsub">{resetModal.email}</p>
+            <label className="u-label" htmlFor="reset-pw">New password</label>
+            <input id="reset-pw" className="u-input" style={{ marginBottom: 18 }} type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="New secure password" autoFocus minLength={8} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="u-btn u-btn-primary" onClick={doReset}>Reset password</button>
+              <button className="u-btn u-btn-ghost" onClick={() => setResetModal(null)}>Cancel</button>
             </div>
           </div>
         </div>
