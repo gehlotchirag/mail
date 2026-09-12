@@ -121,15 +121,29 @@ export async function getPublishableRecords(
  * page that displays it.
  */
 export async function checkMxLive(domain: string, timeoutMs = 4000): Promise<boolean | null> {
+  const hosts = await getMxHosts(domain, timeoutMs);
+  if (hosts === null) return null;
+  const host = MAIL_HOST.replace(/\.$/, '').toLowerCase();
+  return hosts.includes(host);
+}
+
+/**
+ * The actual MX exchange hostnames a domain currently resolves to, lowest
+ * priority first — so the console can honestly say where mail is routing
+ * ("still pointing at aspmx.l.google.com") instead of guessing a provider name
+ * from a boolean. `null` on no MX / lookup failure / timeout, same convention
+ * as `checkMxLive`.
+ */
+export async function getMxHosts(domain: string, timeoutMs = 4000): Promise<string[] | null> {
   try {
     const records = await Promise.race([
       dns.resolveMx(domain),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
     ]);
-    const host = MAIL_HOST.replace(/\.$/, '').toLowerCase();
-    return records.some(r => r.exchange.replace(/\.$/, '').toLowerCase() === host);
+    return records
+      .sort((a, b) => a.priority - b.priority)
+      .map(r => r.exchange.replace(/\.$/, '').toLowerCase());
   } catch {
-    // No MX at all, resolution failure, or timeout — cannot claim mail is live.
     return null;
   }
 }

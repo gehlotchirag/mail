@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { queryOne, query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { removeDomain, listUsersForDomain, deleteUser } from '@/lib/flux';
-import { getVerifyRecord, verifyDomainOwnership, detectDnsProvider, getPublishableRecords, checkMxLive } from '@/lib/dns';
+import { getVerifyRecord, verifyDomainOwnership, detectDnsProvider, getPublishableRecords, getMxHosts } from '@/lib/dns';
 import { ensureSesIdentity, getSesAccountStatus, deleteSesIdentity } from '@/lib/ses';
 
 type Params = { params: Promise<{ id: string }> };
@@ -20,7 +20,7 @@ export async function GET(_req: Request, { params }: Params) {
   // alongside the DNS records rather than left for the customer to discover via a
   // bounce. `ensureSesIdentity` is idempotent, so this also self-heals domains that
   // were created before SES provisioning existed.
-  const [dnsProvider, ses, account, records, mxLive] = await Promise.all([
+  const [dnsProvider, ses, account, records, mxHosts] = await Promise.all([
     detectDnsProvider(domain.domain),
     ensureSesIdentity(domain.domain),
     getSesAccountStatus(),
@@ -28,14 +28,18 @@ export async function GET(_req: Request, { params }: Params) {
     // what the button pushes can never disagree.
     getPublishableRecords(domain.domain, { verified: domain.verified, verifyToken: domain.verify_token }),
     // Ownership verified is not the same claim as "mail routes here" — see
-    // checkMxLive. The detail page uses this to keep the DNS step open (and its
-    // warning visible) even for a domain the wizard would otherwise treat as done.
-    checkMxLive(domain.domain),
+    // getMxHosts. The detail page uses this to keep the DNS step open (and its
+    // warning visible) even for a domain the wizard would otherwise treat as done,
+    // and to say honestly where mail currently resolves instead of a boolean.
+    getMxHosts(domain.domain),
   ]);
+  const mailHost = (process.env.MAIL_HOST ?? 'mail.arhamworkspace.tech').replace(/\.$/, '').toLowerCase();
+  const mxLive = mxHosts === null ? null : mxHosts.includes(mailHost);
 
   return NextResponse.json({
     ...domain,
     mxLive,
+    mxHosts,
     records,
     verifyRecord: getVerifyRecord(domain.domain, domain.verify_token),
     dnsProvider,  // 'cloudflare' | 'godaddy' | 'namecheap' | 'route53' | null

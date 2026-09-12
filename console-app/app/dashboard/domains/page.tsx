@@ -1,5 +1,7 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { resolvePlanLimits, type PlanKey } from '@/lib/plans';
+import { DomainsStyles } from './domains-theme';
 
 interface Domain {
   id: string; domain: string; verified: boolean; verify_token: string; flux_domain_id?: string;
@@ -10,9 +12,16 @@ interface Domain {
    * so an unverified/new domain never gets accused of "mail not switched".
    */
   mxLive?: boolean | null;
+  /** The actual MX exchange hosts this domain currently resolves to, lowest priority first. */
+  mxHosts?: string[] | null;
   /** true = SES will accept mail from this domain; false = outbound bounces; null = unknown. */
   sendingReady?: boolean | null;
+  /** PENDING | SUCCESS | FAILED | TEMPORARY_FAILURE | undefined (no identity yet) */
+  dkimStatus?: string | null;
 }
+
+interface FluxUserLite { id: string; emailAddress: string; usedDiskQuota?: number }
+interface UsersByDomain { domainId: string; domain: string; users: FluxUserLite[] }
 
 const PROVIDER_META: Record<string, { label: string; color: string; logo: string }> = {
   cloudflare:   { label: 'Cloudflare',     color: '#f97316', logo: '🟠' },
@@ -46,14 +55,47 @@ async function detectDnsProvider(domain: string): Promise<string | null> {
   } catch { return null; }
 }
 
-const S = {
-  card: { background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 12, padding: '1.5rem' } as React.CSSProperties,
-  inp:  { width: '100%', padding: '.7rem 1rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', outline: 'none' } as React.CSSProperties,
-  btn:  (c = '#2563eb') => ({ padding: '.6rem 1.2rem', background: c, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }) as React.CSSProperties,
-};
+function fmtBytes(b: number): string {
+  if (b >= 1e9) return (b / 1e9).toFixed(2) + ' GB';
+  if (b >= 1e6) return (b / 1e6).toFixed(0) + ' MB';
+  if (b >= 1e3) return (b / 1e3).toFixed(0) + ' KB';
+  return b + ' B';
+}
+
+function initials(domain: string): string {
+  const parts = domain.split('.');
+  return (parts[0].slice(0, 2) || domain.slice(0, 2)).toUpperCase();
+}
+
+const CheckIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+);
+const WarnIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+);
+const ArrowIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+);
+const SearchIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+);
+
+function dkimLabel(status: string | null | undefined): { text: string; ok: boolean | null } {
+  switch (status) {
+    case 'SUCCESS': return { text: 'Verified', ok: true };
+    case 'PENDING': return { text: 'Pending', ok: false };
+    case 'FAILED': return { text: 'Failed', ok: false };
+    case 'TEMPORARY_FAILURE': return { text: 'Retry pending', ok: false };
+    default: return { text: 'Not started', ok: null };
+  }
+}
+
+type FilterKey = 'all' | 'attention' | 'ready' | 'notrouted' | 'pending';
 
 export default function DomainsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
+  const [usersByDomain, setUsersByDomain] = useState<UsersByDomain[]>([]);
+  const [planLimits, setPlanLimits] = useState<{ planName: string; maxDomains: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newDomain, setNewDomain] = useState('');
@@ -62,6 +104,8 @@ export default function DomainsPage() {
   const [error, setError] = useState('');
   const [detected, setDetected] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
+  const [filter, setFilter] = useState<FilterKey>('all');
+  const [search, setSearch] = useState('');
   // Hitting a plan limit is not an error the user did something wrong — it is an
   // upsell moment. Surfaced as a modal with a route to billing rather than a red
   // banner that disappears after 5 seconds.
@@ -69,8 +113,23 @@ export default function DomainsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch('/api/domains');
-    if (res.ok) { const d = await res.json() as { domains: Domain[] }; setDomains(d.domains); }
+    const [domainsRes, usersRes, billingRes] = await Promise.all([
+      fetch('/api/domains'),
+      fetch('/api/users'),
+      fetch('/api/billing'),
+    ]);
+    if (domainsRes.ok) { const d = await domainsRes.json() as { domains: Domain[] }; setDomains(d.domains); }
+    if (usersRes.ok) { const d = await usersRes.json() as { domains: UsersByDomain[] }; setUsersByDomain(d.domains); }
+    if (billingRes.ok) {
+      const d = await billingRes.json() as { subscription: { plan: string; max_users: number } | null };
+      if (d.subscription) {
+        const limits = resolvePlanLimits(d.subscription);
+        const PLAN_NAMES: Record<PlanKey, string> = {
+          trial: 'Free Trial', lite: 'Lite', starter: 'Starter', business: 'Business', enterprise: 'Enterprise',
+        };
+        setPlanLimits({ planName: PLAN_NAMES[limits.plan], maxDomains: limits.maxDomains });
+      }
+    }
     setLoading(false);
   }, []);
 
@@ -87,6 +146,33 @@ export default function DomainsPage() {
     return () => { clearTimeout(t); setDetecting(false); };
   }, [newDomain]);
 
+  const mailboxCountByDomainId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of usersByDomain) m.set(d.domainId, d.users.length);
+    return m;
+  }, [usersByDomain]);
+  const totalMailboxes = usersByDomain.reduce((n, d) => n + d.users.length, 0);
+
+  const rows = useMemo(() => domains.map(d => {
+    const dkim = dkimLabel(d.dkimStatus);
+    const needsAttention = d.verified && (d.sendingReady === false || d.mxLive === false);
+    return { ...d, dkim, needsAttention, mailboxCount: mailboxCountByDomainId.get(d.id) ?? 0 };
+  }), [domains, mailboxCountByDomainId]);
+
+  const attentionRows = rows.filter(r => r.needsAttention);
+  const readyCount = rows.filter(r => r.sendingReady === true).length;
+
+  const filtered = rows.filter(r => {
+    if (search.trim() && !r.domain.toLowerCase().includes(search.trim().toLowerCase())) return false;
+    switch (filter) {
+      case 'attention': return r.needsAttention;
+      case 'ready': return r.sendingReady === true;
+      case 'notrouted': return r.verified && r.mxLive === false;
+      case 'pending': return r.dkim.ok === false;
+      default: return true;
+    }
+  });
+
   async function addDomain(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true); setError('');
@@ -101,7 +187,7 @@ export default function DomainsPage() {
         window.location.href = `/dashboard/domains/${data.id}`;
       } else {
         setShowAdd(false); setNewDomain(''); setDetected(null); load();
-        setMsg('Domain added! Click "Set up domain" to continue.'); setTimeout(() => setMsg(''), 6000);
+        setMsg('Domain added! Click "Manage" to continue setup.'); setTimeout(() => setMsg(''), 6000);
       }
     } else {
       const d = await res.json() as { error?: string; limitReached?: boolean };
@@ -114,178 +200,222 @@ export default function DomainsPage() {
     }
   }
 
-  async function deleteDomain(id: string, domain: string, force = false) {
-    if (!force && !confirm(`Remove ${domain}? All email users under this domain will lose access.`)) return;
-
-    let res: Response;
-    try {
-      res = await fetch(`/api/domains/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' });
-    } catch {
-      setError('Could not reach the server. Please try again.');
-      setTimeout(() => setError(''), 6000);
-      return;
-    }
-
-    if (res.ok) { setMsg(`${domain} removed.`); setTimeout(() => setMsg(''), 4000); load(); return; }
-
-    const d = await res.json().catch(() => ({})) as {
-      error?: string; requiresForce?: boolean; mailboxCount?: number; mailboxes?: string[];
-    };
-
-    // The server refuses to delete a domain that still has mailboxes, because that
-    // destroys their mail irrecoverably. Make the consequence explicit and let the
-    // user opt in, rather than silently doing nothing.
-    if (res.status === 409 && d.requiresForce) {
-      const list = (d.mailboxes ?? []).slice(0, 5).join('\n  ');
-      const more = (d.mailboxCount ?? 0) > 5 ? `\n  …and ${(d.mailboxCount ?? 0) - 5} more` : '';
-      const ok = confirm(
-        `${domain} still has ${d.mailboxCount} mailbox(es):\n  ${list}${more}\n\n` +
-        'Deleting the domain permanently destroys these mailboxes and all their mail. ' +
-        'This cannot be undone.\n\nDelete anyway?',
-      );
-      if (ok) await deleteDomain(id, domain, true);
-      return;
-    }
-
-    setError(d.error ?? `Could not remove ${domain}.`);
-    setTimeout(() => setError(''), 8000);
-  }
-
   const meta = detected ? PROVIDER_META[detected] : null;
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f2040', letterSpacing: '-0.5px' }}>Domains</h1>
-          <p style={{ color: '#3b5f8a', marginTop: '.25rem', fontSize: '0.875rem' }}>Connect your custom domain to start using email</p>
-        </div>
-        <button style={S.btn()} onClick={() => { setShowAdd(!showAdd); setDetected(null); }}>+ Add domain</button>
+    <div className="domainspage">
+      <DomainsStyles />
+
+      <div className="d-crumb">
+        <span>Workspace</span>
+        <ArrowIcon />
+        <b>Domains</b>
       </div>
 
-      {msg && <div style={{ background: 'rgba(22,163,74,.1)', border: '1px solid rgba(22,163,74,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#16a34a', marginBottom: '1rem', fontSize: '0.85rem' }}>{msg}</div>}
-      {error && <div style={{ background: 'rgba(220,38,38,.1)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 8, padding: '.75rem 1rem', color: '#dc2626', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
+      <div className="d-head">
+        <div className="d-h1">
+          <span>Domains</span>
+          <span className="d-count">{domains.length} registered</span>
+        </div>
+        <div className="d-headactions">
+          <button className="d-btn d-btn-primary" onClick={() => { setShowAdd(!showAdd); setDetected(null); }}>
+            <span>+</span> Add Domain
+          </button>
+        </div>
+      </div>
+
+      {msg && <div style={{ background: 'var(--d-green-soft)', border: '1px solid #BFE5D2', borderRadius: 10, padding: '.75rem 1rem', color: 'var(--d-green)', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 600 }}>{msg}</div>}
+      {error && <div style={{ background: 'var(--d-red-soft)', border: '1px solid #F3C6C4', borderRadius: 10, padding: '.75rem 1rem', color: 'var(--d-red)', marginBottom: '1rem', fontSize: '0.85rem', fontWeight: 600 }}>{error}</div>}
 
       {limitMsg && (
         <div
           onClick={() => setLimitMsg(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(15,32,64,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 50 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(10,18,40,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 50 }}
         >
-          <div onClick={e => e.stopPropagation()} style={{ ...S.card, maxWidth: 420, width: '100%', textAlign: 'center' }}>
+          <div onClick={e => e.stopPropagation()} className="d-addcard" style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
             <div style={{ fontSize: '2.25rem', marginBottom: '.75rem' }}>🚀</div>
-            <h2 style={{ fontWeight: 800, color: '#0f2040', fontSize: '1.1rem', marginBottom: '.5rem' }}>
+            <h2 style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1.1rem', marginBottom: '.5rem' }}>
               You&apos;ve reached your plan&apos;s domain limit
             </h2>
-            <p style={{ color: '#3b5f8a', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1.25rem' }}>
+            <p style={{ color: 'var(--d-muted)', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '1.25rem' }}>
               {limitMsg}
             </p>
             <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a href="/dashboard/billing" style={{ ...S.btn(), textDecoration: 'none', display: 'inline-block' }}>
-                Upgrade plan →
-              </a>
-              <button onClick={() => setLimitMsg(null)} style={{ ...S.btn('#e2e8f0'), color: '#1e3a5f' }}>
-                Not now
-              </button>
+              <a href="/dashboard/billing" className="d-btn d-btn-primary">Upgrade plan →</a>
+              <button onClick={() => setLimitMsg(null)} className="d-btn">Not now</button>
             </div>
           </div>
         </div>
       )}
 
       {showAdd && (
-        <div style={{ ...S.card, marginBottom: '1.5rem' }}>
-          <h2 style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: '1rem' }}>Add a domain</h2>
+        <div className="d-addcard" style={{ marginBottom: 20 }}>
           <form onSubmit={addDomain}>
-            <div style={{ display: 'flex', gap: '.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ flex: 1, minWidth: 220, position: 'relative' }}>
-                <input style={S.inp} placeholder="yourdomain.com" value={newDomain}
-                  onChange={e => { setNewDomain(e.target.value.toLowerCase().trim()); setDetected(null); }} required />
-              </div>
-              {/* Detected provider badge */}
-              {detecting && (
-                <span style={{ fontSize: '0.78rem', color: '#7fa8d0', whiteSpace: 'nowrap' }}>⏳ Detecting…</span>
-              )}
+            <div className="d-addrow">
+              <input className="d-inp" placeholder="yourdomain.com" value={newDomain}
+                onChange={e => { setNewDomain(e.target.value.toLowerCase().trim()); setDetected(null); }} required />
+              {detecting && <span style={{ fontSize: '0.78rem', color: 'var(--d-muted)', whiteSpace: 'nowrap' }}>⏳ Detecting…</span>}
               {meta && !detecting && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '.35rem', fontSize: '0.78rem', padding: '.35rem .75rem', borderRadius: 20, background: `${meta.color}12`, color: meta.color, border: `1px solid ${meta.color}33`, fontWeight: 700, whiteSpace: 'nowrap' }}>
                   {meta.logo} {meta.label} detected
                 </span>
               )}
-              <button type="submit" style={S.btn()} disabled={saving}>{saving ? 'Adding…' : 'Add domain'}</button>
-              <button type="button" style={S.btn('#374151')} onClick={() => { setShowAdd(false); setDetected(null); }}>Cancel</button>
+              <button type="submit" className="d-btn d-btn-primary" disabled={saving}>{saving ? 'Adding…' : 'Add domain'}</button>
+              <button type="button" className="d-btn" onClick={() => { setShowAdd(false); setDetected(null); }}>Cancel</button>
             </div>
-            <p style={{ color: '#7fa8d0', fontSize: '0.78rem', marginTop: '.65rem' }}>
-              {meta
-                ? `We detected ${meta.label} — after adding we'll open the setup wizard and highlight ${meta.label} automatically.`
-                : "We'll detect your DNS provider automatically and open the setup wizard."}
-            </p>
+            {planLimits && (
+              <div className="d-planinfo">
+                <span>Fleet allocation: <b>{domains.length} of {planLimits.maxDomains}</b> domains allowed on your <b>{planLimits.planName}</b> plan.</span>
+              </div>
+            )}
           </form>
         </div>
       )}
 
-      {loading ? (
-        <div style={{ ...S.card, textAlign: 'center', color: '#3b5f8a' }}>Loading…</div>
-      ) : domains.length === 0 ? (
-        <div style={{ ...S.card, textAlign: 'center', padding: '3rem', color: '#3b5f8a' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🌐</div>
-          <div style={{ fontWeight: 600, color: '#7fa8d0', marginBottom: '.5rem' }}>No domains yet</div>
-          <div style={{ fontSize: '0.875rem' }}>Add your first domain to start using email</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {domains.map(d => (
-            <div key={d.id} style={S.card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap' }}>
-                    <a href={`/dashboard/domains/${d.id}`} style={{ fontWeight: 700, color: '#0f2040', fontSize: '1.05rem', textDecoration: 'none' }}>{d.domain}</a>
-                    <span style={{ fontSize: '0.72rem', padding: '.2rem .6rem', borderRadius: 5, background: d.verified ? 'rgba(22,163,74,.12)' : 'rgba(251,191,36,.12)', color: d.verified ? '#16a34a' : '#d97706', fontWeight: 700 }}>
-                      {d.verified ? '✓ Verified' : '⏳ Setup required'}
-                    </span>
-                    {/* "Verified" only proves ownership — it says nothing about
-                        whether mail actually reaches this platform. Without this,
-                        a domain could sit green-checkmarked indefinitely while
-                        every inbound message still landed at the old provider,
-                        with nothing anywhere telling the operator to look. */}
-                    {d.verified && d.mxLive === false && (
-                      <span style={{ fontSize: '0.72rem', padding: '.2rem .6rem', borderRadius: 5, background: 'rgba(220,38,38,.1)', color: '#dc2626', fontWeight: 700 }}>
-                        ⚠ Mail not switched here
-                      </span>
-                    )}
-                    {d.verified && d.sendingReady === false && (
-                      <span style={{ fontSize: '0.72rem', padding: '.2rem .6rem', borderRadius: 5, background: 'rgba(220,38,38,.1)', color: '#dc2626', fontWeight: 700 }}>
-                        ⚠ Cannot send mail
-                      </span>
-                    )}
-                  </div>
-                  {!d.verified && (
-                    <p style={{ color: '#7fa8d0', fontSize: '0.8rem', marginTop: '.35rem' }}>
-                      Verify ownership and configure DNS to activate email.
-                    </p>
-                  )}
-                  {d.verified && d.mxLive === false && (
-                    <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '.35rem' }}>
-                      Incoming mail from outside this platform is still being delivered to your old provider, not here.
-                    </p>
-                  )}
-                  {d.verified && d.sendingReady === false && (
-                    <p style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '.35rem' }}>
-                      Outbound mail from this domain is being rejected by the sending provider. Open the domain to fix it.
-                    </p>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '.5rem', flexShrink: 0 }}>
-                  {!d.verified
-                    ? <a href={`/dashboard/domains/${d.id}`} style={{ ...S.btn('#2563eb'), display: 'inline-flex', alignItems: 'center', gap: '.35rem', textDecoration: 'none' }}>Set up domain →</a>
-                    : d.mxLive === false
-                    ? <a href={`/dashboard/domains/${d.id}`} style={{ ...S.btn('#dc2626'), display: 'inline-flex', textDecoration: 'none' }}>Switch mail here →</a>
-                    : <a href={`/dashboard/domains/${d.id}`} style={{ ...S.btn('#1d4ed8'), display: 'inline-flex', textDecoration: 'none' }}>DNS Settings</a>
-                  }
-                  <button onClick={() => deleteDomain(d.id, d.domain)} style={{ ...S.btn('#991b1b'), fontSize: '0.78rem', padding: '.55rem .9rem' }}>Remove</button>
-                </div>
-              </div>
+      {!loading && attentionRows.map(r => (
+        <div className="d-alert" key={r.id}>
+          <span className="d-alert-icon"><WarnIcon /></span>
+          <div className="d-alert-body">
+            <div className="d-alert-title">
+              <span>Mail is not routed to Arham yet</span>
+              <span className="d-alert-chip">{r.domain}</span>
             </div>
+            <div className="d-alert-desc">
+              {r.mxLive === false
+                ? `Domain ownership is verified, but MX records point to ${r.mxHosts?.[0] ?? 'another provider'}. Inbound email will not route through Arham until MX is updated.`
+                : r.dkim.ok === false
+                  ? `Domain ownership is verified, but DKIM keys are ${r.dkim.text.toLowerCase()} — outbound mail cannot send until this resolves.`
+                  : 'Sending is not ready for this domain yet — open it to see why.'}
+            </div>
+          </div>
+          <a className="d-alert-cta" href={`/dashboard/domains/${r.id}`}>
+            <span>Configure DNS</span> <ArrowIcon />
+          </a>
+        </div>
+      ))}
+
+      <div className="d-metrics">
+        <div className="d-metric">
+          <div className="d-metric-top"><span>Total Domains</span></div>
+          <div className="d-metric-val">{domains.length}</div>
+          <div className="d-metric-sub">{rows.filter(r => r.verified).length} verified</div>
+        </div>
+        <div className="d-metric">
+          <div className="d-metric-top"><span>Sending Ready</span></div>
+          <div className="d-metric-val">{readyCount}</div>
+          <div className="d-metric-sub"><span className="d-metric-tag">sesVerified &amp; production</span></div>
+        </div>
+        <div className="d-metric">
+          <div className="d-metric-top"><span>Needs Attention</span></div>
+          <div className={`d-metric-val ${attentionRows.length ? 'warn' : ''}`}>{attentionRows.length}</div>
+          <div className="d-metric-sub">
+            <span className={`d-metric-tag ${attentionRows.length ? 'warn' : ''}`}>
+              {attentionRows.length ? 'MX / DKIM incomplete' : 'All passing'}
+            </span>
+          </div>
+        </div>
+        <div className="d-metric">
+          <div className="d-metric-top"><span>Mailboxes Configured</span></div>
+          <div className="d-metric-val">{totalMailboxes}</div>
+          <div className="d-metric-sub">allocated mailboxes</div>
+        </div>
+      </div>
+
+      <div className="d-filterbar">
+        <div className="d-tabs">
+          {([
+            ['all', `All (${rows.length})`],
+            ['attention', `Needs Attention (${attentionRows.length})`],
+            ['ready', `Sending Ready (${readyCount})`],
+            ['notrouted', `Mail Not Routed (${rows.filter(r => r.verified && r.mxLive === false).length})`],
+            ['pending', `DKIM Pending (${rows.filter(r => r.dkim.ok === false).length})`],
+          ] as [FilterKey, string][]).map(([key, label]) => (
+            <button key={key} className={`d-tab ${filter === key ? 'active' : ''}`} onClick={() => setFilter(key)}>{label}</button>
           ))}
         </div>
-      )}
+        <div className="d-search">
+          <SearchIcon />
+          <input placeholder="Search domains…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="d-group">
+        {loading ? (
+          <div className="d-empty">Loading…</div>
+        ) : filtered.length === 0 ? (
+          <div className="d-empty">
+            <div className="d-empty-icon">🌐</div>
+            <div style={{ fontWeight: 700, color: 'var(--d-ink2)', marginBottom: 6 }}>
+              {domains.length === 0 ? 'No domains yet' : 'No domains match this filter'}
+            </div>
+            <div style={{ fontSize: 13 }}>{domains.length === 0 ? 'Add your first domain to start using email.' : 'Try a different filter or search term.'}</div>
+          </div>
+        ) : (
+          <>
+            <div className="d-thead">
+              <span>Domain</span>
+              <span>Ownership</span>
+              <span>Mail Routing</span>
+              <span>Sending Identity</span>
+              <span>DKIM Auth</span>
+              <span>Mailboxes</span>
+              <span>Action</span>
+            </div>
+            {filtered.map(r => (
+              <div key={r.id} className={`d-row ${r.needsAttention ? 'attn' : ''}`}>
+                <div className="d-domain-cell">
+                  <div className={`d-favicon ${r.needsAttention ? 'attn' : ''}`}>{initials(r.domain)}</div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="d-domain-name">{r.domain}</span>
+                      {r.needsAttention && <span className="d-tag" style={{ background: 'var(--d-red-soft)', color: 'var(--d-red)' }}>Needs Attention</span>}
+                    </div>
+                    <div className={`d-domain-meta ${r.mxLive === false ? 'attn' : ''}`}>
+                      {r.mxLive === false && r.mxHosts?.[0] ? `Points to ${r.mxHosts[0]}` : 'Registered domain'}
+                    </div>
+                  </div>
+                </div>
+                {r.verified ? (
+                  <span className="d-cell-ok"><CheckIcon /> Verified</span>
+                ) : (
+                  <span className="d-cell-warn"><WarnIcon /> Pending</span>
+                )}
+                {r.mxLive === true ? (
+                  <span className="d-pill ok">Routed to Arham</span>
+                ) : r.mxLive === false ? (
+                  <span className="d-pill warn">Routed Elsewhere</span>
+                ) : (
+                  <span className="d-pill neutral">Not detected</span>
+                )}
+                {r.sendingReady === true ? (
+                  <span className="d-pill ok">Production Ready</span>
+                ) : r.verified ? (
+                  <span className="d-pill warn">Not Ready</span>
+                ) : (
+                  <span className="d-cell-muted">&mdash;</span>
+                )}
+                {r.dkim.ok === true ? (
+                  <span className="d-cell-ok"><CheckIcon /> {r.dkim.text}</span>
+                ) : r.dkim.ok === false ? (
+                  <span className="d-cell-warn"><WarnIcon /> {r.dkim.text}</span>
+                ) : (
+                  <span className="d-cell-muted">{r.dkim.text}</span>
+                )}
+                <span className="d-cell-muted">{r.mailboxCount} mailbox{r.mailboxCount !== 1 ? 'es' : ''}</span>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  {!r.verified
+                    ? <a className="d-row-link" href={`/dashboard/domains/${r.id}`}>Set up →</a>
+                    : r.mxLive === false
+                    ? <a className="d-row-link warn" href={`/dashboard/domains/${r.id}`}>Switch mail →</a>
+                    : <a className="d-row-link" href={`/dashboard/domains/${r.id}`}>Manage →</a>
+                  }
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
     </div>
   );
 }
