@@ -1551,13 +1551,21 @@ export default function MigrationPage() {
                     that does not exist in Zoho's API — so it always came back true
                     and labelled every account, including paid ones, as free. */}
                 <div style={{ background: 'rgba(22,163,74,.06)', border: '1px solid rgba(22,163,74,.2)', borderRadius: '10px 10px 0 0', padding: '.75rem 1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-                    <span style={{ color: '#0B9E58', fontSize: '1rem' }}>✓</span>
-                    <span style={{ color: '#087A44', fontWeight: 600, fontSize: '0.875rem' }}>
-                      {zohoConnected.displayEmail || 'Zoho account connected'}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+                    <span style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(11,158,88,.15)', color: '#0B9E58', display: 'grid', placeItems: 'center', fontSize: '1rem', flexShrink: 0 }}>🔗</span>
+                    <div>
+                      <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.85rem' }}>
+                        Connected account: <span className="s-mono" style={{ color: '#087A44', fontFamily: 'monospace' }}>{zohoConnected.displayEmail || 'Zoho account connected'}</span>
+                      </div>
+                      <div style={{ color: '#7A8CAE', fontSize: '0.76rem', marginTop: '.1rem' }}>
+                        The connection lasts one page load — reconnect any time to reach the controls below again.
+                      </div>
+                    </div>
                   </div>
-                  <button onClick={() => { setZohoConnected(null); setCreds({}); }} style={{ ...S.btn('#B0231F', true), fontSize: '0.78rem', padding: '.3rem .75rem' }}>Disconnect</button>
+                  <div style={{ display: 'flex', gap: '.5rem', flexShrink: 0 }}>
+                    <a href="/api/auth/zoho" style={{ ...S.btn('#7A8CAE', true), fontSize: '0.78rem', padding: '.3rem .75rem', textDecoration: 'none' }}>↻ Re-authenticate</a>
+                    <button onClick={() => { setZohoConnected(null); setCreds({}); }} style={{ ...S.btn('#B0231F', true), fontSize: '0.78rem', padding: '.3rem .75rem' }}>Disconnect</button>
+                  </div>
                 </div>
 
                 {/* Domain picker. Sits ABOVE the IMAP/password buttons on purpose:
@@ -1765,7 +1773,7 @@ export default function MigrationPage() {
                                   {m.existsHere ? (
                                     <span style={{ color: '#1E40E0', fontWeight: 600, fontSize: '0.74rem' }}>Already on INBOX</span>
                                   ) : (
-                                    <span style={{ color: '#087A44', fontWeight: 600, fontSize: '0.74rem' }}>✓ Ready to move</span>
+                                    <span style={{ color: '#087A44', fontWeight: 600, fontSize: '0.74rem' }}>✓ Ready to provision</span>
                                   )}
                                 </td>
                               </tr>
@@ -1832,6 +1840,10 @@ export default function MigrationPage() {
                     password — Zoho has no admin login that works across mailboxes.
                   </p>
 
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+                  {/* LEFT: Bulk password provisioning — the shared-password/IMAP domain-wide actions. */}
+                  <div>
+                  <div style={{ fontWeight: 800, color: '#0A1228', fontSize: '0.85rem', marginBottom: '.6rem' }}>Bulk password provisioning</div>
                   {/* The shared value is chosen here, not hardcoded. Zoho rejects any
                       password that has appeared in a breach — the old hardcoded
                       'ChangeMe123' failed on every single mailbox — so it has to be
@@ -1935,12 +1947,16 @@ export default function MigrationPage() {
                       in Zoho.
                     </div>
                   </div>
-
+                  </div>
+                  {/* RIGHT: per-mailbox override list — a granular fallback for named
+                      accounts, distinct from the shared-password bulk actions on the left. */}
+                  <div style={{ background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 10, padding: '1rem' }}>
+                  <div style={{ fontWeight: 800, color: '#0A1228', fontSize: '0.85rem', marginBottom: '.6rem' }}>Granular overrides</div>
                   {/* Sets a DIFFERENT password per mailbox, unlike "Prepare mailboxes"
                       above which puts everyone on the same shared value. For the case
                       that needs each person to get back into Zoho on their own
                       password rather than a guessable common one. */}
-                  <div style={{ marginTop: '.9rem', paddingTop: '.8rem', borderTop: '1px solid #F0F4FF' }}>
+                  <div>
                     <div style={{ fontWeight: 700, color: '#0A1228', fontSize: '0.82rem', marginBottom: '.35rem' }}>
                       Set specific passwords
                     </div>
@@ -1986,6 +2002,8 @@ export default function MigrationPage() {
                       Irreversible, same as any Zoho password reset — there is no way to recover what a
                       mailbox's password was before this runs.
                     </div>
+                  </div>
+                  </div>
                   </div>
 
                   {/* The Zoho connection is single-use: the token arrives in a cookie
