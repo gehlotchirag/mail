@@ -23,9 +23,9 @@ interface MigrationJob {
 
 const S = {
   card: { background: '#ffffff', border: '1px solid #dbeafe', borderRadius: 12, padding: '1.5rem' } as React.CSSProperties,
-  inp: { width: '100%', padding: '.65rem .9rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, color: '#1e3a5f', outline: 'none', boxSizing: 'border-box' as const } as React.CSSProperties,
-  btn: (c = '#2563eb', outline = false) => ({ padding: '.6rem 1.2rem', background: outline ? 'transparent' : c, color: outline ? c : '#fff', border: `1.5px solid ${c}`, borderRadius: 7, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem' }) as React.CSSProperties,
-  label: { display: 'block', color: '#3b5f8a', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.5px', marginBottom: '.3rem' },
+  inp: { width: '100%', padding: '.65rem .9rem', background: '#F0F4FF', border: '1px solid #bfdbfe', borderRadius: 8, color: '#374264', outline: 'none', boxSizing: 'border-box' as const } as React.CSSProperties,
+  btn: (c = '#2F56FF', outline = false) => ({ padding: '.6rem 1.2rem', background: outline ? 'transparent' : c, color: outline ? c : '#fff', border: `1.5px solid ${c}`, borderRadius: 7, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem' }) as React.CSSProperties,
+  label: { display: 'block', color: '#7A8CAE', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.5px', marginBottom: '.3rem' },
 };
 
 interface ZohoTokens {
@@ -82,12 +82,12 @@ function fmtRelTime(iso: string) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, [string, string]> = {
-    pending:     ['rgba(148,163,184,.15)', '#64748b'],
+    pending:     ['rgba(148,163,184,.15)', '#7A8CAE'],
     discovering: ['rgba(168,85,247,.12)',  '#7c3aed'],
-    migrating:   ['rgba(37,99,235,.1)',    '#2563eb'],
-    running:     ['rgba(37,99,235,.1)',    '#2563eb'],
-    completed:   ['rgba(22,163,74,.1)',    '#16a34a'],
-    failed:      ['rgba(220,38,38,.1)',    '#dc2626'],
+    migrating:   ['rgba(37,99,235,.1)',    '#2F56FF'],
+    running:     ['rgba(37,99,235,.1)',    '#2F56FF'],
+    completed:   ['rgba(22,163,74,.1)',    '#0B9E58'],
+    failed:      ['rgba(220,38,38,.1)',    '#B0231F'],
     cancelled:   ['rgba(217,119,6,.1)',    '#d97706'],
   };
   const [bg, color] = map[status] ?? map.pending;
@@ -119,8 +119,8 @@ function EventFeed({ events }: { events: MigrationEvent[] }) {
   const sorted = [...events].sort((a, b) => a.id - b.id);
   return (
     <div style={{ marginTop: '1.25rem' }}>
-      <div style={{ color: '#3b5f8a', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.5rem' }}>Activity</div>
-      <div style={{ background: '#f8faff', border: '1px solid #dbeafe', borderRadius: 8, padding: '.5rem .75rem', maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '.3rem' }}>
+      <div style={{ color: '#7A8CAE', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.5rem' }}>Activity</div>
+      <div style={{ background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 8, padding: '.5rem .75rem', maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '.3rem' }}>
         {sorted.map(ev => {
           const meta = EVENT_META[ev.event_type];
           const icon = meta?.icon ?? '•';
@@ -128,7 +128,7 @@ function EventFeed({ events }: { events: MigrationEvent[] }) {
           return (
             <div key={ev.id} style={{ display: 'flex', gap: '.6rem', alignItems: 'flex-start', fontSize: '0.78rem' }}>
               <span style={{ flexShrink: 0, fontSize: '0.85rem' }}>{icon}</span>
-              <span style={{ color: '#1e3a5f', flex: 1, lineHeight: 1.4 }}>{label}</span>
+              <span style={{ color: '#374264', flex: 1, lineHeight: 1.4 }}>{label}</span>
               <span style={{ flexShrink: 0, color: '#94a3b8', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{fmtRelTime(ev.created_at)}</span>
             </div>
           );
@@ -157,11 +157,11 @@ function PhaseBar({ status }: { status: string }) {
         const done    = i < doneIdx;
         const current = i === activeIdx && status !== 'completed';
         const future  = !done && !current;
-        const color = done ? '#16a34a' : current ? '#2563eb' : '#94a3b8';
+        const color = done ? '#0B9E58' : current ? '#2F56FF' : '#94a3b8';
         return (
           <div key={p.key} style={{ display: 'flex', alignItems: 'center', flex: i < PHASES.length - 1 ? 1 : 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '.35rem', flexShrink: 0 }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: current ? '#2563eb' : done ? '#16a34a' : '#e2e8f0', border: `2px solid ${color}`, flexShrink: 0, boxShadow: current ? '0 0 0 3px rgba(37,99,235,.2)' : 'none' }} />
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: current ? '#2F56FF' : done ? '#0B9E58' : '#e2e8f0', border: `2px solid ${color}`, flexShrink: 0, boxShadow: current ? '0 0 0 3px rgba(37,99,235,.2)' : 'none' }} />
               <span style={{ fontSize: '0.72rem', fontWeight: current ? 700 : 500, color, whiteSpace: 'nowrap' }}>{p.label}</span>
             </div>
             {i < PHASES.length - 1 && (
@@ -179,31 +179,31 @@ function UserRow({ u }: { u: MigrationUser }) {
   const isRunning = u.status === 'running';
   const isFailed  = u.status === 'failed';
   return (
-    <div style={{ padding: '.85rem 1rem', background: isRunning ? 'rgba(37,99,235,.04)' : isFailed ? 'rgba(220,38,38,.04)' : '#f8faff', border: `1px solid ${isRunning ? '#bfdbfe' : isFailed ? 'rgba(220,38,38,.2)' : '#e8f0fd'}`, borderRadius: 9 }}>
+    <div style={{ padding: '.85rem 1rem', background: isRunning ? 'rgba(37,99,235,.04)' : isFailed ? 'rgba(220,38,38,.04)' : '#F0F4FF', border: `1px solid ${isRunning ? '#bfdbfe' : isFailed ? 'rgba(220,38,38,.2)' : '#e8f0fd'}`, borderRadius: 9 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem', minWidth: 0 }}>
           {isRunning && (
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', display: 'inline-block', flexShrink: 0, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2F56FF', display: 'inline-block', flexShrink: 0, animation: 'pulse 1.5s ease-in-out infinite' }} />
           )}
-          <span style={{ color: '#1e3a5f', fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.source_email}</span>
+          <span style={{ color: '#374264', fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.source_email}</span>
           {u.source_email !== u.target_email && (
             <>
               <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>→</span>
-              <span style={{ color: '#3b5f8a', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.target_email}</span>
+              <span style={{ color: '#7A8CAE', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.target_email}</span>
             </>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem', flexShrink: 0 }}>
           <StatusBadge status={u.status} />
-          <span style={{ color: '#3b5f8a', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}>{u.imported_messages.toLocaleString()} emails</span>
+          <span style={{ color: '#7A8CAE', fontSize: '0.8rem', fontVariantNumeric: 'tabular-nums' }}>{u.imported_messages.toLocaleString()} emails</span>
           <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{fmtBytes(u.imported_bytes)}</span>
           {u.failed_messages > 0 && (
-            <span style={{ color: '#dc2626', fontSize: '0.78rem' }}>· {u.failed_messages} failed</span>
+            <span style={{ color: '#B0231F', fontSize: '0.78rem' }}>· {u.failed_messages} failed</span>
           )}
         </div>
       </div>
       {isFailed && u.error_message && (
-        <div style={{ marginTop: '.5rem', color: '#dc2626', fontSize: '0.76rem', background: 'rgba(220,38,38,.06)', padding: '.4rem .7rem', borderRadius: 5 }}>
+        <div style={{ marginTop: '.5rem', color: '#B0231F', fontSize: '0.76rem', background: 'rgba(220,38,38,.06)', padding: '.4rem .7rem', borderRadius: 5 }}>
           {u.error_message}
         </div>
       )}
@@ -230,18 +230,18 @@ function LiveJobPanel({ job, onCancel, onRetry }: { job: MigrationJob; onCancel:
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '.75rem' }}>
         <div>
-          <div style={{ fontWeight: 700, color: '#0f2040', fontSize: '1rem' }}>
+          <div style={{ fontWeight: 700, color: '#0A1228', fontSize: '1rem' }}>
             {isDone ? '✓ Import complete' : isFailed ? 'Import stopped' : `Importing from ${providerLabel}`}
           </div>
-          {job.source_host && <div style={{ color: '#7fa8d0', fontSize: '0.8rem', marginTop: '.1rem' }}>{job.source_host}</div>}
+          {job.source_host && <div style={{ color: '#7A8CAE', fontSize: '0.8rem', marginTop: '.1rem' }}>{job.source_host}</div>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
           <StatusBadge status={job.status} />
           {isActive && (
-            <button onClick={onCancel} style={S.btn('#dc2626')}>Cancel</button>
+            <button onClick={onCancel} style={S.btn('#B0231F')}>Cancel</button>
           )}
           {(isFailed || job.status === 'cancelled') && onRetry && (
-            <button onClick={onRetry} style={S.btn('#2563eb')}>Retry import</button>
+            <button onClick={onRetry} style={S.btn('#2F56FF')}>Retry import</button>
           )}
         </div>
       </div>
@@ -250,23 +250,23 @@ function LiveJobPanel({ job, onCancel, onRetry }: { job: MigrationJob; onCancel:
       <PhaseBar status={job.status} />
 
       {/* Stats strip */}
-      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '.75rem 1rem', background: '#f0f6ff', borderRadius: 8 }}>
+      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1rem', padding: '.75rem 1rem', background: '#F0F4FF', borderRadius: 8 }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f2040', fontVariantNumeric: 'tabular-nums' }}>{job.imported_messages.toLocaleString()}</div>
-          <div style={{ fontSize: '0.7rem', color: '#7fa8d0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Emails</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0A1228', fontVariantNumeric: 'tabular-nums' }}>{job.imported_messages.toLocaleString()}</div>
+          <div style={{ fontSize: '0.7rem', color: '#7A8CAE', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Emails</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f2040' }}>{fmtBytes(job.imported_bytes)}</div>
-          <div style={{ fontSize: '0.7rem', color: '#7fa8d0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Data</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0A1228' }}>{fmtBytes(job.imported_bytes)}</div>
+          <div style={{ fontSize: '0.7rem', color: '#7A8CAE', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Data</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f2040', fontVariantNumeric: 'tabular-nums' }}>{job.completed_users} / {job.total_users ?? '?'}</div>
-          <div style={{ fontSize: '0.7rem', color: '#7fa8d0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Users</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0A1228', fontVariantNumeric: 'tabular-nums' }}>{job.completed_users} / {job.total_users ?? '?'}</div>
+          <div style={{ fontSize: '0.7rem', color: '#7A8CAE', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Users</div>
         </div>
         {job.failed_users > 0 && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#dc2626', fontVariantNumeric: 'tabular-nums' }}>{job.failed_users}</div>
-            <div style={{ fontSize: '0.7rem', color: '#dc2626', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Failed</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#B0231F', fontVariantNumeric: 'tabular-nums' }}>{job.failed_users}</div>
+            <div style={{ fontSize: '0.7rem', color: '#B0231F', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Failed</div>
           </div>
         )}
       </div>
@@ -279,7 +279,7 @@ function LiveJobPanel({ job, onCancel, onRetry }: { job: MigrationJob; onCancel:
             <span>{pct}%</span>
           </div>
           <div style={{ background: '#dbeafe', borderRadius: 99, height: 7 }}>
-            <div style={{ background: isDone ? 'linear-gradient(90deg,#16a34a,#15803d)' : 'linear-gradient(90deg,#2563eb,#1d4ed8)', borderRadius: 99, height: 7, width: `${pct}%`, transition: 'width .6s ease' }} />
+            <div style={{ background: isDone ? 'linear-gradient(90deg,#0B9E58,#087A44)' : 'linear-gradient(90deg,#2F56FF,#1E40E0)', borderRadius: 99, height: 7, width: `${pct}%`, transition: 'width .6s ease' }} />
           </div>
         </div>
       )}
@@ -287,7 +287,7 @@ function LiveJobPanel({ job, onCancel, onRetry }: { job: MigrationJob; onCancel:
       {/* Per-user rows */}
       {job.users && job.users.length > 0 && (
         <div>
-          <div style={{ color: '#3b5f8a', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.5rem' }}>
+          <div style={{ color: '#7A8CAE', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.5rem' }}>
             Users ({job.users.length})
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
@@ -304,15 +304,15 @@ function LiveJobPanel({ job, onCancel, onRetry }: { job: MigrationJob; onCancel:
       {((job.credential_count ?? 0) > 0 || (job.users && job.users.length > 0)) && (
         <div style={{ marginTop: '1rem', background: 'rgba(37,99,235,.05)', border: '1px solid #bfdbfe', borderRadius: 9, padding: '.85rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ color: '#1e3a5f', fontWeight: 600, fontSize: '0.85rem' }}>Mailbox sign-in details</div>
-            <div style={{ color: '#3b5f8a', fontSize: '0.78rem' }}>
+            <div style={{ color: '#374264', fontWeight: 600, fontSize: '0.85rem' }}>Mailbox sign-in details</div>
+            <div style={{ color: '#7A8CAE', fontSize: '0.78rem' }}>
               {job.credential_count
                 ? `Passwords for the ${job.credential_count} mailbox(es) this import created — hand these to your users, then ask them to change it.`
                 : 'Passwords for the accounts this import created — hand these to your users, then ask them to change it.'}
             </div>
           </div>
           <a href={`/api/migration/${job.id}/credentials?format=csv`}
-             style={{ ...S.btn('#2563eb'), textDecoration: 'none', fontSize: '0.78rem', padding: '.45rem 1rem' }}>
+             style={{ ...S.btn('#2F56FF'), textDecoration: 'none', fontSize: '0.78rem', padding: '.45rem 1rem' }}>
             ⬇ Download CSV
           </a>
         </div>
@@ -320,8 +320,19 @@ function LiveJobPanel({ job, onCancel, onRetry }: { job: MigrationJob; onCancel:
 
       {/* Error message */}
       {job.error_message && (
-        <div style={{ marginTop: '1rem', color: '#dc2626', fontSize: '0.8rem', background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.2)', borderRadius: 7, padding: '.6rem .9rem' }}>
+        <div style={{ marginTop: '1rem', color: '#B0231F', fontSize: '0.8rem', background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.2)', borderRadius: 7, padding: '.6rem .9rem' }}>
           {job.error_message}
+        </div>
+      )}
+
+      {/* Recovery is automatic, not a per-mailbox button — the worker already
+          retries a failing mailbox up to 5 times with backoff, and a
+          background sweep re-queues anything left stuck every few minutes.
+          Shown honestly rather than a manual "requeue" action the backend
+          doesn't expose. */}
+      {isFailed && job.failed_users > 0 && (
+        <div style={{ marginTop: '1rem', color: '#374264', fontSize: '0.78rem', background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 7, padding: '.6rem .9rem', lineHeight: 1.5 }}>
+          Failed mailboxes are retried automatically — each one gets up to 5 attempts with backoff before it&apos;s marked failed, and a background check re-queues anything left stuck every few minutes. Checkpoints mean a retry resumes where it left off rather than re-importing mail. Use <strong>Retry import</strong> above to start a fresh run if this job has stopped for good.
         </div>
       )}
     </div>
@@ -466,6 +477,38 @@ export default function MigrationPage() {
   }, []);
 
   useEffect(() => { loadJobs(); }, [loadJobs]);
+
+  // Domain cutover readiness — real data from the same /migration-readiness
+  // endpoint the Domains detail page uses, just rolled up across every domain
+  // in the org so this page can say "N domains are safe to cut over" without
+  // duplicating that page's full DNS/DKIM UI.
+  const [domainReadiness, setDomainReadiness] = useState<{
+    loading: boolean;
+    domains: Array<{ id: string; domain: string; ready: boolean | null; missing: number; sendingReady: boolean }>;
+  }>({ loading: true, domains: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch('/api/domains');
+      if (!res.ok || cancelled) return;
+      const { domains } = await res.json() as { domains: Array<{ id: string; domain: string; verified: boolean }> };
+      const verified = domains.filter(d => d.verified);
+      const results = await Promise.all(verified.map(async d => {
+        const r = await fetch(`/api/domains/${d.id}/migration-readiness`);
+        if (!r.ok) return { id: d.id, domain: d.domain, ready: null as boolean | null, missing: 0, sendingReady: false };
+        const g = await r.json() as { checked: boolean; missing?: string[]; sending?: { ready: boolean } };
+        return {
+          id: d.id, domain: d.domain,
+          ready: g.checked ? (g.missing ?? []).length === 0 && !!g.sending?.ready : null,
+          missing: g.missing?.length ?? 0,
+          sendingReady: !!g.sending?.ready,
+        };
+      }));
+      if (!cancelled) setDomainReadiness({ loading: false, domains: results });
+    })().catch(() => { if (!cancelled) setDomainReadiness(p => ({ ...p, loading: false })); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const running = jobs.find(j => j.status === 'running' || j.status === 'pending' || j.status === 'discovering' || j.status === 'migrating');
@@ -1175,8 +1218,8 @@ export default function MigrationPage() {
     padding: '.55rem 1.2rem',
     background: 'none',
     border: 'none',
-    borderBottom: tab === t ? '2.5px solid #2563eb' : '2.5px solid transparent',
-    color: tab === t ? '#2563eb' : '#64748b',
+    borderBottom: tab === t ? '2.5px solid #2F56FF' : '2.5px solid transparent',
+    color: tab === t ? '#2F56FF' : '#7A8CAE',
     fontWeight: tab === t ? 700 : 500,
     cursor: 'pointer',
     fontSize: '0.875rem',
@@ -1190,11 +1233,11 @@ export default function MigrationPage() {
   // something saw the disconnected screen and no guidance at all.
   const imapInstructions = (
                 <details style={{ marginTop: '.6rem' }}>
-                  <summary style={{ cursor: 'pointer', color: '#2563eb', fontSize: '0.78rem', fontWeight: 600 }}>
+                  <summary style={{ cursor: 'pointer', color: '#2F56FF', fontSize: '0.78rem', fontWeight: 600 }}>
                     How to turn IMAP off
                   </summary>
-                  <div style={{ color: '#3b5f8a', fontSize: '0.78rem', lineHeight: 1.6, marginTop: '.5rem' }}>
-                    <div style={{ fontWeight: 700, color: '#0f2040', marginBottom: '.25rem' }}>
+                  <div style={{ color: '#7A8CAE', fontSize: '0.78rem', lineHeight: 1.6, marginTop: '.5rem' }}>
+                    <div style={{ fontWeight: 700, color: '#0A1228', marginBottom: '.25rem' }}>
                       For specific people (recommended)
                     </div>
                     <ol style={{ margin: '0 0 .75rem', paddingLeft: '1.1rem' }}>
@@ -1207,7 +1250,7 @@ export default function MigrationPage() {
                           nothing else — no password is touched.</li>
                     </ol>
 
-                    <div style={{ fontWeight: 700, color: '#0f2040', marginBottom: '.25rem' }}>
+                    <div style={{ fontWeight: 700, color: '#0A1228', marginBottom: '.25rem' }}>
                       For whole domains at once
                     </div>
                     <ol style={{ margin: '0 0 .75rem', paddingLeft: '1.1rem' }}>
@@ -1219,7 +1262,7 @@ export default function MigrationPage() {
                       switches off every mailbox in those domains. The per-person list above avoids that,
                       because you can see each mailbox&apos;s current state and pick accordingly.
                     </p>
-                    <div style={{ fontWeight: 700, color: '#0f2040', marginBottom: '.25rem' }}>Directly in Zoho</div>
+                    <div style={{ fontWeight: 700, color: '#0A1228', marginBottom: '.25rem' }}>Directly in Zoho</div>
                     <p style={{ margin: '0 0 .4rem' }}>
                       One mailbox: <strong>Zoho Mail Admin Console</strong> → <strong>Users</strong> → pick the
                       user → their mail account settings → turn <strong>IMAP Access</strong> off.
@@ -1240,16 +1283,16 @@ export default function MigrationPage() {
 
   const bulkPasswordInstructions = (
                 <details style={{ marginTop: '.6rem' }}>
-                  <summary style={{ cursor: 'pointer', color: '#2563eb', fontSize: '0.78rem', fontWeight: 600 }}>
+                  <summary style={{ cursor: 'pointer', color: '#2F56FF', fontSize: '0.78rem', fontWeight: 600 }}>
                     How to reset passwords in bulk
                   </summary>
-                  <div style={{ color: '#3b5f8a', fontSize: '0.78rem', lineHeight: 1.6, marginTop: '.5rem' }}>
+                  <div style={{ color: '#7A8CAE', fontSize: '0.78rem', lineHeight: 1.6, marginTop: '.5rem' }}>
                     <p style={{ margin: '0 0 .75rem' }}>
                       Three ways to do this, from most precise to broadest. All of them are
                       irreversible — see the note at the bottom.
                     </p>
 
-                    <div style={{ fontWeight: 700, color: '#0f2040', marginBottom: '.25rem' }}>
+                    <div style={{ fontWeight: 700, color: '#0A1228', marginBottom: '.25rem' }}>
                       1. Selected people, same password (recommended)
                     </div>
                     <ol style={{ margin: '0 0 .75rem', paddingLeft: '1.1rem' }}>
@@ -1263,21 +1306,21 @@ export default function MigrationPage() {
                     </ol>
                     <p style={{ margin: '0 0 .75rem' }}>
                       Those mailboxes are set to
-                      <code style={{ background: '#eff6ff', padding: '1px 5px', borderRadius: 4 }}>ChangeMe123</code>.
+                      <code style={{ background: '#F0F4FF', padding: '1px 5px', borderRadius: 4 }}>ChangeMe123</code>.
                       IMAP is <em>not</em> touched, so this is the right choice for people staying on Zoho
                       who simply need to get back in.
                     </p>
 
-                    <div style={{ fontWeight: 700, color: '#0f2040', marginBottom: '.25rem' }}>
+                    <div style={{ fontWeight: 700, color: '#0A1228', marginBottom: '.25rem' }}>
                       2. A different password per person
                     </div>
                     <p style={{ margin: '0 0 .75rem' }}>
-                      Use <strong>Set specific passwords</strong> lower down: paste one <code style={{ background: '#eff6ff', padding: '1px 5px', borderRadius: 4 }}>email,password</code> per
+                      Use <strong>Set specific passwords</strong> lower down: paste one <code style={{ background: '#F0F4FF', padding: '1px 5px', borderRadius: 4 }}>email,password</code> per
                       line, each mailbox getting its own value so nobody shares a password with anyone
                       else. Best when the people involved are staying on Zoho long term.
                     </p>
 
-                    <div style={{ fontWeight: 700, color: '#0f2040', marginBottom: '.25rem' }}>
+                    <div style={{ fontWeight: 700, color: '#0A1228', marginBottom: '.25rem' }}>
                       3. Whole domains at once (migration cutover)
                     </div>
                     <p style={{ margin: '0 0 .75rem' }}>
@@ -1288,7 +1331,7 @@ export default function MigrationPage() {
                       connection mid-run.
                     </p>
 
-                    <div style={{ fontWeight: 700, color: '#0f2040', marginBottom: '.25rem' }}>Directly in Zoho</div>
+                    <div style={{ fontWeight: 700, color: '#0A1228', marginBottom: '.25rem' }}>Directly in Zoho</div>
                     <p style={{ margin: '0 0 .4rem' }}>
                       One mailbox: <strong>Zoho Mail Admin Console</strong> → <strong>Users</strong> → pick the
                       user → <strong>Reset Password</strong>.
@@ -1308,42 +1351,104 @@ export default function MigrationPage() {
                 </details>
   );
 
+  const isZoho = provider === 'zoho';
+  const isConnected = isZoho ? !!zohoConnected : !!testResult?.ok;
+  const stage = displayJob ? 3 : isConnected ? 2 : 1;
+  const hasEverStarted = jobs.length > 0 || zohoConnected || orgMailboxes.length > 0 || !!displayJob;
+
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div style={{ maxWidth: 1040 }}>
       {/* Page header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f2040', letterSpacing: '-0.5px' }}>Import Email</h1>
-        <p style={{ color: '#3b5f8a', marginTop: '.25rem', fontSize: '0.875rem' }}>Migrate mailboxes from Zoho, Google Workspace, cPanel, or Dovecot into your workspace</p>
+      <div style={{ marginBottom: '1.25rem' }}>
+        <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0A1228', letterSpacing: '-0.5px' }}>Import Email</h1>
+        <p style={{ color: '#7A8CAE', marginTop: '.25rem', fontSize: '0.875rem' }}>Migrate mailboxes from Zoho, Google Workspace, cPanel, or Dovecot into your workspace</p>
       </div>
 
+      {/* Stage indicator — reflects real state, not a fixed wizard: "Connect"
+          once a provider is picked, "Prepare & Select" once a connection is
+          verified (Zoho additionally discovers and lists real mailboxes here),
+          "Live Migration" once a job exists. */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', background: '#fff', border: '1px solid #dbeafe', borderRadius: 10, padding: 4, fontSize: '0.78rem', fontWeight: 600, marginBottom: '1.25rem', boxShadow: '0 1px 3px rgba(10,18,40,.06)' }}>
+        {['Connect', 'Prepare & Select', 'Live Migration'].map((label, i) => (
+          <span key={label} style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{
+              padding: '.4rem .8rem', borderRadius: 7,
+              color: stage === i + 1 ? '#2F56FF' : stage > i + 1 ? '#0B9E58' : '#7A8CAE',
+              background: stage === i + 1 ? 'rgba(47,86,255,.08)' : 'transparent',
+            }}>
+              {stage > i + 1 ? '✓ ' : `${i + 1}. `}{label}
+            </span>
+            {i < 2 && <span style={{ color: '#dbeafe', margin: '0 .1rem' }}>→</span>}
+          </span>
+        ))}
+      </div>
+
+      {/* Empty state — only shown before anything real has happened, alongside
+          (not instead of) the configure form below, so there is always
+          something actionable on screen. */}
+      {!loadingJobs && !hasEverStarted && (
+        <div style={{ background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 12, padding: '1.5rem', marginBottom: '1.25rem', textAlign: 'center' }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(47,86,255,.1)', color: '#2F56FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto .75rem', fontSize: '1.3rem' }}>⇩</div>
+          <div style={{ fontWeight: 800, color: '#0A1228', fontSize: '1.05rem', marginBottom: '.4rem' }}>No migration jobs yet</div>
+          <p style={{ color: '#7A8CAE', fontSize: '0.85rem', maxWidth: 480, margin: '0 auto', lineHeight: 1.5 }}>
+            Connect Zoho Mail, Google Workspace, cPanel/WHM, or Dovecot below to move mailboxes into your workspace — full folder hierarchy, read/unread state, and flags preserved.
+          </p>
+        </div>
+      )}
+
+      {/* Domain migration readiness — rolls up the same per-domain check the
+          Domains detail page runs (missing mailboxes + sending readiness)
+          across every verified domain in the org, so a cutover risk is visible
+          from here without duplicating that page's full DNS UI. */}
+      {!domainReadiness.loading && domainReadiness.domains.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #dbeafe', borderRadius: 12, padding: '1rem 1.25rem', marginBottom: '1.25rem', boxShadow: '0 1px 3px rgba(10,18,40,.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
+            <div style={{ fontWeight: 700, color: '#0A1228', fontSize: '0.88rem' }}>Domain cutover readiness</div>
+            <a href="/dashboard/domains" style={{ fontSize: '0.78rem', color: '#2F56FF', fontWeight: 700, textDecoration: 'none' }}>View domains →</a>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginTop: '.6rem' }}>
+            {domainReadiness.domains.map(d => (
+              <span key={d.id} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '.35rem .7rem', borderRadius: 8, fontSize: '0.78rem', fontWeight: 600,
+                background: d.ready === true ? 'rgba(11,158,88,.08)' : d.ready === false ? 'rgba(176,35,31,.06)' : '#F0F4FF',
+                color: d.ready === true ? '#0B9E58' : d.ready === false ? '#B0231F' : '#7A8CAE',
+              }}>
+                {d.ready === true ? '✓' : d.ready === false ? '⚠' : '?'} {d.domain}
+                {d.ready === false && d.missing > 0 && <span style={{ fontWeight: 400 }}>· {d.missing} missing</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Banners */}
-      {msg   && <div style={{ background: 'rgba(22,163,74,.08)',  border: '1px solid rgba(22,163,74,.25)',  borderRadius: 8, padding: '.75rem 1rem', color: '#16a34a', marginBottom: '1rem', fontSize: '0.85rem' }}>{msg}</div>}
-      {error && <div style={{ background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.2)', borderRadius: 8, padding: '.75rem 1rem', color: '#dc2626', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
+      {msg   && <div style={{ background: 'rgba(22,163,74,.08)',  border: '1px solid rgba(22,163,74,.25)',  borderRadius: 8, padding: '.75rem 1rem', color: '#0B9E58', marginBottom: '1rem', fontSize: '0.85rem' }}>{msg}</div>}
+      {error && <div style={{ background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.2)', borderRadius: 8, padding: '.75rem 1rem', color: '#B0231F', marginBottom: '1rem', fontSize: '0.85rem' }}>{error}</div>}
 
       {domainLimit && (
         <div onClick={() => setDomainLimit(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(15,32,64,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 50 }}>
           <div onClick={e => e.stopPropagation()} style={{ ...S.card, maxWidth: 460, width: '100%' }}>
             <div style={{ fontSize: '2rem', marginBottom: '.6rem', textAlign: 'center' }}>🌐</div>
-            <h2 style={{ fontWeight: 800, color: '#0f2040', fontSize: '1.05rem', marginBottom: '.5rem', textAlign: 'center' }}>
+            <h2 style={{ fontWeight: 800, color: '#0A1228', fontSize: '1.05rem', marginBottom: '.5rem', textAlign: 'center' }}>
               This account uses more domains than your plan
             </h2>
-            <p style={{ color: '#3b5f8a', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '.9rem', textAlign: 'center' }}>
+            <p style={{ color: '#7A8CAE', fontSize: '0.875rem', lineHeight: 1.5, marginBottom: '.9rem', textAlign: 'center' }}>
               {domainLimit.message}
             </p>
             {domainLimit.domains.length > 0 && (
-              <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, padding: '.7rem .9rem', marginBottom: '1.1rem' }}>
-                <div style={{ color: '#3b5f8a', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.35rem' }}>
+              <div style={{ background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 8, padding: '.7rem .9rem', marginBottom: '1.1rem' }}>
+                <div style={{ color: '#7A8CAE', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '.35rem' }}>
                   Needs a higher plan
                 </div>
                 {domainLimit.domains.map(d => (
-                  <div key={d} style={{ color: '#1e3a5f', fontSize: '0.85rem', fontWeight: 600 }}>{d}</div>
+                  <div key={d} style={{ color: '#374264', fontSize: '0.85rem', fontWeight: 600 }}>{d}</div>
                 ))}
               </div>
             )}
             <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a href="/dashboard/billing" style={{ ...S.btn('#2563eb'), textDecoration: 'none', display: 'inline-block' }}>Upgrade plan →</a>
-              <button onClick={() => setDomainLimit(null)} style={S.btn('#64748b', true)}>Not now</button>
+              <a href="/dashboard/billing" style={{ ...S.btn('#2F56FF'), textDecoration: 'none', display: 'inline-block' }}>Upgrade plan →</a>
+              <button onClick={() => setDomainLimit(null)} style={S.btn('#7A8CAE', true)}>Not now</button>
             </div>
           </div>
         </div>
@@ -1353,12 +1458,12 @@ export default function MigrationPage() {
       {activeJobs.length > 0 && !displayJob && (
         <div style={{ background: 'rgba(37,99,235,.06)', border: '1px solid #bfdbfe', borderRadius: 9, padding: '.7rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.75rem', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />
-            <span style={{ color: '#1e3a5f', fontWeight: 600, fontSize: '0.85rem' }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2F56FF', display: 'inline-block', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <span style={{ color: '#374264', fontWeight: 600, fontSize: '0.85rem' }}>
               {activeJobs.length} import{activeJobs.length > 1 ? 's' : ''} in progress
             </span>
           </div>
-          <button onClick={() => { startSse(activeJobs[0].id); setTab('import'); }} style={{ ...S.btn('#2563eb'), fontSize: '0.78rem', padding: '.35rem .9rem' }}>Watch progress</button>
+          <button onClick={() => { startSse(activeJobs[0].id); setTab('import'); }} style={{ ...S.btn('#2F56FF'), fontSize: '0.78rem', padding: '.35rem .9rem' }}>Watch progress</button>
         </div>
       )}
 
@@ -1384,7 +1489,7 @@ export default function MigrationPage() {
 
           {/* Import form card */}
           <div style={S.card}>
-            <h2 style={{ fontWeight: 700, color: '#0f2040', marginBottom: '1.25rem', fontSize: '1rem' }}>
+            <h2 style={{ fontWeight: 700, color: '#0A1228', marginBottom: '1.25rem', fontSize: '1rem' }}>
               {displayJob && ['running','pending','discovering','migrating'].includes(displayJob.status) ? 'Start another import' : 'Configure import'}
             </h2>
 
@@ -1394,26 +1499,26 @@ export default function MigrationPage() {
               <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
                 {PROVIDERS.map(p => (
                   <button key={p.key} onClick={() => { setProvider(p.key); setCreds({}); setTestResult(null); }}
-                    style={{ padding: '.45rem .95rem', borderRadius: 8, border: `1.5px solid ${provider === p.key ? '#2563eb' : '#dbeafe'}`, background: provider === p.key ? 'rgba(37,99,235,.08)' : 'transparent', color: provider === p.key ? '#2563eb' : '#3b5f8a', fontWeight: provider === p.key ? 700 : 400, cursor: 'pointer', fontSize: '0.85rem', transition: 'all .15s' }}>
+                    style={{ padding: '.45rem .95rem', borderRadius: 8, border: `1.5px solid ${provider === p.key ? '#2F56FF' : '#dbeafe'}`, background: provider === p.key ? 'rgba(37,99,235,.08)' : 'transparent', color: provider === p.key ? '#2F56FF' : '#7A8CAE', fontWeight: provider === p.key ? 700 : 400, cursor: 'pointer', fontSize: '0.85rem', transition: 'all .15s' }}>
                     {p.icon} {p.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div style={{ borderTop: '1px solid #eff6ff', margin: '1.25rem 0' }} />
+            <div style={{ borderTop: '1px solid #F0F4FF', margin: '1.25rem 0' }} />
 
             {/* Zoho OAuth connect / connected strip */}
             {provider === 'zoho' && !zohoConnected && (
               <div style={{ background: 'rgba(37,99,235,.05)', border: '1px solid rgba(37,99,235,.18)', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.75rem' }}>
                 <div>
-                  <div style={{ fontWeight: 600, color: '#1e3a5f', marginBottom: '.2rem' }}>Connect with Zoho OAuth</div>
-                  <div style={{ color: '#7fa8d0', fontSize: '0.8rem' }}>One click — no manual token needed.</div>
+                  <div style={{ fontWeight: 600, color: '#374264', marginBottom: '.2rem' }}>Connect with Zoho OAuth</div>
+                  <div style={{ color: '#7A8CAE', fontSize: '0.8rem' }}>One click — no manual token needed.</div>
                   {/* The controls for enabling AND for undoing IMAP live behind this
                       connection, and the token only survives one page load. Someone
                       coming back to undo something finds an empty page otherwise, with
                       no clue that reconnecting is what brings the buttons back. */}
-                  <div style={{ color: '#7fa8d0', fontSize: '0.78rem', marginTop: '.35rem', lineHeight: 1.5 }}>
+                  <div style={{ color: '#7A8CAE', fontSize: '0.78rem', marginTop: '.35rem', lineHeight: 1.5 }}>
                     Reconnect to reach the mailbox controls — including <strong>turning IMAP back off</strong>
                     after an abandoned import. The connection lasts one page load, so it has to be re-made
                     each visit.
@@ -1421,7 +1526,7 @@ export default function MigrationPage() {
                   <div style={{ marginTop: '.5rem' }}>{imapInstructions}</div>
                   <div>{bulkPasswordInstructions}</div>
                 </div>
-                <a href="/api/auth/zoho" style={{ ...S.btn('#2563eb'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '.4rem' }}>
+                <a href="/api/auth/zoho" style={{ ...S.btn('#2F56FF'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '.4rem' }}>
                   🔵 Connect Zoho
                 </a>
               </div>
@@ -1434,12 +1539,12 @@ export default function MigrationPage() {
                     and labelled every account, including paid ones, as free. */}
                 <div style={{ background: 'rgba(22,163,74,.06)', border: '1px solid rgba(22,163,74,.2)', borderRadius: '10px 10px 0 0', padding: '.75rem 1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.75rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-                    <span style={{ color: '#16a34a', fontSize: '1rem' }}>✓</span>
-                    <span style={{ color: '#15803d', fontWeight: 600, fontSize: '0.875rem' }}>
+                    <span style={{ color: '#0B9E58', fontSize: '1rem' }}>✓</span>
+                    <span style={{ color: '#087A44', fontWeight: 600, fontSize: '0.875rem' }}>
                       {zohoConnected.displayEmail || 'Zoho account connected'}
                     </span>
                   </div>
-                  <button onClick={() => { setZohoConnected(null); setCreds({}); }} style={{ ...S.btn('#dc2626', true), fontSize: '0.78rem', padding: '.3rem .75rem' }}>Disconnect</button>
+                  <button onClick={() => { setZohoConnected(null); setCreds({}); }} style={{ ...S.btn('#B0231F', true), fontSize: '0.78rem', padding: '.3rem .75rem' }}>Disconnect</button>
                 </div>
 
                 {/* Domain picker. Sits ABOVE the IMAP/password buttons on purpose:
@@ -1448,10 +1553,10 @@ export default function MigrationPage() {
                     anything destructive is offered. */}
                 {orgDomains.length > 1 && (
                   <div style={{ background: '#fff', border: '1px solid #dbeafe', borderTop: 'none', padding: '1rem 1.1rem' }}>
-                    <div style={{ color: '#0f2040', fontWeight: 700, fontSize: '0.875rem', marginBottom: '.35rem' }}>
+                    <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.875rem', marginBottom: '.35rem' }}>
                       Which domains do you want to import?
                     </div>
-                    <p style={{ color: '#3b5f8a', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: '.8rem' }}>
+                    <p style={{ color: '#7A8CAE', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: '.8rem' }}>
                       This Zoho organisation covers {orgDomains.length} domains. Only the ones you tick are
                       imported — the rest are left completely untouched in Zoho.
                     </p>
@@ -1459,14 +1564,14 @@ export default function MigrationPage() {
                       {orgDomains.map(d => {
                         const on = (creds.importDomains ?? '').split(',').map(x => x.trim()).includes(d.domain);
                         return (
-                          <label key={d.domain} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', cursor: 'pointer', padding: '.45rem .6rem', borderRadius: 8, background: on ? 'rgba(37,99,235,.06)' : 'transparent', border: `1px solid ${on ? 'rgba(37,99,235,.25)' : '#eff6ff'}` }}>
-                            <input type="checkbox" checked={on} onChange={() => toggleImportDomain(d.domain)} style={{ width: 16, height: 16, accentColor: '#2563eb' }} />
-                            <span style={{ color: '#0f2040', fontWeight: 600, fontSize: '0.85rem' }}>{d.domain}</span>
-                            <span style={{ color: '#7fa8d0', fontSize: '0.78rem', fontVariantNumeric: 'tabular-nums' }}>
+                          <label key={d.domain} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', cursor: 'pointer', padding: '.45rem .6rem', borderRadius: 8, background: on ? 'rgba(37,99,235,.06)' : 'transparent', border: `1px solid ${on ? 'rgba(37,99,235,.25)' : '#F0F4FF'}` }}>
+                            <input type="checkbox" checked={on} onChange={() => toggleImportDomain(d.domain)} style={{ width: 16, height: 16, accentColor: '#2F56FF' }} />
+                            <span style={{ color: '#0A1228', fontWeight: 600, fontSize: '0.85rem' }}>{d.domain}</span>
+                            <span style={{ color: '#7A8CAE', fontSize: '0.78rem', fontVariantNumeric: 'tabular-nums' }}>
                               {d.userCount} mailbox{d.userCount === 1 ? '' : 'es'}
                             </span>
                             {d.alreadyAdded && (
-                              <span style={{ color: '#15803d', fontSize: '0.72rem', fontWeight: 700, background: 'rgba(22,163,74,.1)', borderRadius: 5, padding: '.1rem .4rem' }}>
+                              <span style={{ color: '#087A44', fontSize: '0.72rem', fontWeight: 700, background: 'rgba(22,163,74,.1)', borderRadius: 5, padding: '.1rem .4rem' }}>
                                 already added here
                               </span>
                             )}
@@ -1475,17 +1580,17 @@ export default function MigrationPage() {
                       })}
                     </div>
                     {!(creds.importDomains ?? '').trim() && (
-                      <div style={{ color: '#b91c1c', fontSize: '0.8rem', marginTop: '.6rem', fontWeight: 600 }}>
+                      <div style={{ color: '#8E1B17', fontSize: '0.8rem', marginTop: '.6rem', fontWeight: 600 }}>
                         Pick at least one domain to continue.
                       </div>
                     )}
                   </div>
                 )}
                 {discovering && (
-                  <div style={{ background: '#fff', border: '1px solid #dbeafe', borderTop: 'none', padding: '.7rem 1.1rem', color: '#3b5f8a', fontSize: '0.8rem' }}>
+                  <div style={{ background: '#fff', border: '1px solid #dbeafe', borderTop: 'none', padding: '.7rem 1.1rem', color: '#7A8CAE', fontSize: '0.8rem' }}>
                     Listing mailboxes from Zoho
                     {discoverProgress > 0 ? ` — ${discoverProgress} found so far…` : '…'}
-                    <div style={{ color: '#7fa8d0', fontSize: '0.75rem', marginTop: '.25rem' }}>
+                    <div style={{ color: '#7A8CAE', fontSize: '0.75rem', marginTop: '.25rem' }}>
                       A large organisation can take a minute or two. You can leave this page open.
                     </div>
                   </div>
@@ -1522,7 +1627,7 @@ export default function MigrationPage() {
                 {orgMailboxes.length > 0 && (
                   <div style={{ background: '#fff', border: '1px solid #dbeafe', borderTop: 'none', padding: '1rem 1.1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.6rem', flexWrap: 'wrap', marginBottom: '.6rem' }}>
-                      <div style={{ color: '#0f2040', fontWeight: 700, fontSize: '0.875rem' }}>
+                      <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.875rem' }}>
                         Mailboxes in this Zoho account ({orgMailboxes.length})
                       </div>
                       <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}>
@@ -1530,11 +1635,11 @@ export default function MigrationPage() {
                           value={mbFilter}
                           onChange={e => setMbFilter(e.target.value)}
                           placeholder="Search name or address"
-                          style={{ padding: '.35rem .6rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 7, color: '#0f2040', fontSize: '0.78rem', minWidth: 180 }}
+                          style={{ padding: '.35rem .6rem', background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 7, color: '#0A1228', fontSize: '0.78rem', minWidth: 180 }}
                         />
                         {orgDomains.length > 1 && (
                           <select value={mbDomain} onChange={e => setMbDomain(e.target.value)}
-                            style={{ padding: '.35rem .5rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 7, color: '#0f2040', fontSize: '0.78rem' }}>
+                            style={{ padding: '.35rem .5rem', background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 7, color: '#0A1228', fontSize: '0.78rem' }}>
                             <option value="">All domains</option>
                             {orgDomains.map(d => <option key={d.domain} value={d.domain}>{d.domain}</option>)}
                           </select>
@@ -1546,7 +1651,7 @@ export default function MigrationPage() {
                         row at a time is not realistic, and "select all" is too blunt
                         when only part of an organisation is moving. */}
                     <div style={{ display: 'flex', gap: '.15rem', flexWrap: 'wrap', marginBottom: '.5rem', alignItems: 'center' }}>
-                      <span style={{ color: '#7fa8d0', fontSize: '0.72rem', marginRight: '.25rem' }}>Select by letter:</span>
+                      <span style={{ color: '#7A8CAE', fontSize: '0.72rem', marginRight: '.25rem' }}>Select by letter:</span>
                       {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
                         const group = mailboxesForLetter(letter);
                         const allOn = group.length > 0 && group.every(m => picked.has(m.email));
@@ -1560,9 +1665,9 @@ export default function MigrationPage() {
                             style={{
                               width: 22, height: 22, padding: 0, borderRadius: 5, fontSize: '0.7rem', fontWeight: 700,
                               cursor: group.length === 0 ? 'default' : 'pointer',
-                              border: `1px solid ${allOn ? '#2563eb' : group.length ? '#dbeafe' : '#f1f5f9'}`,
-                              background: allOn ? '#2563eb' : '#fff',
-                              color: allOn ? '#fff' : group.length ? '#1e3a5f' : '#cbd5e1',
+                              border: `1px solid ${allOn ? '#2F56FF' : group.length ? '#dbeafe' : '#f1f5f9'}`,
+                              background: allOn ? '#2F56FF' : '#fff',
+                              color: allOn ? '#fff' : group.length ? '#374264' : '#cbd5e1',
                             }}
                           >
                             {letter}
@@ -1573,33 +1678,33 @@ export default function MigrationPage() {
 
                     <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '.5rem', fontSize: '0.76rem' }}>
                       <button type="button" onClick={() => setPicked(new Set(visibleMailboxes.map(m => m.email)))}
-                        style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0, fontSize: '0.76rem' }}>
+                        style={{ background: 'none', border: 'none', color: '#2F56FF', cursor: 'pointer', padding: 0, fontSize: '0.76rem' }}>
                         Select all shown ({visibleMailboxes.length})
                       </button>
                       <button type="button" onClick={() => setPicked(new Set())}
-                        style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0, fontSize: '0.76rem' }}>
+                        style={{ background: 'none', border: 'none', color: '#2F56FF', cursor: 'pointer', padding: 0, fontSize: '0.76rem' }}>
                         Clear
                       </button>
-                      <span style={{ color: picked.size ? '#15803d' : '#7fa8d0', fontWeight: picked.size ? 700 : 400 }}>
+                      <span style={{ color: picked.size ? '#087A44' : '#7A8CAE', fontWeight: picked.size ? 700 : 400 }}>
                         {picked.size} selected
                       </span>
-                      <span style={{ color: '#7fa8d0', fontSize: '0.72rem' }}>
+                      <span style={{ color: '#7A8CAE', fontSize: '0.72rem' }}>
                         Tip: press a letter key to select that group (press it again to clear).
                       </span>
                     </div>
 
-                    <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #eff6ff', borderRadius: 8 }}>
+                    <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #F0F4FF', borderRadius: 8 }}>
                       {visibleMailboxes.map(m => {
                         const on = picked.has(m.email);
                         return (
                           <label key={m.email} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.45rem .7rem', borderBottom: '1px solid #f8fbff', cursor: 'pointer', background: on ? 'rgba(37,99,235,.05)' : 'transparent' }}>
-                            <input type="checkbox" checked={on} onChange={() => togglePicked(m.email)} style={{ width: 15, height: 15, accentColor: '#2563eb', flexShrink: 0 }} />
+                            <input type="checkbox" checked={on} onChange={() => togglePicked(m.email)} style={{ width: 15, height: 15, accentColor: '#2F56FF', flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ color: '#0f2040', fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <div style={{ color: '#0A1228', fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {m.email}
                               </div>
                               {m.displayName && (
-                                <div style={{ color: '#7fa8d0', fontSize: '0.72rem' }}>{m.displayName}</div>
+                                <div style={{ color: '#7A8CAE', fontSize: '0.72rem' }}>{m.displayName}</div>
                               )}
                             </div>
                             <div style={{ display: 'flex', gap: '.3rem', flexShrink: 0, alignItems: 'center' }}>
@@ -1608,28 +1713,28 @@ export default function MigrationPage() {
                                   style={{ fontSize: '0.66rem', fontWeight: 700, color: '#6d28d9', background: 'rgba(109,40,217,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>admin</span>
                               )}
                               <span style={{ fontSize: '0.66rem', fontWeight: 700, borderRadius: 4, padding: '.1rem .35rem',
-                                color: m.imapEnabled ? '#15803d' : '#64748b',
+                                color: m.imapEnabled ? '#087A44' : '#7A8CAE',
                                 background: m.imapEnabled ? 'rgba(22,163,74,.1)' : 'rgba(100,116,139,.1)' }}>
                                 IMAP {m.imapEnabled ? 'on' : 'off'}
                               </span>
                               {m.tfaEnabled && (
                                 <span title="Two-factor authentication is on. Zoho then requires an app-specific password for IMAP, which only this user can create — a bulk migration cannot read this mailbox."
-                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#b91c1c', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>2FA</span>
+                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#8E1B17', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>2FA</span>
                               )}
                               {m.imapBlocked && (
                                 <span title="IMAP is blocked by an organisation policy — the per-user switch cannot override it."
-                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#b91c1c', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>blocked</span>
+                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#8E1B17', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>blocked</span>
                               )}
                               {m.existsHere && (
                                 <span title="A mailbox with this address already exists in Arham"
-                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#1d4ed8', background: 'rgba(37,99,235,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>here</span>
+                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#1E40E0', background: 'rgba(37,99,235,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>here</span>
                               )}
                             </div>
                           </label>
                         );
                       })}
                       {visibleMailboxes.length === 0 && (
-                        <div style={{ padding: '.7rem', color: '#7fa8d0', fontSize: '0.78rem' }}>Nothing matches that filter.</div>
+                        <div style={{ padding: '.7rem', color: '#7A8CAE', fontSize: '0.78rem' }}>Nothing matches that filter.</div>
                       )}
                     </div>
 
@@ -1640,15 +1745,15 @@ export default function MigrationPage() {
                         🔑 Reset Zoho password
                       </button>
                       <button onClick={() => runOnPicked('enable', false)} disabled={imapBusy || picked.size === 0}
-                        style={{ ...S.btn('#2563eb', true), fontSize: '0.76rem', padding: '.35rem .75rem' }}>
+                        style={{ ...S.btn('#2F56FF', true), fontSize: '0.76rem', padding: '.35rem .75rem' }}>
                         📥 IMAP on
                       </button>
                       <button onClick={() => runOnPicked('disable', false)} disabled={imapBusy || picked.size === 0}
-                        style={{ ...S.btn('#64748b', true), fontSize: '0.76rem', padding: '.35rem .75rem' }}>
+                        style={{ ...S.btn('#7A8CAE', true), fontSize: '0.76rem', padding: '.35rem .75rem' }}>
                         ↩ IMAP off
                       </button>
                       <button onClick={migratePicked} disabled={starting || imapBusy || picked.size === 0}
-                        style={{ ...S.btn('#16a34a'), fontSize: '0.76rem', padding: '.35rem .75rem' }}>
+                        style={{ ...S.btn('#0B9E58'), fontSize: '0.76rem', padding: '.35rem .75rem' }}>
                         {starting ? 'Working…' : autoPrepare ? '➡ Prepare & migrate' : '➡ Migrate to Arham'}
                       </button>
                     </div>
@@ -1660,15 +1765,15 @@ export default function MigrationPage() {
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: '.5rem', marginTop: '.55rem', cursor: 'pointer' }}>
                       <input type="checkbox" checked={autoPrepare}
                         onChange={e => setAutoPrepare(e.target.checked)}
-                        style={{ width: 15, height: 15, accentColor: '#16a34a', marginTop: 2, flexShrink: 0 }} />
-                      <span style={{ color: '#3b5f8a', fontSize: '0.78rem', lineHeight: 1.5 }}>
+                        style={{ width: 15, height: 15, accentColor: '#0B9E58', marginTop: 2, flexShrink: 0 }} />
+                      <span style={{ color: '#7A8CAE', fontSize: '0.78rem', lineHeight: 1.5 }}>
                         <strong>Prepare mailboxes automatically before importing</strong> — switches IMAP on and
                         sets the password above, then imports. Zoho will not let us read anyone else&apos;s mail
                         without both, so leaving this off only works if you have already done it.
                       </span>
                     </label>
 
-                    <div style={{ color: '#7fa8d0', fontSize: '0.75rem', marginTop: '.45rem', lineHeight: 1.5 }}>
+                    <div style={{ color: '#7A8CAE', fontSize: '0.75rem', marginTop: '.45rem', lineHeight: 1.5 }}>
                       Every button here acts on the ticked rows only. <strong>Reset Zoho password</strong> leaves
                       IMAP untouched — use it for people staying on Zoho who just need to get back in.
                       Users prepared for a migration are <em>not</em> forced to change their password at first
@@ -1678,10 +1783,10 @@ export default function MigrationPage() {
                 )}
 
                 <div style={{ background: '#fff', border: '1px solid #dbeafe', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '1rem 1.1rem' }}>
-                  <div style={{ color: '#0f2040', fontWeight: 700, fontSize: '0.875rem', marginBottom: '.35rem' }}>
+                  <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.875rem', marginBottom: '.35rem' }}>
                     Importing other users&apos; mail
                   </div>
-                  <p style={{ color: '#3b5f8a', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: '.9rem' }}>
+                  <p style={{ color: '#7A8CAE', fontSize: '0.82rem', lineHeight: 1.55, marginBottom: '.9rem' }}>
                     Zoho only lets a connected admin read <strong>their own</strong> mailbox. To import anyone
                     else, each mailbox needs IMAP switched on (Zoho disables it by default) and its own
                     password — Zoho has no admin login that works across mailboxes.
@@ -1692,8 +1797,8 @@ export default function MigrationPage() {
                       'ChangeMe123' failed on every single mailbox — so it has to be
                       something unique, and the operator has to be able to read it
                       back in order to hand it out. */}
-                  <div style={{ marginBottom: '.8rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, padding: '.7rem .8rem' }}>
-                    <label style={{ display: 'block', color: '#3b5f8a', fontSize: '0.76rem', fontWeight: 700, marginBottom: '.35rem' }}>
+                  <div style={{ marginBottom: '.8rem', background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 8, padding: '.7rem .8rem' }}>
+                    <label style={{ display: 'block', color: '#7A8CAE', fontSize: '0.76rem', fontWeight: 700, marginBottom: '.35rem' }}>
                       Password to set on every mailbox
                     </label>
                     <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}>
@@ -1701,24 +1806,24 @@ export default function MigrationPage() {
                         value={sharedPassword}
                         onChange={e => setSharedPassword(e.target.value)}
                         placeholder="type one, or click Generate"
-                        style={{ flex: 1, minWidth: 200, padding: '.4rem .6rem', background: '#fff', border: '1px solid #dbeafe', borderRadius: 7, color: '#0f2040', fontSize: '0.82rem', fontFamily: 'ui-monospace, monospace' }}
+                        style={{ flex: 1, minWidth: 200, padding: '.4rem .6rem', background: '#fff', border: '1px solid #dbeafe', borderRadius: 7, color: '#0A1228', fontSize: '0.82rem', fontFamily: 'ui-monospace, monospace' }}
                       />
                       <button type="button" onClick={() => setSharedPassword(makeSharedPassword())}
-                        style={{ ...S.btn('#2563eb', true), fontSize: '0.75rem', padding: '.35rem .7rem' }}>
+                        style={{ ...S.btn('#2F56FF', true), fontSize: '0.75rem', padding: '.35rem .7rem' }}>
                         Generate
                       </button>
                     </div>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: '.5rem', marginTop: '.55rem', cursor: 'pointer' }}>
                       <input type="checkbox" checked={forcePasswordChange}
                         onChange={e => setForcePasswordChange(e.target.checked)}
-                        style={{ width: 15, height: 15, accentColor: '#2563eb', marginTop: 2, flexShrink: 0 }} />
-                      <span style={{ color: '#3b5f8a', fontSize: '0.78rem', lineHeight: 1.5 }}>
+                        style={{ width: 15, height: 15, accentColor: '#2F56FF', marginTop: 2, flexShrink: 0 }} />
+                      <span style={{ color: '#7A8CAE', fontSize: '0.78rem', lineHeight: 1.5 }}>
                         <strong>Make users set their own password at first login</strong> — Zoho treats the
                         value above as one-time. Strongly recommended: without it, everyone you reset stays
                         on the same shared password indefinitely.
                       </span>
                     </label>
-                    <div style={{ color: '#7fa8d0', fontSize: '0.74rem', marginTop: '.35rem', lineHeight: 1.5 }}>
+                    <div style={{ color: '#7A8CAE', fontSize: '0.74rem', marginTop: '.35rem', lineHeight: 1.5 }}>
                       Defaults to <code>Arham#2026</code>. Zoho refuses any password that has appeared in a
                       data breach — <code>ChangeMe123</code> and similar are rejected on every mailbox — so
                       change this only to something equally unusual. Write it down before you run a reset:
@@ -1748,10 +1853,10 @@ export default function MigrationPage() {
 
                     <div style={{ display: 'flex', gap: '.75rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                       <button onClick={() => enableZohoImap(false)} disabled={imapBusy || (orgDomains.length > 1 && !(creds.importDomains ?? '').trim())}
-                        style={{ ...S.btn('#2563eb', true), fontSize: '0.78rem', padding: '.4rem .85rem', whiteSpace: 'nowrap' }}>
+                        style={{ ...S.btn('#2F56FF', true), fontSize: '0.78rem', padding: '.4rem .85rem', whiteSpace: 'nowrap' }}>
                         {imapBusy ? 'Working…' : orgDomains.length > 1 ? '📥 Enable IMAP for selected' : '📥 Enable IMAP for all'}
                       </button>
-                      <div style={{ color: '#3b5f8a', fontSize: '0.8rem', lineHeight: 1.5, flex: 1, minWidth: 220 }}>
+                      <div style={{ color: '#7A8CAE', fontSize: '0.8rem', lineHeight: 1.5, flex: 1, minWidth: 220 }}>
                         Turns IMAP on for every mailbox. Nothing else changes — but each user must then
                         create their own app password in Zoho and give it to you.
                       </div>
@@ -1779,12 +1884,12 @@ export default function MigrationPage() {
                   {/* Undo for the IMAP half only. Password resets are one-way — Zoho
                       stores hashes and exposes no restore — so this never claims to
                       roll a migration back. */}
-                  <div style={{ marginTop: '.9rem', paddingTop: '.8rem', borderTop: '1px solid #eff6ff' }}>
+                  <div style={{ marginTop: '.9rem', paddingTop: '.8rem', borderTop: '1px solid #F0F4FF' }}>
                     <button onClick={() => enableZohoImap(false, true)} disabled={imapBusy || (orgDomains.length > 1 && !(creds.importDomains ?? '').trim())}
-                      style={{ ...S.btn('#64748b', true), fontSize: '0.78rem', padding: '.35rem .8rem', whiteSpace: 'nowrap' }}>
+                      style={{ ...S.btn('#7A8CAE', true), fontSize: '0.78rem', padding: '.35rem .8rem', whiteSpace: 'nowrap' }}>
                       {imapBusy ? 'Working…' : '↩ Turn IMAP back off'}
                     </button>
-                    <div style={{ color: '#7fa8d0', fontSize: '0.76rem', marginTop: '.4rem', lineHeight: 1.5 }}>
+                    <div style={{ color: '#7A8CAE', fontSize: '0.76rem', marginTop: '.4rem', lineHeight: 1.5 }}>
                       Abandoning the import? This switches IMAP off again for the selected domains. It cannot
                       undo password resets — those are permanent, and affected users must set a new password
                       in Zoho.
@@ -1795,37 +1900,37 @@ export default function MigrationPage() {
                       above which puts everyone on the same shared value. For the case
                       that needs each person to get back into Zoho on their own
                       password rather than a guessable common one. */}
-                  <div style={{ marginTop: '.9rem', paddingTop: '.8rem', borderTop: '1px solid #eff6ff' }}>
-                    <div style={{ fontWeight: 700, color: '#0f2040', fontSize: '0.82rem', marginBottom: '.35rem' }}>
+                  <div style={{ marginTop: '.9rem', paddingTop: '.8rem', borderTop: '1px solid #F0F4FF' }}>
+                    <div style={{ fontWeight: 700, color: '#0A1228', fontSize: '0.82rem', marginBottom: '.35rem' }}>
                       Set specific passwords
                     </div>
-                    <p style={{ color: '#7fa8d0', fontSize: '0.78rem', lineHeight: 1.5, marginBottom: '.5rem' }}>
+                    <p style={{ color: '#7A8CAE', fontSize: '0.78rem', lineHeight: 1.5, marginBottom: '.5rem' }}>
                       For a handful of named mailboxes, each getting its own password — not the shared
-                      one above. One per line: <code style={{ background: '#eff6ff', padding: '1px 5px', borderRadius: 4 }}>email,password</code>
+                      one above. One per line: <code style={{ background: '#F0F4FF', padding: '1px 5px', borderRadius: 4 }}>email,password</code>
                     </p>
                     <textarea
                       value={pwEntriesText}
                       onChange={e => setPwEntriesText(e.target.value)}
                       placeholder={'someone@arhamshare.com,TheirNewPass1!\nanother@arhamshare.com,DifferentPass2!'}
                       rows={4}
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '.6rem .7rem', background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 8, color: '#0f2040', fontSize: '0.8rem', fontFamily: 'ui-monospace, monospace', resize: 'vertical' }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '.6rem .7rem', background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 8, color: '#0A1228', fontSize: '0.8rem', fontFamily: 'ui-monospace, monospace', resize: 'vertical' }}
                     />
                     {pwEntriesText.trim() && (
                       <div style={{ marginTop: '.4rem', display: 'flex', alignItems: 'center', gap: '.6rem', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.76rem', color: pwParsed.invalid.length ? '#92400e' : '#15803d' }}>
+                        <span style={{ fontSize: '0.76rem', color: pwParsed.invalid.length ? '#92400e' : '#087A44' }}>
                           {pwParsed.valid.length} mailbox{pwParsed.valid.length === 1 ? '' : 'es'} ready
                           {pwParsed.invalid.length ? ` · ${pwParsed.invalid.length} line(s) unreadable` : ''}
                         </span>
                         {pwParsed.valid.length > 0 && (
                           <button type="button" onClick={() => setPwShowValues(v => !v)}
-                            style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.74rem', cursor: 'pointer', padding: 0 }}>
+                            style={{ background: 'none', border: 'none', color: '#2F56FF', fontSize: '0.74rem', cursor: 'pointer', padding: 0 }}>
                             {pwShowValues ? 'Hide' : 'Show'} parsed list
                           </button>
                         )}
                       </div>
                     )}
                     {pwShowValues && pwParsed.valid.length > 0 && (
-                      <div style={{ marginTop: '.4rem', background: '#fff', border: '1px solid #eff6ff', borderRadius: 6, padding: '.5rem .7rem', fontSize: '0.76rem', color: '#3b5f8a', maxHeight: 140, overflowY: 'auto' }}>
+                      <div style={{ marginTop: '.4rem', background: '#fff', border: '1px solid #F0F4FF', borderRadius: 6, padding: '.5rem .7rem', fontSize: '0.76rem', color: '#7A8CAE', maxHeight: 140, overflowY: 'auto' }}>
                         {pwParsed.valid.map(e => (
                           <div key={e.email} style={{ fontFamily: 'ui-monospace, monospace' }}>
                             {e.email} → {'•'.repeat(Math.min(e.password.length, 12))}
@@ -1837,7 +1942,7 @@ export default function MigrationPage() {
                       style={{ ...S.btn('#b45309'), fontSize: '0.78rem', padding: '.4rem .85rem', marginTop: '.6rem' }}>
                       {imapBusy ? 'Working…' : `🔑 Set ${pwParsed.valid.length || ''} password${pwParsed.valid.length === 1 ? '' : 's'}`.trim()}
                     </button>
-                    <div style={{ color: '#7fa8d0', fontSize: '0.76rem', marginTop: '.4rem', lineHeight: 1.5 }}>
+                    <div style={{ color: '#7A8CAE', fontSize: '0.76rem', marginTop: '.4rem', lineHeight: 1.5 }}>
                       Irreversible, same as any Zoho password reset — there is no way to recover what a
                       mailbox's password was before this runs.
                     </div>
@@ -1851,7 +1956,7 @@ export default function MigrationPage() {
                   {imapInstructions}
                   {bulkPasswordInstructions}
 
-                  <div style={{ color: '#7fa8d0', fontSize: '0.76rem', marginTop: '.85rem', lineHeight: 1.5 }}>
+                  <div style={{ color: '#7A8CAE', fontSize: '0.76rem', marginTop: '.85rem', lineHeight: 1.5 }}>
                     Then click <strong>Start import</strong>. When it finishes, download the CSV on the job to
                     get each user&apos;s new mailbox password here.
                   </div>
@@ -1861,7 +1966,7 @@ export default function MigrationPage() {
 
             {imapProgress && (
               <div style={{ marginBottom: '1.25rem', background: 'rgba(37,99,235,.06)', border: '1px solid rgba(37,99,235,.2)', borderRadius: 8, padding: '.8rem 1rem' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1d4ed8', marginBottom: '.4rem' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1E40E0', marginBottom: '.4rem' }}>
                   {imapProgress.total === 0
                     // The run lists the organisation itself before it can know a
                     // total; showing "0 of 0" here read as though nothing was found.
@@ -1872,14 +1977,14 @@ export default function MigrationPage() {
                           : 'Working'} — {imapProgress.processed} of {imapProgress.total} mailboxes
                       </>}
                 </div>
-                <div style={{ height: 6, borderRadius: 999, background: '#eff6ff', overflow: 'hidden', marginBottom: '.4rem' }}>
+                <div style={{ height: 6, borderRadius: 999, background: '#F0F4FF', overflow: 'hidden', marginBottom: '.4rem' }}>
                   <div style={{
-                    height: '100%', borderRadius: 999, background: '#2563eb',
+                    height: '100%', borderRadius: 999, background: '#2F56FF',
                     width: `${imapProgress.total ? Math.min(100, (imapProgress.processed / imapProgress.total) * 100) : 0}%`,
                     transition: 'width .3s ease',
                   }} />
                 </div>
-                <div style={{ color: '#3b5f8a', fontSize: '0.78rem' }}>
+                <div style={{ color: '#7A8CAE', fontSize: '0.78rem' }}>
                   {imapProgress.changed} changed · {imapProgress.unchanged} already correct
                   {imapProgress.failed ? ` · ${imapProgress.failed} failed` : ''}
                 </div>
@@ -1888,7 +1993,7 @@ export default function MigrationPage() {
 
             {imapResult && (
               <div style={{ marginBottom: '1.25rem', background: imapResult.failed ? 'rgba(217,119,6,.06)' : 'rgba(22,163,74,.06)', border: `1px solid ${imapResult.failed ? 'rgba(217,119,6,.3)' : 'rgba(22,163,74,.25)'}`, borderRadius: 8, padding: '.8rem 1rem' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: imapResult.failed ? '#92400e' : '#15803d', marginBottom: '.35rem' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: imapResult.failed ? '#92400e' : '#087A44', marginBottom: '.35rem' }}>
                   {imapResult.mode === 'passwords'
                     ? <>Passwords: {imapResult.enabled} set{imapResult.failed ? ` · ${imapResult.failed} failed` : ''}</>
                     : imapResult.mode === 'disabled'
@@ -1898,7 +2003,7 @@ export default function MigrationPage() {
                   }
                 </div>
                 {imapResult.skippedOwner && (
-                  <div style={{ color: '#3b5f8a', fontSize: '0.78rem', marginBottom: '.3rem' }}>
+                  <div style={{ color: '#7A8CAE', fontSize: '0.78rem', marginBottom: '.3rem' }}>
                     {imapResult.skippedOwner} — password left unchanged (it owns the Zoho connection; its mail
                     is read directly over the API, so no password is needed).
                   </div>
@@ -1911,7 +2016,7 @@ export default function MigrationPage() {
                 {imapResult.results.filter(r => r.status === 'failed').slice(0, 6).map(r => (
                   <div key={r.email} style={{ color: '#78350f', fontSize: '0.78rem' }}>{r.email} — {r.error}</div>
                 ))}
-                <button onClick={() => setImapResult(null)} style={{ ...S.btn('#64748b', true), fontSize: '0.72rem', padding: '.25rem .7rem', marginTop: '.5rem' }}>Dismiss</button>
+                <button onClick={() => setImapResult(null)} style={{ ...S.btn('#7A8CAE', true), fontSize: '0.72rem', padding: '.25rem .7rem', marginTop: '.5rem' }}>Dismiss</button>
               </div>
             )}
 
@@ -1954,7 +2059,7 @@ export default function MigrationPage() {
 
             {/* Test result */}
             {testResult && (
-              <div style={{ background: testResult.ok ? 'rgba(22,163,74,.08)' : 'rgba(220,38,38,.06)', border: `1px solid ${testResult.ok ? 'rgba(22,163,74,.25)' : 'rgba(220,38,38,.2)'}`, borderRadius: 8, padding: '.75rem 1rem', color: testResult.ok ? '#16a34a' : '#dc2626', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              <div style={{ background: testResult.ok ? 'rgba(22,163,74,.08)' : 'rgba(220,38,38,.06)', border: `1px solid ${testResult.ok ? 'rgba(22,163,74,.25)' : 'rgba(220,38,38,.2)'}`, borderRadius: 8, padding: '.75rem 1rem', color: testResult.ok ? '#0B9E58' : '#B0231F', fontSize: '0.85rem', marginBottom: '1rem' }}>
                 {testResult.ok ? '✓ ' : '✗ '}{testResult.message}
               </div>
             )}
@@ -1962,7 +2067,7 @@ export default function MigrationPage() {
             {/* Actions */}
             <div style={{ display: 'flex', gap: '.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
               {provider !== 'zoho' && (
-                <button onClick={testCreds} style={S.btn('#64748b')} disabled={testing}>
+                <button onClick={testCreds} style={S.btn('#7A8CAE')} disabled={testing}>
                   {testing ? 'Validating…' : 'Validate credentials'}
                 </button>
               )}
@@ -1989,12 +2094,12 @@ export default function MigrationPage() {
       {tab === 'history' && (
         <div>
           {loadingJobs ? (
-            <div style={{ color: '#7fa8d0', fontSize: '0.875rem', padding: '2rem 0', textAlign: 'center' }}>Loading…</div>
+            <div style={{ color: '#7A8CAE', fontSize: '0.875rem', padding: '2rem 0', textAlign: 'center' }}>Loading…</div>
           ) : historyJobs.length === 0 ? (
             <div style={{ ...S.card, textAlign: 'center', padding: '3rem 1.5rem' }}>
               <div style={{ fontSize: '2rem', marginBottom: '.75rem' }}>📭</div>
-              <div style={{ color: '#1e3a5f', fontWeight: 600, marginBottom: '.35rem' }}>No completed imports yet</div>
-              <div style={{ color: '#7fa8d0', fontSize: '0.85rem' }}>Start an import from the New Import tab — it will appear here when done.</div>
+              <div style={{ color: '#374264', fontWeight: 600, marginBottom: '.35rem' }}>No completed imports yet</div>
+              <div style={{ color: '#7A8CAE', fontSize: '0.85rem' }}>Start an import from the New Import tab — it will appear here when done.</div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
@@ -2006,20 +2111,20 @@ export default function MigrationPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem' }}>
                         <span style={{ fontSize: '1.1rem' }}>{prov?.icon ?? '📦'}</span>
                         <div>
-                          <span style={{ color: '#1e3a5f', fontWeight: 700, fontSize: '0.9rem' }}>{prov?.label ?? j.source_type ?? 'Unknown'}</span>
-                          {j.source_host && <span style={{ color: '#7fa8d0', fontSize: '0.8rem', marginLeft: '.5rem' }}>{j.source_host}</span>}
+                          <span style={{ color: '#374264', fontWeight: 700, fontSize: '0.9rem' }}>{prov?.label ?? j.source_type ?? 'Unknown'}</span>
+                          {j.source_host && <span style={{ color: '#7A8CAE', fontSize: '0.8rem', marginLeft: '.5rem' }}>{j.source_host}</span>}
                         </div>
                       </div>
                       <StatusBadge status={j.status} />
                     </div>
-                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: '#64748b', flexWrap: 'wrap', paddingLeft: '1.75rem' }}>
-                      <span><strong style={{ color: '#1e3a5f' }}>{j.imported_messages.toLocaleString()}</strong> emails</span>
-                      <span><strong style={{ color: '#1e3a5f' }}>{fmtBytes(j.imported_bytes)}</strong> data</span>
+                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: '#7A8CAE', flexWrap: 'wrap', paddingLeft: '1.75rem' }}>
+                      <span><strong style={{ color: '#374264' }}>{j.imported_messages.toLocaleString()}</strong> emails</span>
+                      <span><strong style={{ color: '#374264' }}>{fmtBytes(j.imported_bytes)}</strong> data</span>
                       <span>{j.completed_users} / {j.total_users ?? '?'} users</span>
-                      {j.failed_users > 0 && <span style={{ color: '#dc2626' }}>{j.failed_users} failed</span>}
+                      {j.failed_users > 0 && <span style={{ color: '#B0231F' }}>{j.failed_users} failed</span>}
                       <span style={{ marginLeft: 'auto', color: '#94a3b8' }}>{new Date(j.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                     </div>
-                    {j.error_message && <div style={{ color: '#dc2626', fontSize: '0.78rem', marginTop: '.5rem', paddingLeft: '1.75rem' }}>{j.error_message}</div>}
+                    {j.error_message && <div style={{ color: '#B0231F', fontSize: '0.78rem', marginTop: '.5rem', paddingLeft: '1.75rem' }}>{j.error_message}</div>}
 
                     {/* History renders its own card rather than the detailed one, so
                         the sign-in download has to be repeated here — it was only on
@@ -2030,16 +2135,16 @@ export default function MigrationPage() {
                     {(j.credential_count ?? 0) > 0 && (
                       <div style={{ marginTop: '.7rem', marginLeft: '1.75rem', display: 'flex', alignItems: 'center', gap: '.75rem', flexWrap: 'wrap', background: 'rgba(37,99,235,.05)', border: '1px solid #bfdbfe', borderRadius: 8, padding: '.6rem .8rem' }}>
                         <div style={{ flex: 1, minWidth: 200 }}>
-                          <div style={{ color: '#1e3a5f', fontWeight: 600, fontSize: '0.82rem' }}>
+                          <div style={{ color: '#374264', fontWeight: 600, fontSize: '0.82rem' }}>
                             Mailbox sign-in details ({j.credential_count})
                           </div>
-                          <div style={{ color: '#3b5f8a', fontSize: '0.76rem', lineHeight: 1.5 }}>
+                          <div style={{ color: '#7A8CAE', fontSize: '0.76rem', lineHeight: 1.5 }}>
                             Passwords for the mailboxes this run created on Arham — not the Zoho passwords.
                             Give them to your users and ask them to change them.
                           </div>
                         </div>
                         <a href={`/api/migration/${j.id}/credentials?format=csv`}
-                           style={{ ...S.btn('#2563eb'), textDecoration: 'none', fontSize: '0.78rem', padding: '.4rem .9rem', whiteSpace: 'nowrap' }}>
+                           style={{ ...S.btn('#2F56FF'), textDecoration: 'none', fontSize: '0.78rem', padding: '.4rem .9rem', whiteSpace: 'nowrap' }}>
                           ⬇ Download CSV
                         </a>
                       </div>
