@@ -19,9 +19,25 @@ export const PLANS = {
     name: 'Free Trial', pricePerUser: 0, storageGbPerUser: 5, maxDomains: 1, includedUsers: 3,
     features: ['3 mailboxes', '5 GB per mailbox', '1 domain', '14-day trial'],
   },
+  // The signup incentive: every new organisation is provisioned directly onto
+  // this plan (see app/api/auth/signup/route.ts), not the 14-day `trial`
+  // above — 20 mailboxes, free for 12 months, no card required. Enforcement
+  // needs no bespoke code: `max_users` is set to `freeIncludedUsers` at
+  // signup, so the ordinary per-seat cap blocks mailbox #21, and
+  // `trial_ends_at` is set 365 days out with `status: 'trial'`, so the
+  // ordinary getActiveSub() expiry check blocks everything once the year is
+  // up — the same two mechanisms that already gate the `trial` plan above.
+  // Checkout deliberately refuses to sell this plan (see
+  // app/api/billing/checkout/route.ts) so it can only ever be granted at
+  // signup, never bought or switched into later — existing orgs are
+  // unaffected by this offer.
   lite: {
     name: 'Lite', pricePerUser: 40, storageGbPerUser: 5, maxDomains: 30, includedUsers: 1,
-    features: ['5 GB per mailbox', 'Up to 30 domains', 'IMAP, POP and ActiveSync', 'Free migration', 'Email support'],
+    /** Free-plan seat count granted at signup — see the comment above. */
+    freeIncludedUsers: 20,
+    /** How long the free period lasts from signup, in days. */
+    freeDays: 365,
+    features: ['Free for your first 12 months', 'Up to 20 mailboxes included', '5 GB per mailbox', 'Up to 30 domains', 'IMAP, POP and ActiveSync', 'Free migration', 'Email support'],
   },
   starter: {
     name: 'Starter', pricePerUser: 60, storageGbPerUser: 10, maxDomains: 30, includedUsers: 1,

@@ -4,6 +4,7 @@ import { query, queryOne, ensureDb } from '@/lib/db';
 import { createSession } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { issueVerificationEmail } from '@/lib/tokens';
+import { PLANS } from '@/lib/plans';
 
 export async function POST(req: Request) {
   // 5 signups per hour per IP
@@ -35,10 +36,18 @@ export async function POST(req: Request) {
 
     if (!org) return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
 
+    // Every new org is provisioned straight onto the free Lite offer — 20
+    // mailboxes, free for a year, no card — not the old 14-day/3-mailbox
+    // `trial` plan. `status: 'trial'` is deliberate, not a typo: it reuses
+    // getActiveSub()'s existing trial-expiry check (status='trial' AND
+    // trial_ends_at in the past => no active subscription) as the enforcement
+    // for the free year, so nothing new has to detect the free period ending.
+    // The seat cap is likewise just `max_users`, enforced by the ordinary
+    // per-plan seat check every other tier already goes through.
     await query(`
-      INSERT INTO subscriptions (org_id, plan, max_users, status)
-      VALUES ($1, 'trial', 3, 'trial')
-    `, [org.id]);
+      INSERT INTO subscriptions (org_id, plan, max_users, status, trial_ends_at)
+      VALUES ($1, 'lite', $2, 'trial', NOW() + ($3 || ' days')::interval)
+    `, [org.id, PLANS.lite.freeIncludedUsers, String(PLANS.lite.freeDays)]);
 
     // Confirm the address is real and reachable. Deliberately not fatal: the account
     // and its subscription already exist, and losing a signup to a transient SMTP

@@ -76,11 +76,11 @@ export default function SignupPage() {
       <div className="a-right">
         <div className="a-wrap">
           <div className="a-crumb">
-            <span className="a-tag">14-day free trial</span>
+            <span className="a-tag">Free for 12 months</span>
             <span className="a-host">no credit card required</span>
           </div>
           <h1 className="a-title">Create your workspace</h1>
-          <p className="a-desc">3 mailboxes, 1 domain, everything unlocked — free for 14 days.</p>
+          <p className="a-desc">Up to 20 mailboxes, 30 domains, everything unlocked — free for your first 12 months.</p>
 
           <div className="a-card">
             {error && (

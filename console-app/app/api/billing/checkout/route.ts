@@ -17,6 +17,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
   }
   if (plan === 'trial') return NextResponse.json({ error: 'Cannot checkout trial plan' }, { status: 400 });
+  // Lite is the free-for-a-year signup incentive (see app/api/auth/signup/route.ts)
+  // — it is granted once, automatically, at signup and is never for sale. Without
+  // this an org could "buy" Lite here for ₹40/seat against a Razorpay plan that may
+  // not even exist, or — worse — an already-paying org could downgrade into what
+  // is meant to be a one-time new-signup offer.
+  if (plan === 'lite') {
+    return NextResponse.json({
+      error: 'Lite is a free first-year offer for new signups and isn’t available to switch into — choose Starter or above to upgrade from here.',
+    }, { status: 400 });
+  }
   const paidPlan = plan as Exclude<PlanKey, 'trial'>;
 
   // Plans are sold by the seat, so a checkout without a seat count has no price.

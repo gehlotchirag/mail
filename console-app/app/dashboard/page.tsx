@@ -272,10 +272,14 @@ export default async function DashboardPage() {
       ctaHref: `/dashboard/domains/${d.id}`,
     });
   }
+  // Free Lite (lib/plans.ts) reuses this same status='trial' expiry check for
+  // its 365-day free period — "trial" reads oddly for a year-long free plan,
+  // so the copy says "free" there instead.
+  const freeWord = sub?.plan === 'lite' ? 'free period' : 'trial';
   if (sub?.status === 'trial' && trialDays <= 7) {
     attention.push({
       kind: 'info',
-      title: trialDays === 0 ? 'Your trial ends today' : `Your trial ends in ${trialDays} day${trialDays !== 1 ? 's' : ''}`,
+      title: trialDays === 0 ? `Your ${freeWord} ends today` : `Your ${freeWord} ends in ${trialDays} day${trialDays !== 1 ? 's' : ''}`,
       // "Expires", not "renews" — trials don't auto-renew or charge anything
       // in this app; they lapse to 'expired' unless manually upgraded.
       chip: sub.trial_ends_at
@@ -377,7 +381,7 @@ export default async function DashboardPage() {
           <div className="o-stat">
             <div className="o-stat-top">
               <span className="o-stat-label">Plan</span>
-              {sub?.status === 'trial' && <span className="o-stat-tag">Trial</span>}
+              {sub?.status === 'trial' && <span className="o-stat-tag">{sub.plan === 'lite' ? 'Free' : 'Trial'}</span>}
             </div>
             {sub?.status === 'trial' ? (
               <>
@@ -711,7 +715,7 @@ export default async function DashboardPage() {
                 <div>
                   <div className="o-paneltitle">
                     Subscription &amp; tier
-                    {sub?.status === 'trial' && <span className="o-stat-tag">Trial</span>}
+                    {sub?.status === 'trial' && <span className="o-stat-tag">{sub.plan === 'lite' ? 'Free' : 'Trial'}</span>}
                   </div>
                 </div>
               </div>

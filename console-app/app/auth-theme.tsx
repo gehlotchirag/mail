@@ -258,7 +258,7 @@ export function AuthPanel() {
       <div className="a-stats">
         <div className="a-stat"><b>AWS Mumbai</b><span>India-hosted</span></div>
         <div className="a-stat"><b>IMAP · JMAP</b><span>Open standards</span></div>
-        <div className="a-stat"><b>14 days</b><span>Free trial</span></div>
+        <div className="a-stat"><b>12 months</b><span>Free, 20 mailboxes</span></div>
       </div>
 
       <div className="a-panelfoot">

@@ -212,7 +212,11 @@ export default function BillingPage() {
               <span className="b-eyebrow">Active plan</span>
               {(() => {
                 const st = sub?.status ?? 'trial';
-                const label = st === 'trial' ? `Trial — ${trialDays} day${trialDays !== 1 ? 's' : ''} left`
+                // Free Lite (see lib/plans.ts) uses the same status='trial' expiry
+                // mechanism as the old 14-day trial, but "Trial" reads oddly next
+                // to a 365-day free period — say what it actually is.
+                const freeLabel = sub?.plan === 'lite' ? 'Free' : 'Trial';
+                const label = st === 'trial' ? `${freeLabel} — ${trialDays} day${trialDays !== 1 ? 's' : ''} left`
                   : st === 'pending'   ? 'Payment retrying'
                   : st === 'expired'   ? 'Payment failed'
                   : st === 'cancelled' ? 'Cancelled'
@@ -337,6 +341,10 @@ export default function BillingPage() {
         {paidKeys.map(key => {
           const p = plans[key];
           const isCurrent = sub?.plan === key;
+          // Lite is the free-for-a-year signup offer (see lib/plans.ts) — never
+          // for sale, so it never gets the per-seat price or Zoho-savings framing
+          // the paid tiers use, and its button can't trigger a real checkout.
+          const isFreeSignupPlan = key === 'lite';
           const monthly = p.pricePerUser * seats;
           const zoho = ZOHO_COMPARISON[key];
           const saving = zoho ? Math.round((1 - p.pricePerUser / zoho.price) * 100) : 0;
@@ -345,19 +353,34 @@ export default function BillingPage() {
               {isCurrent && <div className="b-plantag current">Current</div>}
               {key === 'business' && !isCurrent && <div className="b-plantag popular">Popular</div>}
               <div className="b-planlabel">{p.name}</div>
-              <div className="b-planprice"><b>₹{p.pricePerUser}</b><span>/mailbox/month</span></div>
-              <div className="b-plantotal">{fmtINR(monthly)}/month for {seats}{gstNote}</div>
-              {zoho && saving > 0 && <div className="b-plansaving">{saving}% under {zoho.plan} (₹{zoho.price})</div>}
+              {isFreeSignupPlan ? (
+                <>
+                  <div className="b-planprice"><b>Free</b><span>for 12 months</span></div>
+                  <div className="b-plantotal">Then ₹{p.pricePerUser}/mailbox/month{gstNote}</div>
+                </>
+              ) : (
+                <>
+                  <div className="b-planprice"><b>₹{p.pricePerUser}</b><span>/mailbox/month</span></div>
+                  <div className="b-plantotal">{fmtINR(monthly)}/month for {seats}{gstNote}</div>
+                </>
+              )}
+              {isFreeSignupPlan
+                ? <div className="b-plansaving">Up to 20 mailboxes included, no card required</div>
+                : (zoho && saving > 0 && <div className="b-plansaving">{saving}% under {zoho.plan} (₹{zoho.price})</div>)}
               <ul className="b-planfeatures">
                 {p.features.map(f => <li key={f}>{f}</li>)}
               </ul>
               <button
-                className={isCurrent ? 'b-btn' : 'b-btn b-btn-primary'}
+                className={isCurrent || isFreeSignupPlan ? 'b-btn' : 'b-btn b-btn-primary'}
                 onClick={() => isCurrent ? focusSeatInput() : setSwitchTarget(key)}
-                disabled={upgrading === key}
+                disabled={upgrading === key || (isFreeSignupPlan && !isCurrent)}
                 style={{ width: '100%' }}
+                title={isFreeSignupPlan && !isCurrent ? 'Only granted automatically at signup' : undefined}
               >
-                {upgrading === key ? 'Redirecting…' : isCurrent ? 'Change seat count' : `Switch to ${p.name}`}
+                {upgrading === key ? 'Redirecting…'
+                  : isCurrent ? 'Change seat count'
+                  : isFreeSignupPlan ? 'Included at signup only'
+                  : `Switch to ${p.name}`}
               </button>
             </div>
           );
