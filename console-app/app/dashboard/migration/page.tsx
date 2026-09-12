@@ -35,10 +35,10 @@ interface ZohoTokens {
 }
 
 const PROVIDERS = [
-  { key: 'zoho',    label: 'Zoho Mail',        icon: '🔵' },
-  { key: 'gsuite',  label: 'Google Workspace', icon: '🔴' },
-  { key: 'cpanel',  label: 'cPanel / WHM',      icon: '🟠' },
-  { key: 'dovecot', label: 'Dovecot / IMAP',    icon: '🟣' },
+  { key: 'zoho',    label: 'Zoho Mail',        icon: '🔵', desc: 'OAuth — auto-discovers mailboxes' },
+  { key: 'gsuite',  label: 'Google Workspace', icon: '🔴', desc: 'Service account, domain-wide delegation' },
+  { key: 'cpanel',  label: 'cPanel / WHM',      icon: '🟠', desc: 'WHM API token' },
+  { key: 'dovecot', label: 'Dovecot / IMAP',    icon: '🟣', desc: 'IMAP master-user login' },
 ];
 
 const FIELDS: Record<string, { key: string; label: string; placeholder: string; type?: string; rows?: number }[]> = {
@@ -1358,6 +1358,11 @@ export default function MigrationPage() {
 
   return (
     <div style={{ maxWidth: 1040 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: '#7A8CAE', fontWeight: 600, marginBottom: 6 }}>
+        <span>Workspace</span>
+        <span style={{ color: '#dbeafe' }}>/</span>
+        <span style={{ color: '#0A1228', fontWeight: 700 }}>Migration</span>
+      </div>
       {/* Page header */}
       <div style={{ marginBottom: '1.25rem' }}>
         <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0A1228', letterSpacing: '-0.5px' }}>Import Email</h1>
@@ -1496,13 +1501,21 @@ export default function MigrationPage() {
             {/* Provider selector */}
             <div style={{ marginBottom: '.5rem' }}>
               <label style={{ ...S.label, marginBottom: '.6rem' }}>Source provider</label>
-              <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap' }}>
-                {PROVIDERS.map(p => (
-                  <button key={p.key} onClick={() => { setProvider(p.key); setCreds({}); setTestResult(null); }}
-                    style={{ padding: '.45rem .95rem', borderRadius: 8, border: `1.5px solid ${provider === p.key ? '#2F56FF' : '#dbeafe'}`, background: provider === p.key ? 'rgba(37,99,235,.08)' : 'transparent', color: provider === p.key ? '#2F56FF' : '#7A8CAE', fontWeight: provider === p.key ? 700 : 400, cursor: 'pointer', fontSize: '0.85rem', transition: 'all .15s' }}>
-                    {p.icon} {p.label}
-                  </button>
-                ))}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '.75rem' }}>
+                {PROVIDERS.map(p => {
+                  const active = provider === p.key;
+                  return (
+                    <div key={p.key} onClick={() => { setProvider(p.key); setCreds({}); setTestResult(null); }}
+                      style={{ position: 'relative', cursor: 'pointer', padding: '.9rem', borderRadius: 12, border: `2px solid ${active ? '#2F56FF' : '#dbeafe'}`, background: active ? 'rgba(47,86,255,.04)' : '#fff', transition: 'all .15s' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <span style={{ width: 36, height: 36, borderRadius: 9, display: 'grid', placeItems: 'center', fontSize: '1.1rem', background: '#F0F4FF' }}>{p.icon}</span>
+                        {active && <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#2F56FF', color: '#fff', fontSize: '0.65rem', display: 'grid', placeItems: 'center' }}>✓</span>}
+                      </div>
+                      <div style={{ fontWeight: 700, color: '#0A1228', fontSize: '0.85rem', marginTop: '.55rem' }}>{p.label}</div>
+                      <div style={{ color: '#7A8CAE', fontSize: '0.72rem', marginTop: '.15rem', lineHeight: 1.4 }}>{p.desc}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1686,56 +1699,83 @@ export default function MigrationPage() {
                         Clear
                       </button>
                       <span style={{ color: picked.size ? '#087A44' : '#7A8CAE', fontWeight: picked.size ? 700 : 400 }}>
-                        {picked.size} selected
+                        {picked.size} of {orgMailboxes.length} selected
                       </span>
+                      {picked.size > 0 && (() => {
+                        const mb = orgMailboxes.filter(m => picked.has(m.email)).reduce((n, m) => n + (m.usedStorageMb ?? 0), 0);
+                        return (
+                          <span style={{ color: '#374264', fontSize: '0.76rem', fontFamily: 'monospace' }}>
+                            {mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`} to move
+                          </span>
+                        );
+                      })()}
                       <span style={{ color: '#7A8CAE', fontSize: '0.72rem' }}>
                         Tip: press a letter key to select that group (press it again to clear).
                       </span>
                     </div>
 
-                    <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #F0F4FF', borderRadius: 8 }}>
-                      {visibleMailboxes.map(m => {
-                        const on = picked.has(m.email);
-                        return (
-                          <label key={m.email} style={{ display: 'flex', alignItems: 'center', gap: '.6rem', padding: '.45rem .7rem', borderBottom: '1px solid #f8fbff', cursor: 'pointer', background: on ? 'rgba(37,99,235,.05)' : 'transparent' }}>
-                            <input type="checkbox" checked={on} onChange={() => togglePicked(m.email)} style={{ width: 15, height: 15, accentColor: '#2F56FF', flexShrink: 0 }} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ color: '#0A1228', fontSize: '0.8rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {m.email}
-                              </div>
-                              {m.displayName && (
-                                <div style={{ color: '#7A8CAE', fontSize: '0.72rem' }}>{m.displayName}</div>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', gap: '.3rem', flexShrink: 0, alignItems: 'center' }}>
-                              {m.role === 'super_admin' && (
-                                <span title="Owns the Zoho connection — its password is never reset in a bulk run"
-                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#6d28d9', background: 'rgba(109,40,217,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>admin</span>
-                              )}
-                              <span style={{ fontSize: '0.66rem', fontWeight: 700, borderRadius: 4, padding: '.1rem .35rem',
-                                color: m.imapEnabled ? '#087A44' : '#7A8CAE',
-                                background: m.imapEnabled ? 'rgba(22,163,74,.1)' : 'rgba(100,116,139,.1)' }}>
-                                IMAP {m.imapEnabled ? 'on' : 'off'}
-                              </span>
-                              {m.tfaEnabled && (
-                                <span title="Two-factor authentication is on. Zoho then requires an app-specific password for IMAP, which only this user can create — a bulk migration cannot read this mailbox."
-                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#8E1B17', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>2FA</span>
-                              )}
-                              {m.imapBlocked && (
-                                <span title="IMAP is blocked by an organisation policy — the per-user switch cannot override it."
-                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#8E1B17', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>blocked</span>
-                              )}
-                              {m.existsHere && (
-                                <span title="A mailbox with this address already exists in Arham"
-                                  style={{ fontSize: '0.66rem', fontWeight: 700, color: '#1E40E0', background: 'rgba(37,99,235,.1)', borderRadius: 4, padding: '.1rem .35rem' }}>here</span>
-                              )}
-                            </div>
-                          </label>
-                        );
-                      })}
-                      {visibleMailboxes.length === 0 && (
-                        <div style={{ padding: '.7rem', color: '#7A8CAE', fontSize: '0.78rem' }}>Nothing matches that filter.</div>
-                      )}
+                    <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid #F0F4FF', borderRadius: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                        <thead>
+                          <tr style={{ position: 'sticky', top: 0, background: '#F0F4FF', textAlign: 'left' }}>
+                            <th style={{ padding: '.5rem .6rem', width: 28 }}></th>
+                            <th style={{ padding: '.5rem .6rem', color: '#7A8CAE', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Source mailbox</th>
+                            <th style={{ padding: '.5rem .6rem', color: '#7A8CAE', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Account flags</th>
+                            <th style={{ padding: '.5rem .6rem', color: '#7A8CAE', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Size</th>
+                            <th style={{ padding: '.5rem .6rem', color: '#7A8CAE', fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Destination</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleMailboxes.map(m => {
+                            const on = picked.has(m.email);
+                            return (
+                              <tr key={m.email} onClick={() => togglePicked(m.email)} style={{ cursor: 'pointer', borderBottom: '1px solid #f8fbff', background: on ? 'rgba(37,99,235,.05)' : 'transparent' }}>
+                                <td style={{ padding: '.5rem .6rem' }}>
+                                  <input type="checkbox" checked={on} onChange={() => togglePicked(m.email)} onClick={e => e.stopPropagation()} style={{ width: 15, height: 15, accentColor: '#2F56FF' }} />
+                                </td>
+                                <td style={{ padding: '.5rem .6rem', minWidth: 0 }}>
+                                  <div style={{ color: '#0A1228', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{m.email}</div>
+                                  {m.displayName && <div style={{ color: '#7A8CAE', fontSize: '0.7rem' }}>{m.displayName}</div>}
+                                </td>
+                                <td style={{ padding: '.5rem .6rem' }}>
+                                  <div style={{ display: 'flex', gap: '.3rem', flexWrap: 'wrap' }}>
+                                    {m.role === 'super_admin' && (
+                                      <span title="Owns the Zoho connection — its password is never reset in a bulk run"
+                                        style={{ fontSize: '0.64rem', fontWeight: 700, color: '#6d28d9', background: 'rgba(109,40,217,.1)', borderRadius: 4, padding: '.1rem .35rem', whiteSpace: 'nowrap' }}>Admin</span>
+                                    )}
+                                    <span style={{ fontSize: '0.64rem', fontWeight: 700, borderRadius: 4, padding: '.1rem .35rem', whiteSpace: 'nowrap',
+                                      color: m.imapEnabled ? '#087A44' : '#7A8CAE',
+                                      background: m.imapEnabled ? 'rgba(22,163,74,.1)' : 'rgba(100,116,139,.1)' }}>
+                                      {m.imapEnabled ? 'IMAP on' : 'Needs app password'}
+                                    </span>
+                                    {m.tfaEnabled && (
+                                      <span title="Two-factor authentication is on. Zoho then requires an app-specific password for IMAP, which only this user can create — a bulk migration cannot read this mailbox."
+                                        style={{ fontSize: '0.64rem', fontWeight: 700, color: '#8E1B17', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem', whiteSpace: 'nowrap' }}>2FA</span>
+                                    )}
+                                    {m.imapBlocked && (
+                                      <span title="IMAP is blocked by an organisation policy — the per-user switch cannot override it."
+                                        style={{ fontSize: '0.64rem', fontWeight: 700, color: '#8E1B17', background: 'rgba(185,28,28,.1)', borderRadius: 4, padding: '.1rem .35rem', whiteSpace: 'nowrap' }}>Blocked</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td style={{ padding: '.5rem .6rem', color: '#374264', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                                  {m.usedStorageMb != null ? (m.usedStorageMb >= 1024 ? `${(m.usedStorageMb / 1024).toFixed(1)} GB` : `${m.usedStorageMb} MB`) : '—'}
+                                </td>
+                                <td style={{ padding: '.5rem .6rem', whiteSpace: 'nowrap' }}>
+                                  {m.existsHere ? (
+                                    <span style={{ color: '#1E40E0', fontWeight: 600, fontSize: '0.74rem' }}>Already on INBOX</span>
+                                  ) : (
+                                    <span style={{ color: '#087A44', fontWeight: 600, fontSize: '0.74rem' }}>✓ Ready to move</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {visibleMailboxes.length === 0 && (
+                            <tr><td colSpan={5} style={{ padding: '.7rem .6rem', color: '#7A8CAE', fontSize: '0.78rem' }}>Nothing matches that filter.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
 
                     {/* Actions apply ONLY to ticked rows — never to the whole org. */}
