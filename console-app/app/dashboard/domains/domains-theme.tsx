@@ -33,6 +33,7 @@ export function DomainsStyles() {
       /* header + breadcrumb */
       .domainspage .d-crumb { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--d-muted); font-weight: 600; margin-bottom: 6px; }
       .domainspage .d-crumb b { color: var(--d-ink); font-weight: 700; }
+      .domainspage .d-crumb svg { width: 12px; height: 12px; flex: none; }
       .domainspage .d-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
       .domainspage .d-h1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
       .domainspage .d-h1 span:first-child { font-size: 22px; font-weight: 800; color: var(--d-ink); letter-spacing: -.02em; }
@@ -46,6 +47,7 @@ export function DomainsStyles() {
         cursor: pointer; text-decoration: none; white-space: nowrap;
         transition: background .15s ease, box-shadow .15s ease;
       }
+      .domainspage .d-btn svg { width: 15px; height: 15px; flex: none; }
       .domainspage .d-btn:hover { background: var(--d-surface2); }
       .domainspage .d-btn-primary { background: var(--d-accent); color: #fff; border-color: transparent; box-shadow: var(--d-shadow-s); }
       .domainspage .d-btn-primary:hover { box-shadow: var(--d-shadow-m); }
@@ -167,6 +169,8 @@ export function DomainsStyles() {
       /* migration safeguard card */
       .domainspage .d-safeguard { background: var(--d-surface); border: 1px solid var(--d-border); border-radius: 14px; padding: 18px 20px; box-shadow: var(--d-shadow-s); }
       .domainspage .d-safeguard-top { display: flex; align-items: flex-start; gap: 10px; }
+      .domainspage .d-safeguard-icon { flex: none; }
+      .domainspage .d-safeguard-icon svg { width: 20px; height: 20px; }
       .domainspage .d-safeguard-title { font-size: 14px; font-weight: 700; color: var(--d-ink); }
       .domainspage .d-safeguard-desc { font-size: 12.5px; color: var(--d-muted); margin-top: 4px; }
       .domainspage .d-missing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin-top: 12px; }

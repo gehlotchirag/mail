@@ -552,7 +552,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
       {readiness?.checked && (readiness.missing?.length ?? 0) > 0 && (
         <div className="d-safeguard" style={{ marginBottom: 20 }}>
           <div className="d-safeguard-top">
-            <span style={{ color: 'var(--d-red)', flex: 'none' }}><WarnIcon /></span>
+            <span className="d-safeguard-icon" style={{ color: 'var(--d-red)' }}><WarnIcon /></span>
             <div style={{ flex: 1 }}>
               <div className="d-safeguard-title">
                 {readiness.missing!.length} address{readiness.missing!.length !== 1 ? 'es' : ''} from your source mailbox {readiness.missing!.length !== 1 ? 'have' : 'has'} no mailbox here yet
