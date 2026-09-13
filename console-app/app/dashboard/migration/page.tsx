@@ -34,6 +34,27 @@ interface ZohoTokens {
   isPersonal?: boolean;
 }
 
+/* ── Provider-selector design tokens, mapped from the Stitch reference ── */
+const PT = {
+  primary: '#004ac6',
+  primaryContainer: '#2563eb',
+  surfaceContainerLowest: '#ffffff',
+  surfaceContainerHigh: '#e2e7ff',
+  surfaceContainerLow: '#f2f3ff',
+  onSurface: '#131b2e',
+  onSurfaceVariant: '#434655',
+  outline: '#737686',
+  outlineVariant: '#c3c6d7',
+};
+
+function MatIcon({ name, size = 18, style }: { name: string; size?: number; style?: React.CSSProperties }) {
+  return (
+    <span className="material-symbols-outlined" style={{ fontSize: size, lineHeight: 1, ...style }}>
+      {name}
+    </span>
+  );
+}
+
 function ProviderIcon({ provider }: { provider: string }) {
   const common = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 22, height: 22 };
   switch (provider) {
@@ -1515,29 +1536,52 @@ export default function MigrationPage() {
             </h2>
 
             {/* Provider selector */}
-            <div style={{ marginBottom: '.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '.7rem' }}>
-                <span style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '.05em', textTransform: 'uppercase', color: '#7A8CAE' }}>Select email source</span>
-                <span style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: '#7A8CAE' }}>{PROVIDERS.length} providers available</span>
+            <div style={{ marginBottom: '.5rem', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '.4rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: PT.onSurfaceVariant }}>Select Email Architecture Source</span>
+                  <span style={{ fontSize: '11px', fontFamily: "'JetBrains Mono', monospace", color: PT.onSurfaceVariant }}>{PROVIDERS.length} Providers Configured</span>
+                </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '.9rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: '1rem' }} className="mig-provider-grid">
+                <style>{`
+                  @media (min-width: 640px) { .mig-provider-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+                  @media (min-width: 1280px) { .mig-provider-grid { grid-template-columns: repeat(4, 1fr) !important; } }
+                `}</style>
                 {PROVIDERS.map(p => {
                   const active = provider === p.key;
                   const isZohoConnected = p.key === 'zoho' && !!zohoConnected;
                   return (
                     <div key={p.key} onClick={() => { setProvider(p.key); setCreds({}); setTestResult(null); }}
-                      style={{ position: 'relative', cursor: 'pointer', padding: '1rem', borderRadius: 14, background: '#fff', boxShadow: active ? '0 4px 20px rgba(47,86,255,.12)' : '0 1px 3px rgba(10,18,40,.06)', border: `1.5px solid ${active ? '#2F56FF' : '#F0F4FF'}`, transition: 'all .15s' }}>
+                      style={{
+                        position: 'relative', cursor: 'pointer', padding: '1rem', borderRadius: 12,
+                        background: active ? `linear-gradient(to bottom right, ${PT.surfaceContainerLowest}, ${PT.surfaceContainerLow})` : PT.surfaceContainerLowest,
+                        boxShadow: active ? '0 4px 10px rgba(19,27,46,.12)' : '0 1px 3px rgba(19,27,46,.06)',
+                        opacity: active ? 1 : 0.85,
+                        transition: 'all .15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.boxShadow = active ? '0 6px 14px rgba(19,27,46,.16)' : '0 4px 10px rgba(19,27,46,.1)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity = active ? '1' : '.85'; e.currentTarget.style.boxShadow = active ? '0 4px 10px rgba(19,27,46,.12)' : '0 1px 3px rgba(19,27,46,.06)'; }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '.7rem' }}>
-                        <span style={{ width: 40, height: 40, borderRadius: 10, display: 'grid', placeItems: 'center', color: active ? '#2F56FF' : '#374264', background: active ? 'rgba(47,86,255,.1)' : '#F0F4FF' }}><ProviderIcon provider={p.key} /></span>
+                        <span style={{ width: 40, height: 40, borderRadius: 8, display: 'grid', placeItems: 'center', color: active ? PT.primary : PT.onSurface, background: active ? 'rgba(0,74,198,.1)' : PT.surfaceContainerHigh }}><ProviderIcon provider={p.key} /></span>
                         {isZohoConnected && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: '#fff', background: '#2F56FF', borderRadius: 999, padding: '.25rem .55rem' }}>✓ Connected</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '10px', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: '#fff', background: PT.primary, borderRadius: 999, padding: '.15rem .5rem' }}>
+                            <MatIcon name="check" size={12} />
+                            Connected
+                          </span>
                         )}
                       </div>
-                      <div style={{ fontWeight: 800, color: '#0A1228', fontSize: '0.95rem' }}>{p.label}</div>
-                      <div style={{ color: '#7A8CAE', fontSize: '0.76rem', marginTop: '.2rem', lineHeight: 1.4, minHeight: '2.1em' }}>{p.desc}</div>
-                      <div style={{ marginTop: '.8rem', paddingTop: '.6rem', borderTop: '1px solid #F0F4FF', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: active ? '#2F56FF' : '#7A8CAE', fontWeight: 600 }}>{p.tag}</span>
-                        <span style={{ color: active ? '#2F56FF' : '#dbeafe', fontSize: '0.9rem' }}>{active ? '⬡' : '›'}</span>
+                      <div style={{ fontWeight: 600, color: PT.onSurface, fontSize: '1.15rem', lineHeight: '1.7rem', marginBottom: '2px' }}>{p.label}</div>
+                      <div style={{
+                        color: PT.onSurfaceVariant, fontSize: '13px', lineHeight: '18px',
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}>{p.desc}</div>
+                      <div style={{ marginTop: '.75rem', paddingTop: '.4rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '11px', color: active ? PT.primary : PT.onSurfaceVariant, fontWeight: 500 }}>
+                          {isZohoConnected ? 'OAuth2 + Token Active' : p.tag}
+                        </span>
+                        <MatIcon name={active ? 'hub' : 'chevron_right'} size={18} style={{ color: active ? PT.primary : PT.outline }} />
                       </div>
                     </div>
                   );
