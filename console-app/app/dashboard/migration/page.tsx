@@ -1580,8 +1580,12 @@ export default function MigrationPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
                     <span style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(11,158,88,.15)', color: '#0B9E58', display: 'grid', placeItems: 'center', fontSize: '1rem', flexShrink: 0 }}>🔗</span>
                     <div>
-                      <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.85rem' }}>
-                        Connected account: <span className="s-mono" style={{ color: '#087A44', fontFamily: 'monospace' }}>{zohoConnected.displayEmail || 'Zoho account connected'}</span>
+                      <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '.5rem', flexWrap: 'wrap' }}>
+                        Connected Account: <span className="s-mono" style={{ color: '#087A44', fontFamily: 'monospace', fontWeight: 700 }}>{zohoConnected.displayEmail || 'Zoho account connected'}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.66rem', fontWeight: 700, color: '#374264', background: '#EEF1FF', borderRadius: 999, padding: '.2rem .6rem' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0B9E58', display: 'inline-block' }} />
+                          Zoho OAuth Valid
+                        </span>
                       </div>
                       <div style={{ color: '#7A8CAE', fontSize: '0.76rem', marginTop: '.1rem' }}>
                         Authorized via {zohoConnected.region === 'in' ? 'India datacenter (zoho.in)' : 'global datacenter (zoho.com)'} · connection lasts one page load — reconnect any time to reach the controls below again.
@@ -1654,11 +1658,15 @@ export default function MigrationPage() {
                     who is already here, whose IMAP is on, and which specific people to
                     act on. */}
                 {discoverError && orgMailboxes.length === 0 && (
-                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderTop: 'none', padding: '.8rem 1.1rem', color: '#92400e', fontSize: '0.8rem', lineHeight: 1.55 }}>
-                    <strong>Could not load the mailbox list.</strong> {discoverError}
-                    <div style={{ marginTop: '.35rem' }}>
-                      The per-person picker is hidden because of this. The domain-level actions below still
-                      work, but they apply to every mailbox in the ticked domains.
+                  <div style={{ background: '#F0F4FF', border: '1px solid #dbeafe', borderTop: 'none', padding: '.9rem 1.1rem', display: 'flex', gap: '.7rem' }}>
+                    <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#dbeafe', color: '#374264', display: 'grid', placeItems: 'center', fontSize: '0.7rem', fontWeight: 800, flexShrink: 0 }}>i</span>
+                    <div style={{ color: '#374264', fontSize: '0.8rem', lineHeight: 1.55 }}>
+                      <div style={{ color: '#0A1228', fontWeight: 700, marginBottom: '.15rem' }}>Partial mailbox discovery notice</div>
+                      <strong>Could not load the mailbox list.</strong> {discoverError}
+                      <div style={{ marginTop: '.35rem' }}>
+                        The per-person picker is hidden because of this. The domain-level actions below still
+                        work, but they apply to every mailbox in the ticked domains.
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1674,15 +1682,20 @@ export default function MigrationPage() {
                 {orgMailboxes.length > 0 && (
                   <div style={{ background: '#fff', border: '1px solid #dbeafe', borderTop: 'none', padding: '1rem 1.1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '.6rem', flexWrap: 'wrap', marginBottom: '.6rem' }}>
-                      <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.875rem' }}>
-                        Mailboxes in this Zoho account ({orgMailboxes.length})
+                      <div>
+                        <div style={{ color: '#0A1228', fontWeight: 700, fontSize: '0.95rem' }}>
+                          Mailboxes in this Zoho Account
+                        </div>
+                        <div style={{ color: '#7A8CAE', fontSize: '0.78rem', marginTop: '.15rem' }}>
+                          Select mailboxes to inspect IMAP availability and prepare staging tokens.
+                        </div>
                       </div>
                       <div style={{ display: 'flex', gap: '.4rem', flexWrap: 'wrap' }}>
                         <input
                           value={mbFilter}
                           onChange={e => setMbFilter(e.target.value)}
-                          placeholder="Search name or address"
-                          style={{ padding: '.35rem .6rem', background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 7, color: '#0A1228', fontSize: '0.78rem', minWidth: 180 }}
+                          placeholder="Search by mailbox name or address…"
+                          style={{ padding: '.5rem .7rem', background: '#F0F4FF', border: '1px solid #dbeafe', borderRadius: 8, color: '#0A1228', fontSize: '0.78rem', minWidth: 220 }}
                         />
                         {orgDomains.length > 1 && (
                           <select value={mbDomain} onChange={e => setMbDomain(e.target.value)}
@@ -1697,42 +1710,46 @@ export default function MigrationPage() {
                     {/* Quick-select by first letter. Ticking a few hundred people one
                         row at a time is not realistic, and "select all" is too blunt
                         when only part of an organisation is moving. */}
-                    <div style={{ display: 'flex', gap: '.15rem', flexWrap: 'wrap', marginBottom: '.5rem', alignItems: 'center' }}>
-                      <span style={{ color: '#7A8CAE', fontSize: '0.72rem', marginRight: '.25rem' }}>Select by letter:</span>
-                      {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
-                        const group = mailboxesForLetter(letter);
-                        const allOn = group.length > 0 && group.every(m => picked.has(m.email));
-                        return (
-                          <button
-                            key={letter}
-                            type="button"
-                            onClick={() => toggleLetter(letter)}
-                            disabled={group.length === 0}
-                            title={group.length === 0 ? 'No mailboxes' : `${group.length} mailbox(es) — click or press ${letter}`}
-                            style={{
-                              width: 22, height: 22, padding: 0, borderRadius: 5, fontSize: '0.7rem', fontWeight: 700,
-                              cursor: group.length === 0 ? 'default' : 'pointer',
-                              border: `1px solid ${allOn ? '#2F56FF' : group.length ? '#dbeafe' : '#f1f5f9'}`,
-                              background: allOn ? '#2F56FF' : '#fff',
-                              color: allOn ? '#fff' : group.length ? '#374264' : '#cbd5e1',
-                            }}
-                          >
-                            {letter}
-                          </button>
-                        );
-                      })}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.6rem', marginBottom: '.6rem' }}>
+                      <div style={{ display: 'flex', gap: '.2rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ color: '#7A8CAE', fontSize: '0.68rem', fontWeight: 800, letterSpacing: '.05em', marginRight: '.4rem' }}>JUMP:</span>
+                        {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
+                          const group = mailboxesForLetter(letter);
+                          const allOn = group.length > 0 && group.every(m => picked.has(m.email));
+                          return (
+                            <button
+                              key={letter}
+                              type="button"
+                              onClick={() => toggleLetter(letter)}
+                              disabled={group.length === 0}
+                              title={group.length === 0 ? 'No mailboxes' : `${group.length} mailbox(es) — click or press ${letter}`}
+                              style={{
+                                width: 22, height: 22, padding: 0, borderRadius: 6, fontSize: '0.7rem', fontWeight: 700,
+                                cursor: group.length === 0 ? 'default' : 'pointer',
+                                border: 'none',
+                                background: allOn ? '#2F56FF' : 'transparent',
+                                color: allOn ? '#fff' : group.length ? '#374264' : '#cbd5e1',
+                              }}
+                            >
+                              {letter}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.76rem' }}>
+                        <button type="button" onClick={() => setPicked(new Set(visibleMailboxes.map(m => m.email)))}
+                          style={{ background: '#EEF1FF', border: '1px solid #dbeafe', color: '#1E40E0', cursor: 'pointer', padding: '.4rem .8rem', borderRadius: 8, fontSize: '0.76rem', fontWeight: 700 }}>
+                          Select all shown ({visibleMailboxes.length})
+                        </button>
+                        <button type="button" onClick={() => setPicked(new Set())}
+                          style={{ background: 'none', border: 'none', color: '#7A8CAE', cursor: 'pointer', padding: 0, fontSize: '0.76rem' }}>
+                          Clear
+                        </button>
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '.5rem', fontSize: '0.76rem' }}>
-                      <button type="button" onClick={() => setPicked(new Set(visibleMailboxes.map(m => m.email)))}
-                        style={{ background: 'none', border: 'none', color: '#2F56FF', cursor: 'pointer', padding: 0, fontSize: '0.76rem' }}>
-                        Select all shown ({visibleMailboxes.length})
-                      </button>
-                      <button type="button" onClick={() => setPicked(new Set())}
-                        style={{ background: 'none', border: 'none', color: '#2F56FF', cursor: 'pointer', padding: 0, fontSize: '0.76rem' }}>
-                        Clear
-                      </button>
-                      <span style={{ color: picked.size ? '#087A44' : '#7A8CAE', fontWeight: picked.size ? 700 : 400 }}>
+                      <span style={{ color: picked.size ? '#1E40E0' : '#7A8CAE', fontWeight: 700, background: picked.size ? '#EEF1FF' : '#F0F4FF', borderRadius: 999, padding: '.3rem .7rem' }}>
                         {picked.size} of {orgMailboxes.length} selected
                       </span>
                       {picked.size > 0 && (() => {
@@ -1753,10 +1770,10 @@ export default function MigrationPage() {
                         <thead>
                           <tr style={{ position: 'sticky', top: 0, background: '#F0F4FF', textAlign: 'left', zIndex: 1 }}>
                             <th style={{ padding: '.7rem .8rem', width: 36 }}></th>
-                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Source mailbox</th>
-                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Access protocol / flags</th>
-                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Size</th>
-                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Destination</th>
+                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Source Zoho Mailbox</th>
+                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Access Protocol / Flags</th>
+                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Estimated Volume</th>
+                            <th style={{ padding: '.7rem .8rem', color: '#374264', fontSize: '0.68rem', fontWeight: 700 }}>Destination Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1773,12 +1790,19 @@ export default function MigrationPage() {
                                     <span style={{ width: 32, height: 32, borderRadius: 9, background: '#F0F4FF', color: '#2F56FF', display: 'grid', placeItems: 'center', fontSize: '0.7rem', fontWeight: 800, fontFamily: 'monospace', flexShrink: 0 }}>{initials}</span>
                                     <div style={{ minWidth: 0 }}>
                                       <div style={{ color: '#0A1228', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>{m.email}</div>
-                                      {m.displayName && <div style={{ color: '#7A8CAE', fontSize: '0.72rem' }}>{m.displayName}{m.role === 'super_admin' ? ' (Owner)' : ''}</div>}
+                                      {m.displayName && (
+                                        <div style={{ color: '#7A8CAE', fontSize: '0.72rem' }}>
+                                          {m.displayName}
+                                          {(m.role === 'super_admin' || m.email === zohoConnected.displayEmail) ? (
+                                            <> ({[m.role === 'super_admin' ? 'Owner' : null, m.email === zohoConnected.displayEmail ? 'Primary' : null].filter(Boolean).join(' / ')})</>
+                                          ) : ''}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </td>
                                 <td style={{ padding: '.75rem .8rem' }}>
-                                  <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'wrap' }}>
+                                  <div style={{ display: 'flex', gap: '.35rem', flexWrap: 'wrap', marginBottom: '.3rem' }}>
                                     {m.role === 'super_admin' && (
                                       <span title="Owns the Zoho connection — its password is never reset in a bulk run"
                                         style={{ fontSize: '0.66rem', fontWeight: 700, color: '#6d28d9', background: 'rgba(109,40,217,.1)', borderRadius: 999, padding: '.2rem .55rem', whiteSpace: 'nowrap' }}>Admin</span>
@@ -1786,7 +1810,7 @@ export default function MigrationPage() {
                                     <span style={{ fontSize: '0.66rem', fontWeight: 700, borderRadius: 999, padding: '.2rem .55rem', whiteSpace: 'nowrap',
                                       color: m.imapEnabled ? '#087A44' : '#B45309',
                                       background: m.imapEnabled ? 'rgba(11,158,88,.1)' : 'rgba(180,83,9,.1)' }}>
-                                      {m.imapEnabled ? '● IMAP on' : '🔑 Needs app password'}
+                                      {m.imapEnabled ? '● IMAP On' : '🔑 Needs App Password'}
                                     </span>
                                     {m.tfaEnabled && (
                                       <span title="Two-factor authentication is on. Zoho then requires an app-specific password for IMAP, which only this user can create — a bulk migration cannot read this mailbox."
@@ -1797,6 +1821,7 @@ export default function MigrationPage() {
                                         style={{ fontSize: '0.66rem', fontWeight: 700, color: '#8E1B17', background: 'rgba(185,28,28,.1)', borderRadius: 999, padding: '.2rem .55rem', whiteSpace: 'nowrap' }}>Blocked</span>
                                     )}
                                   </div>
+                                  <div style={{ color: '#7A8CAE', fontSize: '0.7rem', fontFamily: 'monospace' }}>SSL: 993</div>
                                 </td>
                                 <td style={{ padding: '.75rem .8rem', whiteSpace: 'nowrap' }}>
                                   <span style={{ color: '#0A1228', fontFamily: 'monospace', fontWeight: 700 }}>
@@ -1807,7 +1832,7 @@ export default function MigrationPage() {
                                   {m.existsHere ? (
                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#1E40E0', fontWeight: 700, fontSize: '0.74rem', background: 'rgba(47,86,255,.1)', borderRadius: 999, padding: '.3rem .7rem' }}>Already on INBOX</span>
                                   ) : (
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#087A44', fontWeight: 700, fontSize: '0.74rem', background: 'rgba(11,158,88,.1)', borderRadius: 999, padding: '.3rem .7rem' }}>✓ Ready to provision</span>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#1E40E0', fontWeight: 700, fontSize: '0.74rem', background: '#EEF1FF', borderRadius: 999, padding: '.3rem .7rem' }}>⚙ Ready to Provision</span>
                                   )}
                                 </td>
                               </tr>
@@ -1834,11 +1859,11 @@ export default function MigrationPage() {
                       <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         <button onClick={() => runOnPicked('none', true)} disabled={imapBusy || picked.size === 0}
                           style={{ ...S.btn('#374264', true), fontSize: '0.78rem', padding: '.45rem .9rem', background: '#fff' }}>
-                          🔑 Reset Zoho password
+                          🔑 Reset Zoho Password
                         </button>
                         <button onClick={() => runOnPicked('enable', false)} disabled={imapBusy || picked.size === 0}
                           style={{ ...S.btn('#374264', true), fontSize: '0.78rem', padding: '.45rem .9rem', background: '#fff' }}>
-                          ⚡ IMAP on
+                          ⚡ IMAP On
                         </button>
                         <button onClick={() => runOnPicked('disable', false)} disabled={imapBusy || picked.size === 0}
                           style={{ ...S.btn('#7A8CAE', true), fontSize: '0.78rem', padding: '.45rem .9rem', background: '#fff' }}>
