@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { BillingStyles } from './billing-theme';
+import { trackPixel } from '@/lib/pixel';
 
 interface Subscription { plan: string; status: string; max_users: number; trial_ends_at?: string; }
 interface PlanInfo {
@@ -131,6 +132,7 @@ export default function BillingPage() {
       prefill: { name: d.orgName, email: d.email },
       theme: { color: '#2F56FF' },
       handler: async () => {
+        trackPixel('Subscribe', { value: (plans[planKey]?.pricePerUser ?? 0) * seats, currency: 'INR' });
         setMsg('Payment authorised. Your plan will switch over as soon as the first charge settles.');
         setTimeout(() => setMsg(''), 10000);
         await refreshSubscription();

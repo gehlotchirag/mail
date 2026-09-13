@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthStyles, AuthFonts, AuthPanel } from '../auth-theme';
+import { trackPixel } from '@/lib/pixel';
 
 /* ── Password strength ─────────────────────────────────────────────────────── */
 type Req = { label: string; met: (pw: string) => boolean };
@@ -57,7 +58,11 @@ export default function SignupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: form.orgName.trim(), email: form.email.trim().toLowerCase(), password: form.password }),
       });
-      if (res.ok) { router.push('/dashboard'); return; }
+      if (res.ok) {
+        trackPixel('CompleteRegistration', { content_name: 'Lite plan signup' });
+        router.push('/dashboard');
+        return;
+      }
       const d = await res.json() as { error?: string };
       setError(d.error ?? 'Signup failed. Please try again.');
     } catch {
