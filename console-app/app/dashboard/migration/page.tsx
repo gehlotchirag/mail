@@ -34,11 +34,27 @@ interface ZohoTokens {
   isPersonal?: boolean;
 }
 
+function ProviderIcon({ provider }: { provider: string }) {
+  const common = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, width: 22, height: 22 };
+  switch (provider) {
+    case 'zoho':
+      return <svg {...common}><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M22 6l-10 7L2 6" /></svg>;
+    case 'gsuite':
+      return <svg {...common}><path d="M4 21V6l8-3 8 3v15" /><path d="M4 21h16" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1M9 17h2" /></svg>;
+    case 'cpanel':
+      return <svg {...common}><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M6 9l3 3-3 3M12 15h6" /></svg>;
+    case 'dovecot':
+      return <svg {...common}><rect x="3" y="3" width="18" height="6" rx="1.5" /><rect x="3" y="15" width="18" height="6" rx="1.5" /><path d="M7 6h.01M7 18h.01" /></svg>;
+    default:
+      return null;
+  }
+}
+
 const PROVIDERS = [
-  { key: 'zoho',    label: 'Zoho Mail',        icon: '🔵', desc: 'OAuth — auto-discovers mailboxes', tag: 'OAuth 2.0' },
-  { key: 'gsuite',  label: 'Google Workspace', icon: '🔴', desc: 'Service account, domain-wide delegation', tag: 'Service Account' },
-  { key: 'cpanel',  label: 'cPanel / WHM',      icon: '🟠', desc: 'WHM API token', tag: 'WHM API' },
-  { key: 'dovecot', label: 'Dovecot / IMAP',    icon: '🟣', desc: 'IMAP master-user login', tag: 'Port 993 SSL' },
+  { key: 'zoho',    label: 'Zoho Mail',        desc: 'OAuth — auto-discovers mailboxes', tag: 'OAuth 2.0' },
+  { key: 'gsuite',  label: 'Google Workspace', desc: 'Service account, domain-wide delegation', tag: 'Service Account' },
+  { key: 'cpanel',  label: 'cPanel / WHM',      desc: 'WHM API token', tag: 'WHM API' },
+  { key: 'dovecot', label: 'Dovecot / IMAP',    desc: 'IMAP master-user login', tag: 'Port 993 SSL' },
 ];
 
 const FIELDS: Record<string, { key: string; label: string; placeholder: string; type?: string; rows?: number }[]> = {
@@ -1512,7 +1528,7 @@ export default function MigrationPage() {
                     <div key={p.key} onClick={() => { setProvider(p.key); setCreds({}); setTestResult(null); }}
                       style={{ position: 'relative', cursor: 'pointer', padding: '1rem', borderRadius: 14, background: '#fff', boxShadow: active ? '0 4px 20px rgba(47,86,255,.12)' : '0 1px 3px rgba(10,18,40,.06)', border: `1.5px solid ${active ? '#2F56FF' : '#F0F4FF'}`, transition: 'all .15s' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '.7rem' }}>
-                        <span style={{ width: 40, height: 40, borderRadius: 10, display: 'grid', placeItems: 'center', fontSize: '1.3rem', background: active ? 'rgba(47,86,255,.1)' : '#F0F4FF' }}>{p.icon}</span>
+                        <span style={{ width: 40, height: 40, borderRadius: 10, display: 'grid', placeItems: 'center', color: active ? '#2F56FF' : '#374264', background: active ? 'rgba(47,86,255,.1)' : '#F0F4FF' }}><ProviderIcon provider={p.key} /></span>
                         {isZohoConnected && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6rem', fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: '#fff', background: '#2F56FF', borderRadius: 999, padding: '.25rem .55rem' }}>✓ Connected</span>
                         )}
@@ -1568,7 +1584,7 @@ export default function MigrationPage() {
                         Connected account: <span className="s-mono" style={{ color: '#087A44', fontFamily: 'monospace' }}>{zohoConnected.displayEmail || 'Zoho account connected'}</span>
                       </div>
                       <div style={{ color: '#7A8CAE', fontSize: '0.76rem', marginTop: '.1rem' }}>
-                        The connection lasts one page load — reconnect any time to reach the controls below again.
+                        Authorized via {zohoConnected.region === 'in' ? 'India datacenter (zoho.in)' : 'global datacenter (zoho.com)'} · connection lasts one page load — reconnect any time to reach the controls below again.
                       </div>
                     </div>
                   </div>
@@ -2232,7 +2248,7 @@ export default function MigrationPage() {
                   <div key={j.id} style={{ ...S.card, padding: '1rem 1.25rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem', marginBottom: '.6rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '.65rem' }}>
-                        <span style={{ fontSize: '1.1rem' }}>{prov?.icon ?? '📦'}</span>
+                        <span style={{ color: '#374264', display: 'inline-flex' }}>{prov ? <ProviderIcon provider={prov.key} /> : '📦'}</span>
                         <div>
                           <span style={{ color: '#374264', fontWeight: 700, fontSize: '0.9rem' }}>{prov?.label ?? j.source_type ?? 'Unknown'}</span>
                           {j.source_host && <span style={{ color: '#7A8CAE', fontSize: '0.8rem', marginLeft: '.5rem' }}>{j.source_host}</span>}
