@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getSession } from '@/lib/auth';
@@ -27,10 +27,17 @@ import { getSession } from '@/lib/auth';
  * all, which was the actual reason this page wasn't live before this file
  * existed. Edit it in place rather than maintaining a second copy elsewhere.
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getSession();
   if (session) {
-    return NextResponse.redirect(new URL('/dashboard', req.url));
+    // Build the redirect from NEXT_PUBLIC_URL, not req.url: every other
+    // absolute redirect in this app does the same (see zoho/cloudflare auth
+    // routes) because req.url reflects whatever Host header the request
+    // arrives with server-side. Behind a reverse proxy that doesn't forward
+    // the original Host, that can be the upstream's own bind address (e.g.
+    // localhost:3001) instead of the public domain, sending signed-in users
+    // to a redirect Location they can't reach.
+    return NextResponse.redirect(new URL('/dashboard', process.env.NEXT_PUBLIC_URL));
   }
 
   const html = await readFile(path.join(process.cwd(), 'public', 'landing.html'), 'utf-8');

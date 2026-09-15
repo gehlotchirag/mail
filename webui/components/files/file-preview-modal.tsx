@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { Capacitor } from "@capacitor/core";
 import { X, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getFilePreviewKind } from "@/lib/file-preview";
+import { shareNative } from "@/lib/native-attachment";
 
 interface FilePreviewModalProps {
   name: string;
@@ -114,6 +116,12 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
 
   const fileType = resolvedFileType;
 
+  // Ref so the load effect (keyed on getFileContent/name only) can call the
+  // latest onClose without re-running on every parent re-render — onClose is
+  // passed as a fresh inline arrow function each time by the caller.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     let cancelled = false;
     let revokeUrl: string | null = null;
@@ -136,6 +144,13 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
         if (previewType === "text" || previewType === "markdown") {
           const text = await blob.text();
           if (!cancelled) setContent(text);
+        } else if (previewType === "pdf" && Capacitor.isNativePlatform()) {
+          // Android/iOS WebViews have no built-in PDF renderer for
+          // <object>/<embed> — a blob: URL just renders blank there, unlike
+          // desktop browsers which have PDFium/pdf.js built in. Hand it to
+          // the native share sheet's "Open with" instead.
+          await shareNative(blob, name);
+          if (!cancelled) onCloseRef.current();
         } else {
           revokeUrl = URL.createObjectURL(blob);
           if (!cancelled) setObjectUrl(revokeUrl);

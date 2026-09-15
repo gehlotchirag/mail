@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Capacitor } from "@capacitor/core";
 import { PushNotifications, type PushNotificationSchema } from "@capacitor/push-notifications";
 import { Preferences } from "@capacitor/preferences";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import { useAccountStore } from "@/stores/account-store";
 
 // Registers native push (FCM) with the relay and displays the resulting
 // notifications, for the Capacitor shell only.
@@ -27,15 +28,24 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 // no-op outside the Capacitor shell — importing these packages does not pull
 // in any native code on web, they're pure-JS shims there.
 
-const DEVICE_ID_KEY = "pushDeviceClientId";
+// Each logged-in account gets its own JMAP PushSubscription (and thus its
+// own deviceClientId), keyed by cookie slot — a single global id can only
+// ever be bound to one account's credentials server-side.
+function deviceIdKey(slot: number): string {
+  return `pushDeviceClientId:slot:${slot}`;
+}
 
-async function getStoredDeviceClientId(): Promise<string | null> {
-  const { value } = await Preferences.get({ key: DEVICE_ID_KEY });
+async function getStoredDeviceClientId(slot: number): Promise<string | null> {
+  const { value } = await Preferences.get({ key: deviceIdKey(slot) });
   return value ?? null;
 }
 
-async function saveDeviceClientId(id: string): Promise<void> {
-  await Preferences.set({ key: DEVICE_ID_KEY, value: id });
+async function saveDeviceClientId(slot: number, id: string): Promise<void> {
+  await Preferences.set({ key: deviceIdKey(slot), value: id });
+}
+
+async function clearDeviceClientId(slot: number): Promise<void> {
+  await Preferences.remove({ key: deviceIdKey(slot) });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -137,21 +147,26 @@ async function showNotificationFor(data: PushNotificationSchema["data"]): Promis
 }
 
 /**
- * Register the FCM token with the relay. Retries indefinitely with backoff:
- * - 401 means the user isn't logged in yet (the request carries the session
- *   cookie automatically) — keep retrying until they are.
+ * Register the FCM token with the relay for one account (cookie slot).
+ * Retries indefinitely with backoff:
+ * - 401 means that slot isn't logged in yet (the request carries the slot's
+ *   session cookie automatically via X-JMAP-Cookie-Slot) — keep retrying
+ *   until it is.
  * - Any other failure (relay hiccup, network blip) also retries; there's no
  *   user-facing surface to report failure to from here.
  */
-async function registerWithServer(fcmToken: string, signal: AbortSignal): Promise<void> {
-  const existingDeviceClientId = await getStoredDeviceClientId();
+async function registerWithServer(fcmToken: string, slot: number, signal: AbortSignal): Promise<void> {
+  const existingDeviceClientId = await getStoredDeviceClientId(slot);
   let delay = 2000;
 
   while (!signal.aborted) {
     try {
       const res = await fetch("/api/push/mobile/register", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-JMAP-Cookie-Slot": String(slot),
+        },
         credentials: "include",
         body: JSON.stringify({ fcmToken, deviceClientId: existingDeviceClientId }),
         signal,
@@ -169,23 +184,80 @@ async function registerWithServer(fcmToken: string, signal: AbortSignal): Promis
 
       const data = (await res.json()) as { deviceClientId?: string };
       if (data.deviceClientId) {
-        await saveDeviceClientId(data.deviceClientId);
+        await saveDeviceClientId(slot, data.deviceClientId);
       }
       return;
     } catch (err) {
       if (signal.aborted) return;
-      console.warn("[Push] Registration attempt failed, retrying...", err);
+      console.warn(`[Push] Registration attempt failed for slot ${slot}, retrying...`, err);
       await sleep(delay);
       delay = Math.min(Math.floor(delay * 1.5), 30_000);
     }
   }
 }
 
+/** Deregister a previously-registered account (e.g. after it's removed from the app). */
+async function deregisterWithServer(slot: number): Promise<void> {
+  const deviceClientId = await getStoredDeviceClientId(slot);
+  if (!deviceClientId) return;
+  try {
+    await fetch(`/api/push/mobile/register?deviceClientId=${deviceClientId}`, {
+      method: "DELETE",
+      headers: { "X-JMAP-Cookie-Slot": String(slot) },
+      credentials: "include",
+    });
+  } catch (err) {
+    console.warn(`[Push] Deregistration failed for slot ${slot}`, err);
+  } finally {
+    await clearDeviceClientId(slot);
+  }
+}
+
 export function CapacitorPushRegistration() {
+  // One FCM token per device, but one JMAP PushSubscription per logged-in
+  // account (cookie slot) — each needs its own server-side registration so
+  // notifications for every added account actually get delivered, not just
+  // whichever account happened to resolve first server-side.
+  const accounts = useAccountStore((s) => s.accounts);
+  const connectedSlots = accounts.filter((a) => a.isConnected).map((a) => a.cookieSlot);
+  const slotsKey = [...connectedSlots].sort((a, b) => a - b).join(",");
+
+  const fcmTokenRef = useRef<string | null>(null);
+  const connectedSlotsRef = useRef<number[]>(connectedSlots);
+  connectedSlotsRef.current = connectedSlots;
+  const controllersRef = useRef<Map<number, AbortController>>(new Map());
+
+  const syncSlots = (slots: number[]) => {
+    const fcmToken = fcmTokenRef.current;
+    if (!fcmToken) return;
+    const slotSet = new Set(slots);
+
+    for (const slot of slots) {
+      if (controllersRef.current.has(slot)) continue;
+      const controller = new AbortController();
+      controllersRef.current.set(slot, controller);
+      void registerWithServer(fcmToken, slot, controller.signal);
+    }
+
+    for (const [slot, controller] of controllersRef.current) {
+      if (slotSet.has(slot)) continue;
+      controller.abort();
+      controllersRef.current.delete(slot);
+      void deregisterWithServer(slot);
+    }
+  };
+
+  // Re-sync whenever the set of logged-in accounts changes (account added,
+  // removed, or logged out) — not just once at mount.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    syncSlots(connectedSlots);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotsKey]);
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const controller = new AbortController();
     let registrationListener: { remove: () => void } | undefined;
     let errorListener: { remove: () => void } | undefined;
     let receivedListener: { remove: () => void } | undefined;
@@ -210,7 +282,8 @@ export function CapacitorPushRegistration() {
       registrationListener = await PushNotifications.addListener(
         "registration",
         ({ value: fcmToken }) => {
-          void registerWithServer(fcmToken, controller.signal);
+          fcmTokenRef.current = fcmToken;
+          syncSlots(connectedSlotsRef.current);
         },
       );
       errorListener = await PushNotifications.addListener("registrationError", (err) => {
@@ -256,7 +329,12 @@ export function CapacitorPushRegistration() {
     })();
 
     return () => {
-      controller.abort();
+      // controllersRef is a plain instance-variable ref (grown over the
+      // effect's lifetime by syncSlots as accounts are added/removed), not a
+      // DOM node ref — reading .current here intentionally, not stale.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      for (const controller of controllersRef.current.values()) controller.abort();
+      controllersRef.current.clear();
       registrationListener?.remove();
       errorListener?.remove();
       receivedListener?.remove();
