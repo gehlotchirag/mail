@@ -30,12 +30,10 @@ import {
   Loader2,
   Calendar,
   BookUser,
-  HardDrive,
   Pencil,
 } from "lucide-react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useCalendarStore } from "@/stores/calendar-store";
-import { usePolicyStore } from "@/stores/policy-store";
 import { useConfig } from "@/hooks/use-config";
 import { useThemeStore } from "@/stores/theme-store";
 import { cn, buildMailboxTree, MailboxNode } from "@/lib/utils";
@@ -224,10 +222,10 @@ function SidebarRow({
     <div
       {...(dropHandlers || {})}
       onContextMenu={onContextMenu}
-      style={{ paddingBlock: 'var(--density-sidebar-py)' }}
+      style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
       className={cn(
-        "group flex items-center max-lg:min-h-[44px] text-sm transition-colors duration-150 rounded-lg",
-        isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
+        "group flex items-center text-sm transition-colors duration-150 rounded-lg",
+        isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "max-lg:min-h-[44px] mx-2 pr-2",
         isVirtual
           ? "text-muted-foreground"
           : isSelected
@@ -268,8 +266,8 @@ function SidebarRow({
         onClick={() => !isVirtual && onClick?.()}
         disabled={isVirtual}
         className={cn(
-          "flex items-center gap-2 min-w-0 transition-colors",
-          isCollapsed ? "justify-center" : "flex-1 text-left",
+          "flex items-center min-w-0 transition-colors",
+          isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1 text-left",
           isVirtual && "cursor-default select-none"
         )}
         title={isCollapsed ? label : undefined}
@@ -644,14 +642,15 @@ export function Sidebar({
   const pathname = usePathname();
   const { appLogoLightUrl, appLogoDarkUrl, appName } = useConfig();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
-  const logoUrl = resolvedTheme === 'dark' ? (appLogoDarkUrl || appLogoLightUrl) : (appLogoLightUrl || appLogoDarkUrl);
+  const defaultLogo = resolvedTheme === 'dark' ? '/branding/Inbox_Logo_White.svg' : '/branding/Inbox_Logo_Color.svg';
+  const logoUrl = (resolvedTheme === 'dark'
+    ? (appLogoDarkUrl || appLogoLightUrl)
+    : (appLogoLightUrl || appLogoDarkUrl)) || defaultLogo;
   const [appNameBrand, ...appNameRestWords] = (appName || "Inbox Mail").split(" ");
   const appNameRest = appNameRestWords.join(" ");
   const { supportsCalendar } = useCalendarStore();
   const client = useAuthStore((s) => s.client);
   const supportsContacts = client?.supportsContacts() ?? false;
-  const supportsFiles = client?.supportsFiles() ?? false;
-  const filesEnabled = usePolicyStore((s) => s.isFeatureEnabled('filesEnabled'));
   const isSettingsActive = pathname.startsWith('/settings');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [foldersExpanded, setFoldersExpanded] = useState(() => {
@@ -851,7 +850,7 @@ export function Sidebar({
         "relative flex flex-col h-full border-r transition-all duration-300 overflow-hidden",
         "bg-background border-border",
         "max-lg:w-full",
-        isCollapsed ? "lg:w-12" : "lg:w-full",
+        isCollapsed ? "lg:w-16" : "lg:w-full",
         className
       )}
     >
@@ -865,7 +864,7 @@ export function Sidebar({
       <div className={cn(
         "flex items-center border-b border-border flex-shrink-0",
         isCollapsed
-          ? "justify-center px-2 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))]"
+          ? "justify-center px-0 py-2.5"
           : "gap-2 px-3 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))]"
       )}>
         {/* Mobile close */}
@@ -880,8 +879,8 @@ export function Sidebar({
         </Button>
 
         {/* Logo */}
-        {logoUrl && (
-          <img src={logoUrl} alt="" className="w-7 h-7 object-contain flex-shrink-0" />
+        {logoUrl && !isCollapsed && (
+          <img src={logoUrl} alt="Logo" className="w-7 h-7 object-contain flex-shrink-0" />
         )}
 
         {/* App name (hidden when collapsed) */}
@@ -897,7 +896,10 @@ export function Sidebar({
           variant="ghost"
           size="icon"
           onClick={toggleSidebarCollapsed}
-          className="hidden lg:flex h-7 w-7 flex-shrink-0 ml-auto"
+          className={cn(
+            "hidden lg:flex flex-shrink-0",
+            isCollapsed ? "h-10 w-10 mx-auto" : "h-7 w-7 ml-auto"
+          )}
           title={isCollapsed ? t("expand_tooltip") : t("collapse_tooltip")}
         >
           {isCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
@@ -1025,18 +1027,17 @@ export function Sidebar({
           </div>
         )}
 
-        {/* App navigation: Calendar, Contacts, Files — above labels */}
-        {(supportsCalendar || supportsContacts || (supportsFiles && filesEnabled)) && (
-          <div className="mt-1">
+        {/* App navigation: Calendar, Contacts, Settings — above labels */}
+        <div className="mt-1">
             {supportsCalendar && (() => {
               const isActive = pathname === '/calendar' || pathname.startsWith('/calendar/');
               return (
                 <Link
                   href="/calendar"
-                  style={{ paddingBlock: 'var(--density-sidebar-py)' }}
+                  style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
                   className={cn(
                     "flex items-center text-sm transition-colors duration-150 rounded-lg",
-                    isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
+                    isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
                     isActive
                       ? "bg-primary/10 text-primary font-semibold"
                       : "hover:bg-muted/50 text-muted-foreground",
@@ -1044,7 +1045,7 @@ export function Sidebar({
                   title={isCollapsed ? t("calendar") : undefined}
                 >
                   {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
-                  <span className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
                     <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
                       <Calendar className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
                     </span>
@@ -1058,10 +1059,10 @@ export function Sidebar({
               return (
                 <Link
                   href="/contacts"
-                  style={{ paddingBlock: 'var(--density-sidebar-py)' }}
+                  style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
                   className={cn(
                     "flex items-center text-sm transition-colors duration-150 rounded-lg",
-                    isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
+                    isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
                     isActive
                       ? "bg-primary/10 text-primary font-semibold"
                       : "hover:bg-muted/50 text-muted-foreground",
@@ -1069,7 +1070,7 @@ export function Sidebar({
                   title={isCollapsed ? t("contacts") : undefined}
                 >
                   {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
-                  <span className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
                     <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
                       <BookUser className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
                     </span>
@@ -1078,33 +1079,32 @@ export function Sidebar({
                 </Link>
               );
             })()}
-            {supportsFiles && filesEnabled && (() => {
-              const isActive = pathname === '/files' || pathname.startsWith('/files/');
+            {(() => {
+              const isActive = pathname === '/settings' || pathname.startsWith('/settings/');
               return (
                 <Link
-                  href="/files"
-                  style={{ paddingBlock: 'var(--density-sidebar-py)' }}
+                  href="/settings"
+                  style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
                   className={cn(
                     "flex items-center text-sm transition-colors duration-150 rounded-lg",
-                    isCollapsed ? "justify-center px-1 w-10 mx-auto" : "mx-2 pr-2",
+                    isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
                     isActive
                       ? "bg-primary/10 text-primary font-semibold"
                       : "hover:bg-muted/50 text-muted-foreground",
                   )}
-                  title={isCollapsed ? t("files") : undefined}
+                  title={isCollapsed ? t("settings") : undefined}
                 >
                   {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
-                  <span className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
                     <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
-                      <HardDrive className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                      <Settings className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
                     </span>
-                    {!isCollapsed && <span className="flex-1 truncate">{t("files")}</span>}
+                    {!isCollapsed && <span className="flex-1 truncate">{t("settings")}</span>}
                   </span>
                 </Link>
               );
             })()}
           </div>
-        )}
 
         {emailKeywords.length > 0 && (
           <div data-tour="keyword-tags">

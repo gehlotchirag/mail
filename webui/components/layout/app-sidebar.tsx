@@ -14,7 +14,7 @@ export function AppSidebar({ className }: { className?: string }) {
   return (
     <div
       className="flex-shrink-0 h-full transition-[width] duration-300"
-      style={{ width: sidebarCollapsed ? 48 : sidebarWidth }}
+      style={{ width: sidebarCollapsed ? 64 : sidebarWidth }}
     >
       <DragDropProvider>
         <Sidebar

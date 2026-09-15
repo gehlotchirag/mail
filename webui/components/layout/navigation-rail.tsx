@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Mail, Calendar, BookUser, HardDrive, Settings, Keyboard, Plus, Shield, LogOut, Check } from "lucide-react";
+import { Mail, Calendar, BookUser, Settings, Keyboard, Plus, Shield, LogOut, Check } from "lucide-react";
 import { AccountSwitcher } from "./account-switcher";
 import { icons as lucideIcons, type LucideIcon } from "lucide-react";
 import { useConfig } from "@/hooks/use-config";
@@ -177,12 +177,10 @@ export function NavigationRail({
   const { supportsCalendar } = useCalendarStore();
   const { mailboxes } = useEmailStore();
   const client = useAuthStore((s) => s.client);
-  const supportsFiles = client?.supportsFiles() ?? false;
   const supportsContacts = client?.supportsContacts() ?? false;
   const sidebarApps = useSettingsStore((s) => s.sidebarApps);
   const showRailAccountList = useSettingsStore((s) => s.showRailAccountList);
   const sidebarAppsEnabled = usePolicyStore((s) => s.isFeatureEnabled('sidebarAppsEnabled'));
-  const filesEnabled = usePolicyStore((s) => s.isFeatureEnabled('filesEnabled'));
   const visibleSidebarApps = sidebarAppsEnabled ? sidebarApps : [];
   const inboxUnread = mailboxes.find(m => m.role === "inbox")?.unreadEmails || 0;
   const [isStalwartAdmin, setIsStalwartAdmin] = useState(false);
@@ -263,7 +261,6 @@ export function NavigationRail({
     { id: "mail", icon: Mail, labelKey: "mail", href: "/", badge: inboxUnread },
     { id: "calendar", icon: Calendar, labelKey: "calendar", href: "/calendar", hidden: !supportsCalendar },
     { id: "contacts", icon: BookUser, labelKey: "contacts", href: "/contacts", hidden: !supportsContacts },
-    { id: "files", icon: HardDrive, labelKey: "files", href: "/files", hidden: !supportsFiles || !filesEnabled },
   ];
 
   const isSettingsActive = !activeAppId && pathname.startsWith("/settings");
@@ -412,7 +409,10 @@ export function NavigationRail({
       )}
     >
       {(() => {
-        const logoUrl = resolvedTheme === 'dark' ? (appLogoDarkUrl || appLogoLightUrl) : (appLogoLightUrl || appLogoDarkUrl);
+        const defaultLogo = resolvedTheme === 'dark' ? '/branding/Inbox_Logo_White.svg' : '/branding/Inbox_Logo_Color.svg';
+        const logoUrl = (resolvedTheme === 'dark'
+          ? (appLogoDarkUrl || appLogoLightUrl)
+          : (appLogoLightUrl || appLogoDarkUrl)) || defaultLogo;
         return logoUrl ? (
           <div className="flex items-center justify-center py-3 px-1">
             <img

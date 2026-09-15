@@ -909,6 +909,14 @@ export default function Home() {
       await sendEmail(client, data.to, data.subject, data.body, data.cc, data.bcc, data.identityId, data.fromEmail, data.draftId, data.fromName, data.htmlBody, data.attachments, data.inReplyTo, data.references, data.envelopeMailFrom);
       setShowComposer(false);
 
+      // Auto-add sent recipients to contacts if enabled in settings
+      if (useSettingsStore.getState().autoAddSentRecipientsToContacts) {
+        const allRecipients = [...(data.to || []), ...(data.cc || []), ...(data.bcc || [])];
+        useContactStore.getState().autoAddRecipients(client, allRecipients).catch((e) => {
+          debug.error('Failed to auto-add recipients to contacts:', e);
+        });
+      }
+
       // Mark the original email with $answered or $forwarded keyword
       if (originalEmailId && (effectiveMode === 'reply' || effectiveMode === 'replyAll')) {
         try {
@@ -1713,6 +1721,13 @@ export default function Home() {
       threading?.references,
       envelopeMailFrom,
     );
+
+    // Auto-add sent recipients to contacts if enabled in settings
+    if (useSettingsStore.getState().autoAddSentRecipientsToContacts) {
+      useContactStore.getState().autoAddRecipients(client, [sender.email]).catch((e) => {
+        debug.error('Failed to auto-add reply recipient to contacts:', e);
+      });
+    }
 
     // Mark the original email as answered
     try {

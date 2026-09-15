@@ -106,6 +106,7 @@ interface ContactStore {
   renameKeyword: (client: IJMAPClient | null, oldKeyword: string, newKeyword: string) => Promise<void>;
 
   importContacts: (client: IJMAPClient | null, contacts: ContactCard[]) => Promise<number>;
+  autoAddRecipients: (client: IJMAPClient | null, recipients: Array<{ email: string; name?: string } | string>) => Promise<void>;
 
   // Trusted senders address book
   loadTrustedSendersBook: (client: IJMAPClient) => Promise<void>;
@@ -822,6 +823,71 @@ export const useContactStore = create<ContactStore>()(
         }
 
         return imported;
+      },
+
+      autoAddRecipients: async (client, recipients) => {
+        if (!recipients || recipients.length === 0) return;
+        const currentContacts = get().contacts;
+        const { supportsSync, createContact, addLocalContact } = get();
+
+        // Collect existing contact emails (lowercase)
+        const existingEmails = new Set<string>();
+        for (const c of currentContacts) {
+          if (c.emails) {
+            for (const item of Object.values(c.emails)) {
+              if (item?.address) existingEmails.add(item.address.toLowerCase().trim());
+            }
+          }
+        }
+
+        for (const r of recipients) {
+          let rawEmail = typeof r === 'string' ? r : r.email;
+          let rawName = typeof r === 'object' ? r.name : undefined;
+
+          // Parse RFC 2822 format if passed as "Name <email@domain.com>"
+          const match = rawEmail.match(/^(?:["']?([^"']*)["']?\s+)?<?([^<>\s]+@[^<>\s]+)>?$/);
+          if (match) {
+            if (!rawName && match[1]) rawName = match[1].trim();
+            rawEmail = match[2].trim();
+          }
+
+          const normalizedEmail = rawEmail.toLowerCase().trim();
+          if (!normalizedEmail || !normalizedEmail.includes('@') || existingEmails.has(normalizedEmail)) {
+            continue;
+          }
+
+          // Mark as existing so we don't duplicate within the same batch
+          existingEmails.add(normalizedEmail);
+
+          const contactData: Partial<ContactCard> = {
+            emails: { email: { address: normalizedEmail } },
+            ...(rawName ? {
+              name: {
+                components: rawName.includes(' ')
+                  ? [
+                      { kind: 'given' as const, value: rawName.split(' ')[0] },
+                      { kind: 'surname' as const, value: rawName.split(' ').slice(1).join(' ') }
+                    ]
+                  : [{ kind: 'given' as const, value: rawName }]
+              }
+            } : {})
+          };
+
+          try {
+            if (client && supportsSync) {
+              await createContact(client, contactData);
+            } else {
+              addLocalContact({
+                id: `local-${generateUUID()}`,
+                addressBookIds: {},
+                ...contactData,
+              } as ContactCard);
+            }
+            debug.log('contacts', `Auto-added sent recipient to contacts: ${normalizedEmail}`);
+          } catch (err) {
+            debug.error(`Failed to auto-add recipient ${normalizedEmail} to contacts:`, err);
+          }
+        }
       },
     });
     },

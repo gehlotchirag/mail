@@ -28,7 +28,10 @@ export function MobileHeader({
   const { toggleSidebar, goBack, sidebarOpen } = useUIStore();
   const { appLogoLightUrl, appLogoDarkUrl, appName } = useConfig();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
-  const logoUrl = resolvedTheme === 'dark' ? (appLogoDarkUrl || appLogoLightUrl) : (appLogoLightUrl || appLogoDarkUrl);
+  const defaultLogo = resolvedTheme === 'dark' ? '/branding/Inbox_Logo_White.svg' : '/branding/Inbox_Logo_Color.svg';
+  const logoUrl = (resolvedTheme === 'dark'
+    ? (appLogoDarkUrl || appLogoLightUrl)
+    : (appLogoLightUrl || appLogoDarkUrl)) || defaultLogo;
   const [appNameBrand, ...appNameRestWords] = (appName || "Inbox Mail").split(" ");
   const appNameRest = appNameRestWords.join(" ");
 

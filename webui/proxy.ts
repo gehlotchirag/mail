@@ -11,7 +11,7 @@ const intlMiddleware = createIntlMiddleware(routing);
 // (e.g. `export const config = { matcher }`) is no longer allowed in the
 // proxy file. We replicate the previous matcher inline by short-circuiting
 // requests for API routes, Next internals and static assets.
-const PROXY_SKIP_PATTERN = /^\/(?:api|_next)(?:\/|$)|\.[^/]+$/;
+const PROXY_SKIP_PATTERN = /^\/(?:api|_next|\.well-known|jmap)(?:\/|$)|\.[^/]+$/;
 
 function isSetupPath(pathname: string): boolean {
   return (

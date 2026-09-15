@@ -170,6 +170,7 @@ interface SettingsState {
 
   // Contacts Display
   groupContactsByLetter: boolean;
+  autoAddSentRecipientsToContacts: boolean; // Automatically add recipients of sent emails to contacts
 
   // Email Notifications
   emailNotificationsEnabled: boolean;
@@ -324,6 +325,7 @@ const DEFAULT_SETTINGS = {
 
   // Contacts Display
   groupContactsByLetter: true,
+  autoAddSentRecipientsToContacts: true,
 
   // Email Notifications
   emailNotificationsEnabled: true,

@@ -22,6 +22,7 @@ export function ContactsSettings() {
     importContacts,
   } = useContactStore();
   const groupContactsByLetter = useSettingsStore((s) => s.groupContactsByLetter);
+  const autoAddSentRecipientsToContacts = useSettingsStore((s) => s.autoAddSentRecipientsToContacts);
   const updateSetting = useSettingsStore((s) => s.updateSetting);
   const [showImport, setShowImport] = useState(false);
 
@@ -65,6 +66,16 @@ export function ContactsSettings() {
         <ToggleSwitch
           checked={groupContactsByLetter}
           onChange={(checked) => updateSetting("groupContactsByLetter", checked)}
+        />
+      </SettingItem>
+
+      <SettingItem
+        label={tSettings("auto_add_sent_recipients_label")}
+        description={tSettings("auto_add_sent_recipients_description")}
+      >
+        <ToggleSwitch
+          checked={autoAddSentRecipientsToContacts}
+          onChange={(checked) => updateSetting("autoAddSentRecipientsToContacts", checked)}
         />
       </SettingItem>
 
