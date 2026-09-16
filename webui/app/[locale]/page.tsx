@@ -111,6 +111,9 @@ export default function Home() {
   const [conversationEmails, setConversationEmails] = useState<Email[]>([]);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
   const [resolvedThreadHistoryHtml, setResolvedThreadHistoryHtml] = useState<string | undefined>(undefined);
+  // Viewer thread emails (fetches all messages in conversation for EmailViewer)
+  const [currentThreadEmails, setCurrentThreadEmails] = useState<Email[]>([]);
+  const [isLoadingThreadEmails, setIsLoadingThreadEmails] = useState(false);
   const [rateLimitSecondsLeft, setRateLimitSecondsLeft] = useState<number | null>(null);
   const [previewAttachment, setPreviewAttachment] = useState<{ blobId: string; name: string; type?: string } | null>(null);
   const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -813,6 +816,38 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmail?.id]);
+
+  // Fetch all thread emails for the viewer conversation view
+  useEffect(() => {
+    if (!selectedEmail?.threadId || !client) {
+      setCurrentThreadEmails([]);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsLoadingThreadEmails(true);
+
+    const threadId = selectedEmail.threadId;
+    const fetchClient = isUnifiedView && selectedEmail.accountId
+      ? useAuthStore.getState().getClientForAccount(selectedEmail.accountId) ?? client
+      : client;
+
+    fetchClient.getThreadEmails(threadId).then((emails) => {
+      if (!isCancelled) {
+        setCurrentThreadEmails(emails || []);
+      }
+    }).catch((err) => {
+      console.error('Failed to fetch thread emails for viewer:', err);
+    }).finally(() => {
+      if (!isCancelled) {
+        setIsLoadingThreadEmails(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedEmail?.id, selectedEmail?.threadId, client, isUnifiedView]);
 
   // Handle mark-as-read with delay based on settings
   useEffect(() => {
@@ -1665,8 +1700,18 @@ export default function Home() {
     if (!client || !selectedEmail) return;
 
     const sender = selectedEmail.from?.[0];
-    if (!sender?.email) {
-      throw new Error("No sender email found");
+    const currentMailboxRole = mailboxes.find(mb => mb.id === selectedMailbox)?.role;
+    const isSentFolder = currentMailboxRole === 'sent';
+    const myEmail = client.getUsername()?.toLowerCase();
+    const isFromMe = sender?.email?.toLowerCase() === myEmail;
+
+    // When viewing Sent folder or an email sent by current user, reply to the recipient (to)
+    const replyTargetEmail = (isSentFolder || isFromMe)
+      ? (selectedEmail.to?.[0]?.email || sender?.email)
+      : (selectedEmail.replyTo?.[0]?.email || sender?.email);
+
+    if (!replyTargetEmail) {
+      throw new Error("No recipient email found");
     }
 
     const primaryIdentity = identities[0];
@@ -1689,25 +1734,38 @@ export default function Home() {
     const headerFromName = resolved?.overrideName || sendingIdentity?.name || undefined;
     const envelopeMailFrom = resolved?.overrideEmail ? sendingIdentity?.email : undefined;
 
-    // Append signature from the sending identity (fall back to primary
-    // when the reply-from lives on the same identity but a different alias).
+    // Append signature from the sending identity
     const finalBody = appendPlainTextSignature(body, sendingIdentity, {
       separator: useSettingsStore.getState().signatureSeparatorEnabled,
     });
 
     const originalEmailId = selectedEmail.id;
 
-    // RFC 5322 §3.6.4 threading - keep the conversation stitched together (#234).
+    // RFC 5322 §3.6.4 threading - keep the conversation stitched together.
+    let emailForThreading = selectedEmail;
+    if (!selectedEmail.messageId) {
+      try {
+        const fullEmail = await client.getEmail(selectedEmail.id);
+        if (fullEmail) emailForThreading = fullEmail;
+      } catch (e) {
+        debug.error('Failed to fetch full email for threading headers:', e);
+      }
+    }
+
     const threading = computeReplyThreadingHeaders({
-      messageId: selectedEmail.messageId,
-      references: selectedEmail.references,
+      messageId: emailForThreading.messageId,
+      references: emailForThreading.references,
     });
+
+    const threadId = selectedEmail.threadId;
+    const cleanSubject = selectedEmail.subject?.replace(/^(Re:\s*)+/i, '') || '(no subject)';
+    const replySubject = `Re: ${cleanSubject}`;
 
     // Send reply with just the body text
     await sendEmail(
       client,
-      [sender.email],
-      `Re: ${selectedEmail.subject || "(no subject)"}`,
+      [replyTargetEmail],
+      replySubject,
       finalBody,
       undefined,
       undefined,
@@ -1720,11 +1778,12 @@ export default function Home() {
       threading?.inReplyTo,
       threading?.references,
       envelopeMailFrom,
+      threadId,
     );
 
     // Auto-add sent recipients to contacts if enabled in settings
     if (useSettingsStore.getState().autoAddSentRecipientsToContacts) {
-      useContactStore.getState().autoAddRecipients(client, [sender.email]).catch((e) => {
+      useContactStore.getState().autoAddRecipients(client, [replyTargetEmail]).catch((e) => {
         debug.error('Failed to auto-add reply recipient to contacts:', e);
       });
     }
@@ -1736,9 +1795,22 @@ export default function Home() {
       debug.error('Failed to set $answered keyword:', e);
     }
 
-    // Refresh emails to show the sent reply
+    // Refresh thread emails immediately to show the sent reply in conversation view
+    if (threadId) {
+      try {
+        const updatedThread = await client.getThreadEmails(threadId);
+        if (updatedThread && updatedThread.length > 0) {
+          setCurrentThreadEmails(updatedThread);
+        }
+      } catch (e) {
+        debug.error('Failed to refresh thread emails after quick reply:', e);
+      }
+    }
+
+    // Refresh emails to show the sent reply in mailbox list
     await fetchEmails(client, selectedMailbox);
   };
+
 
   // Resolve CID inline images in thread history to base64 data URLs when the
   // composer opens in conversation mode. Base64 data URLs are safe to display
@@ -2576,10 +2648,15 @@ export default function Home() {
                 <ErrorBoundary fallback={EmailViewerErrorFallback}>
                   <EmailViewer
                     email={selectedEmail}
+                    threadEmails={currentThreadEmails}
                     isLoading={isLoadingEmail}
                     onReply={handleReply}
                     onReplyAll={handleReplyAll}
                     onForward={handleForward}
+                    onReplyToEmail={(msg) => {
+                      selectEmail(msg);
+                      handleReply();
+                    }}
                     onDelete={() => handleDelete()}
                     onArchive={() => handleArchive()}
                     onToggleStar={handleToggleStar}

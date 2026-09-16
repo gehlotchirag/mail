@@ -100,13 +100,16 @@ import { emailHooks, uiHooks } from "@/lib/plugin-hooks";
 import type { AttachmentInfo, AttachmentPreview } from "@/lib/plugin-types";
 import { useAttachmentDrag, isDragOutSupported, type AttachmentDragSource } from "@/hooks/use-attachment-drag";
 import type { IJMAPClient } from "@/lib/jmap/client-interface";
+import { EmailCard } from "./thread-conversation-view";
 
 interface EmailViewerProps {
   email: Email | null;
+  threadEmails?: Email[];
   isLoading?: boolean;
   onReply?: (draftText?: string) => void;
   onReplyAll?: () => void;
   onForward?: () => void;
+  onReplyToEmail?: (email: Email) => void;
   onDelete?: () => void;
   onArchive?: () => void;
   onToggleStar?: () => void;
@@ -851,10 +854,12 @@ function SidebarSection({ icon: Icon, title, children }: { icon: React.Component
 
 export function EmailViewer({
   email,
+  threadEmails,
   isLoading = false,
   onReply,
   onReplyAll,
   onForward,
+  onReplyToEmail,
   onDelete,
   onArchive,
   onToggleStar,
@@ -951,6 +956,40 @@ export function EmailViewer({
   const [hiddenPriorities, setHiddenPriorities] = useState<Set<number>>(new Set());
   const currentColors = getCurrentColors(email?.keywords);
   const currentColor = currentColors[0] ?? null;
+
+  // Thread conversation view state
+  const isThreadView = !!(threadEmails && threadEmails.length > 1);
+  const [expandedThreadEmailIds, setExpandedThreadEmailIds] = useState<Set<string>>(new Set());
+  const [allowExternalThreadIds, setAllowExternalThreadIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (threadEmails && threadEmails.length > 1) {
+      const ids = new Set<string>();
+      // Auto-expand the newest email (last in chronological order)
+      const last = threadEmails[threadEmails.length - 1];
+      if (last) ids.add(last.id);
+      // Auto-expand any unread emails
+      threadEmails.forEach((e) => {
+        if (!e.keywords?.$seen) ids.add(e.id);
+      });
+      // Expand currently selected email if present in thread
+      if (email?.id) ids.add(email.id);
+      setExpandedThreadEmailIds(ids);
+    }
+  }, [threadEmails, email?.id]);
+
+  const handleToggleThreadEmail = (emailId: string) => {
+    setExpandedThreadEmailIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(emailId)) next.delete(emailId);
+      else next.add(emailId);
+      return next;
+    });
+  };
+
+  const handleAllowExternalThreadEmail = (emailId: string) => {
+    setAllowExternalThreadIds((prev) => new Set(prev).add(emailId));
+  };
 
   // S/MIME state
   const [smimeStatus, setSmimeStatus] = useState<SmimeStatus | null>(null);
@@ -4090,8 +4129,35 @@ export function EmailViewer({
       {/* Email Content Area */}
       <div className={cn("flex-1 overflow-auto overscroll-contain bg-muted/30", isMobile && "pb-16")}>
 
-      {/* === SENDER INFO (Desktop) === */}
-      <div className="hidden lg:block bg-background border-b border-border px-6" style={{ paddingBlock: 'var(--density-header-py)' }}>
+      {isThreadView && threadEmails ? (
+        <div className="max-w-5xl mx-auto py-3 px-2 sm:px-4 space-y-2">
+          {threadEmails.map((msg, idx) => {
+            const isLast = idx === threadEmails.length - 1;
+            const isExpanded = expandedThreadEmailIds.has(msg.id);
+            const allowExternal = allowExternalThreadIds.has(msg.id);
+            return (
+              <div key={msg.id} className="bg-background rounded-lg border border-border/80 shadow-sm overflow-hidden">
+                <EmailCard
+                  email={msg}
+                  isExpanded={isExpanded}
+                  isLast={isLast}
+                  allowExternal={allowExternal}
+                  onToggleExpanded={() => handleToggleThreadEmail(msg.id)}
+                  onAllowExternal={() => handleAllowExternalThreadEmail(msg.id)}
+                  onReply={onReplyToEmail ? () => onReplyToEmail(msg) : onReply ? () => onReply() : undefined}
+                  onReplyAll={onReplyAll ? () => onReplyAll() : undefined}
+                  onForward={onForward ? () => onForward() : undefined}
+                  onDownloadAttachment={(blobId, name, type) => onDownloadAttachment?.(blobId, name, type)}
+                  onMarkAsRead={onMarkAsRead}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+        {/* === SENDER INFO (Desktop) === */}
+        <div className="hidden lg:block bg-background border-b border-border px-6" style={{ paddingBlock: 'var(--density-header-py)' }}>
           <div className="flex items-start" style={{ gap: 'var(--density-item-gap)' }}>
             <button
               onClick={() => sender?.email && handleViewContactSidebar(null, sender.email)}
@@ -5195,9 +5261,12 @@ export function EmailViewer({
           </div>
 
           <PluginSlot name="email-footer" />
+        </div>
+        </>
+      )}
 
           {/* Quick Reply Section - hidden for drafts and while loading a new email */}
-          {!isDraft && !isBodyLoading && (effectiveEmailContent.isHtml ? iframeReady : true) && (<div className="bg-background border-t border-border px-6" style={{ paddingBlock: 'var(--density-header-py)' }}>
+          {!isDraft && (isThreadView || (!isBodyLoading && (effectiveEmailContent.isHtml ? iframeReady : true))) && (<div className="bg-background border-t border-border px-6" style={{ paddingBlock: 'var(--density-header-py)' }}>
             <div className="flex items-start" style={{ gap: 'var(--density-item-gap)' }}>
               <div className="flex-shrink-0">
                 <Avatar
@@ -5290,7 +5359,6 @@ export function EmailViewer({
               </div>
             </div>
           </div>)}
-        </div>
       </div>
 
       {/* Email Source Modal */}

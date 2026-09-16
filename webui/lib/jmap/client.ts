@@ -94,6 +94,10 @@ const EMAIL_LIST_PROPERTIES = [
   "subject",
   "preview",
   "hasAttachment",
+  // Threading headers — needed for quick reply to set In-Reply-To / References
+  // without a separate Email/get round-trip.
+  "messageId",
+  "references",
 ] as const;
 
 // Stalwart's default property list for Calendar/get omits shareWith, isVisible,
@@ -2115,7 +2119,8 @@ export class JMAPClient implements IJMAPClient {
     attachments?: Array<{ blobId: string; name: string; type: string; size: number; disposition?: 'attachment' | 'inline'; cid?: string }>,
     inReplyTo?: string[],
     references?: string[],
-    envelopeMailFrom?: string
+    envelopeMailFrom?: string,
+    threadId?: string
   ): Promise<void> {
     const emailId = `send-${Date.now()}`;
     const mailboxes = await this.getMailboxes();

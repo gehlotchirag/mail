@@ -241,7 +241,7 @@ export function ThreadConversationView({
   );
 }
 
-interface EmailCardProps {
+export interface EmailCardProps {
   email: Email;
   isExpanded: boolean;
   isLast: boolean;
@@ -256,7 +256,7 @@ interface EmailCardProps {
   onMarkAsRead?: (emailId: string, read: boolean) => void;
 }
 
-function EmailCard({
+export function EmailCard({
   email,
   isExpanded,
   isLast,

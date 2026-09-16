@@ -147,7 +147,9 @@ export interface IJMAPClient {
     inReplyTo?: string[],
     references?: string[],
     envelopeMailFrom?: string,
+    threadId?: string,
   ): Promise<void>;
+
 
   sendImipReply(opts: {
     organizerEmail: string;
