@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { PluginSlot } from "@/components/plugins/plugin-slot";
 import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   Inbox,
   Send,
@@ -218,7 +219,7 @@ function SidebarRow({
   const t = useTranslations('sidebar');
   const leftPad = isCollapsed ? 0 : ROW_PX_BASE + depth * INDENT_STEP;
 
-  return (
+  const rowContent = (
     <div
       {...(dropHandlers || {})}
       onContextMenu={onContextMenu}
@@ -270,7 +271,6 @@ function SidebarRow({
           isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1 text-left",
           isVirtual && "cursor-default select-none"
         )}
-        title={isCollapsed ? label : undefined}
       >
         <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
           {icon}
@@ -289,6 +289,28 @@ function SidebarRow({
       </button>
     </div>
   );
+
+  if (isCollapsed) {
+    return (
+      <Tooltip
+        content={
+          <div className="flex items-center gap-1.5">
+            <span>{label}</span>
+            {unread !== undefined && unread > 0 && (
+              <span className="flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums bg-primary/20 text-primary">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </div>
+        }
+        side="right"
+      >
+        {rowContent}
+      </Tooltip>
+    );
+  }
+
+  return rowContent;
 }
 
 function SidebarSectionHeader({
@@ -892,33 +914,44 @@ export function Sidebar({
         )}
 
         {/* Desktop collapse toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleSidebarCollapsed}
-          className={cn(
-            "hidden lg:flex flex-shrink-0",
-            isCollapsed ? "h-10 w-10 mx-auto" : "h-7 w-7 ml-auto"
-          )}
-          title={isCollapsed ? t("expand_tooltip") : t("collapse_tooltip")}
+        <Tooltip
+          content={t("expand_tooltip")}
+          disabled={!isCollapsed}
+          side="right"
         >
-          {isCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
-        </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebarCollapsed}
+            className={cn(
+              "hidden lg:flex flex-shrink-0",
+              isCollapsed ? "h-10 w-10 mx-auto" : "h-7 w-7 ml-auto"
+            )}
+            title={!isCollapsed ? t("collapse_tooltip") : undefined}
+          >
+            {isCollapsed ? <ChevronsRight className="w-4 h-4" /> : <ChevronsLeft className="w-4 h-4" />}
+          </Button>
+        </Tooltip>
       </div>
 
       {/* Compose button */}
       <div className={cn("px-3 py-2.5 flex-shrink-0", isCollapsed && "flex justify-center px-1")}>
-        <button
-          onClick={onCompose}
-          className={cn(
-            "flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-full font-medium text-sm transition-colors hover:bg-primary/90 active:bg-primary/80 shadow-sm",
-            isCollapsed ? "w-10 h-10" : "w-full px-4 py-2.5"
-          )}
-          title={isCollapsed ? t("compose") : undefined}
+        <Tooltip
+          content={t("compose")}
+          disabled={!isCollapsed}
+          side="right"
         >
-          <Pencil className="w-4 h-4 flex-shrink-0" />
-          {!isCollapsed && <span>{t("compose")}</span>}
-        </button>
+          <button
+            onClick={onCompose}
+            className={cn(
+              "flex items-center justify-center gap-2 bg-primary text-primary-foreground rounded-full font-medium text-sm transition-colors hover:bg-primary/90 active:bg-primary/80 shadow-sm",
+              isCollapsed ? "w-10 h-10" : "w-full px-4 py-2.5"
+            )}
+          >
+            <Pencil className="w-4 h-4 flex-shrink-0" />
+            {!isCollapsed && <span>{t("compose")}</span>}
+          </button>
+        </Tooltip>
       </div>
 
       {!isCollapsed && <DemoBanner />}
@@ -1032,76 +1065,79 @@ export function Sidebar({
             {supportsCalendar && (() => {
               const isActive = pathname === '/calendar' || pathname.startsWith('/calendar/');
               return (
-                <Link
-                  href="/calendar"
-                  style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
-                  className={cn(
-                    "flex items-center text-sm transition-colors duration-150 rounded-lg",
-                    isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
-                    isActive
-                      ? "bg-primary/10 text-primary font-semibold"
-                      : "hover:bg-muted/50 text-muted-foreground",
-                  )}
-                  title={isCollapsed ? t("calendar") : undefined}
-                >
-                  {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
-                  <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
-                    <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
-                      <Calendar className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                <Tooltip content={t("calendar")} disabled={!isCollapsed} side="right">
+                  <Link
+                    href="/calendar"
+                    style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
+                    className={cn(
+                      "flex items-center text-sm transition-colors duration-150 rounded-lg",
+                      isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
+                      isActive
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "hover:bg-muted/50 text-muted-foreground",
+                    )}
+                  >
+                    {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
+                    <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
+                      <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
+                        <Calendar className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                      </span>
+                      {!isCollapsed && <span className="flex-1 truncate">{t("calendar")}</span>}
                     </span>
-                    {!isCollapsed && <span className="flex-1 truncate">{t("calendar")}</span>}
-                  </span>
-                </Link>
+                  </Link>
+                </Tooltip>
               );
             })()}
             {supportsContacts && (() => {
               const isActive = pathname === '/contacts' || pathname.startsWith('/contacts/');
               return (
-                <Link
-                  href="/contacts"
-                  style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
-                  className={cn(
-                    "flex items-center text-sm transition-colors duration-150 rounded-lg",
-                    isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
-                    isActive
-                      ? "bg-primary/10 text-primary font-semibold"
-                      : "hover:bg-muted/50 text-muted-foreground",
-                  )}
-                  title={isCollapsed ? t("contacts") : undefined}
-                >
-                  {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
-                  <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
-                    <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
-                      <BookUser className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                <Tooltip content={t("contacts")} disabled={!isCollapsed} side="right">
+                  <Link
+                    href="/contacts"
+                    style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
+                    className={cn(
+                      "flex items-center text-sm transition-colors duration-150 rounded-lg",
+                      isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
+                      isActive
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "hover:bg-muted/50 text-muted-foreground",
+                    )}
+                  >
+                    {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
+                    <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
+                      <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
+                        <BookUser className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                      </span>
+                      {!isCollapsed && <span className="flex-1 truncate">{t("contacts")}</span>}
                     </span>
-                    {!isCollapsed && <span className="flex-1 truncate">{t("contacts")}</span>}
-                  </span>
-                </Link>
+                  </Link>
+                </Tooltip>
               );
             })()}
             {(() => {
               const isActive = pathname === '/settings' || pathname.startsWith('/settings/');
               return (
-                <Link
-                  href="/settings"
-                  style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
-                  className={cn(
-                    "flex items-center text-sm transition-colors duration-150 rounded-lg",
-                    isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
-                    isActive
-                      ? "bg-primary/10 text-primary font-semibold"
-                      : "hover:bg-muted/50 text-muted-foreground",
-                  )}
-                  title={isCollapsed ? t("settings") : undefined}
-                >
-                  {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
-                  <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
-                    <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
-                      <Settings className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                <Tooltip content={t("settings")} disabled={!isCollapsed} side="right">
+                  <Link
+                    href="/settings"
+                    style={isCollapsed ? undefined : { paddingBlock: 'var(--density-sidebar-py)' }}
+                    className={cn(
+                      "flex items-center text-sm transition-colors duration-150 rounded-lg",
+                      isCollapsed ? "justify-center w-10 h-10 mx-auto my-0.5" : "mx-2 pr-2",
+                      isActive
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "hover:bg-muted/50 text-muted-foreground",
+                    )}
+                  >
+                    {!isCollapsed && <div style={{ width: ROW_PX_BASE + CHEVRON_SLOT }} className="flex-shrink-0" />}
+                    <span className={cn("flex items-center min-w-0", isCollapsed ? "justify-center w-full h-full" : "gap-2 flex-1")}>
+                      <span className="flex items-center justify-center flex-shrink-0 w-4 h-4">
+                        <Settings className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                      </span>
+                      {!isCollapsed && <span className="flex-1 truncate">{t("settings")}</span>}
                     </span>
-                    {!isCollapsed && <span className="flex-1 truncate">{t("settings")}</span>}
-                  </span>
-                </Link>
+                  </Link>
+                </Tooltip>
               );
             })()}
           </div>
@@ -1168,22 +1204,23 @@ export function Sidebar({
           hosts a Settings entry of its own) is hidden */}
       {hideAccountSwitcher && (
         <div className={cn("flex-shrink-0", isCollapsed ? "flex justify-center py-1.5" : "px-2 py-1.5")}>
-          <Link
-            href="/settings"
-            className={cn(
-              "flex items-center gap-2 rounded-lg text-sm transition-colors duration-150",
-              isCollapsed
-                ? "w-10 h-10 justify-center"
-                : "w-full px-2 py-1.5",
-              isSettingsActive
-                ? "bg-primary/10 text-primary font-medium"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-            title={isCollapsed ? t("settings") : undefined}
-          >
-            <Settings className="w-4 h-4 flex-shrink-0" />
-            {!isCollapsed && <span>{t("settings")}</span>}
-          </Link>
+          <Tooltip content={t("settings")} disabled={!isCollapsed} side="right">
+            <Link
+              href="/settings"
+              className={cn(
+                "flex items-center gap-2 rounded-lg text-sm transition-colors duration-150",
+                isCollapsed
+                  ? "w-10 h-10 justify-center"
+                  : "w-full px-2 py-1.5",
+                isSettingsActive
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Settings className="w-4 h-4 flex-shrink-0" />
+              {!isCollapsed && <span>{t("settings")}</span>}
+            </Link>
+          </Tooltip>
         </div>
       )}
 

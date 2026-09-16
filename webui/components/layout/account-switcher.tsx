@@ -9,6 +9,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { getInitials, getMaxAccounts } from "@/lib/account-utils";
 import { cn } from "@/lib/utils";
 import { useRouter } from "@/i18n/navigation";
+import { Tooltip } from "@/components/ui/tooltip";
 
 interface AccountSwitcherProps {
   /** "rail" = small avatar only (NavigationRail), "expanded" = avatar + name + email (Sidebar) */
@@ -137,42 +138,54 @@ export function AccountSwitcher({ variant = "rail", popoverDirection = "down", c
 
   return (
     <>
-      <button
-        ref={buttonRef}
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "flex items-center gap-2 rounded-md transition-colors",
-          variant === "rail"
-            ? "justify-center w-10 h-10 hover:bg-muted"
-            : "w-full px-2 py-1.5 hover:bg-muted text-left min-w-0",
-          className
-        )}
-        title={variant === "rail" ? (displayName || displayEmail) : undefined}
-        aria-expanded={open}
-        aria-haspopup="true"
-      >
-        {activeAccount ? (
-          <>
-            <AccountAvatar account={activeAccount} size={variant === "rail" ? "sm" : "md"} />
-            {variant === "expanded" && (
-              <>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
-                </div>
-                <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform", open && "rotate-180")} />
-              </>
+      <Tooltip
+        content={
+          <div className="flex flex-col gap-0.5">
+            <span className="font-medium">{displayName || displayEmail}</span>
+            {displayEmail && displayName && displayName !== displayEmail && (
+              <span className="text-[11px] text-muted-foreground font-normal">{displayEmail}</span>
             )}
-          </>
-        ) : (
-          <div className={cn(
-            "rounded-full bg-muted flex items-center justify-center text-muted-foreground",
-            variant === "rail" ? "w-8 h-8 text-xs" : "w-9 h-9 text-sm"
-          )}>
-            ?
           </div>
-        )}
-      </button>
+        }
+        disabled={variant !== "rail" || open}
+        side="right"
+      >
+        <button
+          ref={buttonRef}
+          onClick={() => setOpen(!open)}
+          className={cn(
+            "flex items-center gap-2 rounded-md transition-colors",
+            variant === "rail"
+              ? "justify-center w-10 h-10 hover:bg-muted"
+              : "w-full px-2 py-1.5 hover:bg-muted text-left min-w-0",
+            className
+          )}
+          aria-expanded={open}
+          aria-haspopup="true"
+        >
+          {activeAccount ? (
+            <>
+              <AccountAvatar account={activeAccount} size={variant === "rail" ? "sm" : "md"} />
+              {variant === "expanded" && (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
+                  </div>
+                  <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform", open && "rotate-180")} />
+                </>
+              )}
+            </>
+          ) : (
+            <div className={cn(
+              "rounded-full bg-muted flex items-center justify-center text-muted-foreground",
+              variant === "rail" ? "w-8 h-8 text-xs" : "w-9 h-9 text-sm"
+            )}>
+              ?
+            </div>
+          )}
+        </button>
+      </Tooltip>
 
       {open && createPortal(
         <div
