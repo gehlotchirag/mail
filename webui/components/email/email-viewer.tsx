@@ -970,15 +970,21 @@ export function EmailViewer({
       // Auto-expand the newest email (last in chronological order)
       const last = uniqueThreadEmails[uniqueThreadEmails.length - 1];
       if (last) ids.add(last.id);
-      // Auto-expand any unread emails
-      uniqueThreadEmails.forEach((e) => {
-        if (!e.keywords?.$seen) ids.add(e.id);
-      });
-      // Expand currently selected email if present in thread
-      if (email?.id) ids.add(email.id);
+
+      // If thread is partially read, expand unread incoming emails
+      const allUnread = uniqueThreadEmails.every((e) => !e.keywords?.$seen);
+      if (!allUnread) {
+        uniqueThreadEmails.forEach((e) => {
+          const fromEmail = e.from?.[0]?.email?.toLowerCase() || "";
+          const isFromMe = !!currentUserEmail && fromEmail === currentUserEmail.toLowerCase();
+          if (!isFromMe && !e.keywords?.$seen) {
+            ids.add(e.id);
+          }
+        });
+      }
       setExpandedThreadEmailIds(ids);
     }
-  }, [uniqueThreadEmails, email?.id]);
+  }, [uniqueThreadEmails, currentUserEmail]);
 
   const handleToggleThreadEmail = (emailId: string) => {
     setExpandedThreadEmailIds((prev) => {
@@ -4132,14 +4138,15 @@ export function EmailViewer({
       <div className={cn("flex-1 overflow-auto overscroll-contain bg-muted/30", isMobile && "pb-16")}>
 
       {isThreadView && uniqueThreadEmails ? (
-        <div className="max-w-5xl mx-auto py-3 px-2 sm:px-4 space-y-2">
-          {uniqueThreadEmails.map((msg, idx) => {
-            const isLast = idx === uniqueThreadEmails.length - 1;
-            const isExpanded = expandedThreadEmailIds.has(msg.id);
-            const allowExternal = allowExternalThreadIds.has(msg.id);
-            return (
-              <div key={msg.id} className="bg-background rounded-lg border border-border/80 shadow-sm overflow-hidden">
+        <div className="max-w-5xl mx-auto py-4 px-2 sm:px-6">
+          <div className="bg-background rounded-xl border border-border shadow-sm overflow-hidden divide-y divide-border/50">
+            {uniqueThreadEmails.map((msg, idx) => {
+              const isLast = idx === uniqueThreadEmails.length - 1;
+              const isExpanded = expandedThreadEmailIds.has(msg.id);
+              const allowExternal = allowExternalThreadIds.has(msg.id);
+              return (
                 <EmailCard
+                  key={msg.id}
                   email={msg}
                   isExpanded={isExpanded}
                   isLast={isLast}
@@ -4152,9 +4159,9 @@ export function EmailViewer({
                   onDownloadAttachment={(blobId, name, type) => onDownloadAttachment?.(blobId, name, type)}
                   onMarkAsRead={onMarkAsRead}
                 />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       ) : (
         <>

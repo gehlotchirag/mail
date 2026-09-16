@@ -66,6 +66,48 @@ export function formatDateDetailed(date: Date | string): string {
 }
 
 /**
+ * Format timestamp specifically for Gmail-style email threads:
+ * E.g., "5:28 PM (15 minutes ago)" for today, or "Sep 15, 5:28 PM (1 day ago)" for earlier.
+ */
+export function formatThreadDate(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return typeof date === "string" ? date : "";
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  let relative: string;
+  if (minutes < 1) relative = "just now";
+  else if (minutes < 60) relative = `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  else if (hours < 24) relative = `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  else if (days === 1) relative = "1 day ago";
+  else if (days < 30) relative = `${days} days ago`;
+  else relative = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const isToday =
+    d.getDate() === now.getDate() &&
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear();
+
+  const timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+  if (isToday) {
+    return `${timeStr} (${relative})`;
+  }
+
+  const isThisYear = d.getFullYear() === now.getFullYear();
+  const dateStr = d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: isThisYear ? undefined : "numeric",
+  });
+
+  return `${dateStr}, ${timeStr} (${relative})`;
+}
+
+/**
  * Format a date/time string respecting the user's 12h/24h time format preference.
  */
 export function formatDateTime(

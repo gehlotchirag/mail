@@ -10,7 +10,7 @@ import { transformInlineStyles, transformColorForDarkMode, transformBgColorForDa
 import { useThemeStore } from "@/stores/theme-store";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { formatDateDetailed, formatFileSize, cn } from "@/lib/utils";
+import { formatDateDetailed, formatThreadDate, formatFileSize, cn } from "@/lib/utils";
 import {
   ArrowLeft,
   Reply,
@@ -35,6 +35,8 @@ import { useTranslations } from "next-intl";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useContactStore } from "@/stores/contact-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { useAccountStore } from "@/stores/account-store";
+import { useEmailStore } from "@/stores/email-store";
 import { isFilePreviewable } from "@/lib/file-preview";
 
 interface ThreadConversationViewProps {
@@ -81,6 +83,10 @@ export function ThreadConversationView({
   const isTrustedAddressBookSender = useContactStore((state) => state.isTrustedAddressBookSender);
   const addToTrustedSendersBook = useContactStore((state) => state.addToTrustedSendersBook);
   const { client } = useAuthStore();
+  const activeAccountId = useAuthStore((state) => state.activeAccountId);
+  const accounts = useAccountStore((state) => state.accounts);
+  const activeAccount = accounts.find((a) => a.id === activeAccountId);
+  const currentUserEmail = (activeAccount?.email || activeAccount?.username || "").toLowerCase();
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [allowExternalContent, setAllowExternalContent] = useState<Set<string>>(new Set());
@@ -90,18 +96,29 @@ export function ThreadConversationView({
   const uniqueEmails = useMemo(() => deduplicateEmails(emails), [emails]);
 
   // emails arrive oldest-first from getThreadEmails — no need to reverse
-  // Auto-expand the newest email (last in array) + any unread emails
+  // In Gmail, only the newest email is expanded by default; earlier emails are collapsed into compact single-line rows.
   useEffect(() => {
     if (uniqueEmails.length > 0) {
       const idsToExpand = new Set<string>();
-      idsToExpand.add(uniqueEmails[uniqueEmails.length - 1].id);
-      uniqueEmails.forEach(email => {
-        if (!email.keywords?.$seen) idsToExpand.add(email.id);
-      });
+      const newest = uniqueEmails[uniqueEmails.length - 1];
+      if (newest) idsToExpand.add(newest.id);
+
+      // If the thread is partially read, expand unread incoming emails
+      const allUnread = uniqueEmails.every((e) => !e.keywords?.$seen);
+      if (!allUnread) {
+        uniqueEmails.forEach((email) => {
+          const fromEmail = email.from?.[0]?.email?.toLowerCase() || "";
+          const isFromMe = !!currentUserEmail && fromEmail === currentUserEmail;
+          if (!isFromMe && !email.keywords?.$seen) {
+            idsToExpand.add(email.id);
+          }
+        });
+      }
+
       setExpandedIds(idsToExpand);
       setShowAllEmails(false);
     }
-  }, [uniqueEmails]);
+  }, [uniqueEmails, currentUserEmail]);
 
   const toggleExpanded = (emailId: string) => {
     setExpandedIds(prev => {
@@ -277,12 +294,77 @@ export function EmailCard({
   const emailAlwaysLightMode = useSettingsStore((state) => state.emailAlwaysLightMode);
   const sender = email.from?.[0];
   const isUnread = !email.keywords?.$seen;
-  const isStarred = email.keywords?.$flagged;
+  const activeAccountId = useAuthStore((state) => state.activeAccountId);
+  const accounts = useAccountStore((state) => state.accounts);
+  const activeAccount = accounts.find((a) => a.id === activeAccountId);
+  const currentUserEmail = (activeAccount?.email || activeAccount?.username || "").toLowerCase();
+
+  const [isStarred, setIsStarred] = useState(!!email.keywords?.$flagged);
+  const [showDetails, setShowDetails] = useState(false);
+  const detailsRef = useRef<HTMLDivElement>(null);
   const [hasBlockedContent, setHasBlockedContent] = useState(false);
   const [cidBlobUrls, setCidBlobUrls] = useState<Record<string, string>>({});
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const { client } = useAuthStore();
+
+  useEffect(() => {
+    setIsStarred(!!email.keywords?.$flagged);
+  }, [email.keywords?.$flagged]);
+
+  const handleToggleStar = async () => {
+    const nextStarred = !isStarred;
+    setIsStarred(nextStarred);
+    if (client) {
+      try {
+        await useEmailStore.getState().toggleStar(client, email.id);
+      } catch (e) {
+        console.error('Failed to toggle star:', e);
+        setIsStarred(!nextStarred);
+      }
+    }
+  };
+
+  // Close details dropdown on outside click
+  useEffect(() => {
+    if (!showDetails) return;
+    const handler = (e: MouseEvent) => {
+      if (detailsRef.current && !detailsRef.current.contains(e.target as Node)) {
+        setShowDetails(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showDetails]);
+
+  // Snippet preview for collapsed single-line row
+  const snippet = useMemo(() => {
+    if (email.preview) return email.preview.trim();
+    if (email.textBody?.[0]?.partId && email.bodyValues?.[email.textBody[0].partId]) {
+      return email.bodyValues[email.textBody[0].partId].value.replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }, [email.preview, email.textBody, email.bodyValues]);
+
+  // Clean "to me" label matching Gmail
+  const toLabel = useMemo(() => {
+    const recipients = email.to || [];
+    if (recipients.length === 0) return "me";
+    const isMe = (addr?: string) => !!addr && !!currentUserEmail && addr.toLowerCase() === currentUserEmail;
+
+    if (recipients.length === 1) {
+      return isMe(recipients[0].email) ? "me" : (recipients[0].name || recipients[0].email || "me");
+    }
+
+    const hasMe = recipients.some(r => isMe(r.email));
+    if (hasMe) {
+      const others = recipients.filter(r => !isMe(r.email));
+      const otherName = others[0]?.name || others[0]?.email;
+      return `me${otherName ? `, ${otherName}` : ''}${others.length > 1 ? ` +${others.length - 1}` : ''}`;
+    }
+
+    return `${recipients[0]?.name || recipients[0]?.email}${recipients.length > 1 ? ` +${recipients.length - 1}` : ''}`;
+  }, [email.to, currentUserEmail]);
 
   // Close more menu on outside click
   useEffect(() => {
@@ -412,71 +494,131 @@ export function EmailCard({
     )}>
       {/* Collapsed header — clicking expands */}
       {!isExpanded ? (
-        <button
+        <div
           onClick={onToggleExpanded}
-          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+          className={cn(
+            "w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors text-left cursor-pointer select-none",
+            isUnread ? "bg-muted/15" : "bg-background"
+          )}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onToggleExpanded();
+            }
+          }}
         >
           {density !== 'extra-compact' && (
-            <Avatar name={sender?.name} email={sender?.email} size="sm" className="flex-shrink-0" />
+            <Avatar name={sender?.name} email={sender?.email} size="sm" className="w-8 h-8 rounded-full flex-shrink-0" />
           )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className={cn("text-sm truncate", isUnread ? "font-semibold text-foreground" : "font-medium text-foreground/80")}>
-                {sender?.name || sender?.email || "Unknown"}
+          <div className="flex-1 min-w-0 flex items-center gap-3">
+            <span className={cn("text-sm truncate flex-shrink-0", isUnread ? "font-semibold text-foreground" : "font-medium text-foreground/90")}>
+              {sender?.name || sender?.email || "Unknown"}
+            </span>
+            {snippet && (
+              <span className="text-sm text-muted-foreground truncate flex-1 min-w-0">
+                {snippet}
               </span>
-              {email.hasAttachment && <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
-            </div>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {email.preview || ""}
-            </p>
+            )}
+            {email.hasAttachment && <Paperclip className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateDetailed(email.receivedAt)}</span>
-            {isStarred && <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />}
+          <div className="flex items-center gap-2.5 flex-shrink-0 ml-2">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{formatThreadDate(email.receivedAt)}</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleStar();
+              }}
+              className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+              title={isStarred ? "Starred" : "Star"}
+            >
+              <Star className={cn("w-4 h-4 transition-colors", isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-muted-foreground")} />
+            </button>
           </div>
-        </button>
+        </div>
       ) : (
         /* Expanded card */
         <div className={cn(
-          "transition-all duration-200",
+          "transition-all duration-200 bg-background",
           isUnread && "border-l-2 border-l-primary"
         )}>
-          {/* Expanded header */}
-          <div className="flex items-start gap-3 px-4 pt-4 pb-2">
+          {/* Expanded header — clicking non-action areas toggles collapse */}
+          <div
+            onClick={onToggleExpanded}
+            className="flex items-start gap-3 px-4 pt-4 pb-2.5 cursor-pointer select-none"
+          >
             {density !== 'extra-compact' && (
-              <Avatar name={sender?.name} email={sender?.email} size="md" className="flex-shrink-0 mt-0.5" />
+              <Avatar name={sender?.name} email={sender?.email} size="md" className="w-9 h-9 rounded-full flex-shrink-0 mt-0.5" />
             )}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-semibold text-foreground text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-foreground text-sm truncate">
                   {sender?.name || sender?.email || "Unknown"}
                 </span>
-                {sender?.name && sender?.email && (
-                  <span className="text-xs text-muted-foreground">&lt;{sender.email}&gt;</span>
-                )}
-                {isStarred && <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />}
               </div>
-              {toRecipients && (
+              <div className="relative inline-block mt-0.5" ref={detailsRef}>
                 <button
-                  onClick={onToggleExpanded}
-                  // Browsers default <button> to `text-align: center` in their
-                  // UA stylesheet; it's inherited by the <span> below and, once
-                  // the recipient list is long enough to wrap, centers every
-                  // wrapped line instead of the intended flush-left address
-                  // list. `text-left` overrides it — same fix the collapsed
-                  // thread-item button above already carries.
-                  className="flex items-start gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5 text-left"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDetails(v => !v);
+                  }}
+                  className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors rounded px-1 -ml-1 py-0.5 hover:bg-muted/60"
                 >
-                  <span>to {toRecipients}</span>
-                  <ChevronDown className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                  <span>to {toLabel}</span>
+                  <ChevronDown className={cn("w-3 h-3 transition-transform", showDetails && "rotate-180")} />
                 </button>
-              )}
+
+                {showDetails && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute left-0 top-full mt-1.5 p-3 rounded-lg bg-popover border border-border shadow-lg text-xs z-30 min-w-[280px] max-w-[400px] space-y-1.5 text-foreground cursor-default"
+                  >
+                    <div className="grid grid-cols-[54px_1fr] gap-1">
+                      <span className="text-muted-foreground">From:</span>
+                      <span className="font-medium truncate">{sender?.name ? `${sender.name} <${sender.email}>` : sender?.email}</span>
+                    </div>
+                    <div className="grid grid-cols-[54px_1fr] gap-1">
+                      <span className="text-muted-foreground">To:</span>
+                      <span className="truncate">{email.to?.map(r => r.name ? `${r.name} <${r.email}>` : r.email).join(', ') || 'me'}</span>
+                    </div>
+                    {email.cc && email.cc.length > 0 && (
+                      <div className="grid grid-cols-[54px_1fr] gap-1">
+                        <span className="text-muted-foreground">Cc:</span>
+                        <span className="truncate">{email.cc.map(r => r.name ? `${r.name} <${r.email}>` : r.email).join(', ')}</span>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-[54px_1fr] gap-1">
+                      <span className="text-muted-foreground">Date:</span>
+                      <span>{email.receivedAt ? new Date(email.receivedAt).toLocaleString() : ''}</span>
+                    </div>
+                    <div className="grid grid-cols-[54px_1fr] gap-1">
+                      <span className="text-muted-foreground">Subject:</span>
+                      <span className="truncate">{email.subject || '(no subject)'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <span className="text-xs text-muted-foreground whitespace-nowrap mr-1">{formatDateDetailed(email.receivedAt)}</span>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 flex-shrink-0 cursor-default"
+            >
+              <span className="text-xs text-muted-foreground whitespace-nowrap mr-1">{formatThreadDate(email.receivedAt)}</span>
+              <button
+                type="button"
+                onClick={handleToggleStar}
+                className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                title={isStarred ? "Starred" : "Star"}
+              >
+                <Star className={cn("w-4 h-4 transition-colors", isStarred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40 hover:text-muted-foreground")} />
+              </button>
               {onReply && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onReply(); }}
+                  type="button"
+                  onClick={onReply}
                   className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                   title={t("email_viewer.reply")}
                 >
@@ -486,7 +628,8 @@ export function EmailCard({
               {(onReplyAll || onForward) && (
                 <div className="relative" ref={moreMenuRef}>
                   <button
-                    onClick={(e) => { e.stopPropagation(); setShowMoreMenu(v => !v); }}
+                    type="button"
+                    onClick={() => setShowMoreMenu(v => !v)}
                     className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                     title="More actions"
                   >
@@ -495,12 +638,12 @@ export function EmailCard({
                   {showMoreMenu && (
                     <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-lg shadow-md py-1 min-w-[140px] z-20">
                       {onReplyAll && (
-                        <button onClick={(e) => { e.stopPropagation(); setShowMoreMenu(false); onReplyAll(); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                        <button type="button" onClick={() => { setShowMoreMenu(false); onReplyAll(); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors text-left">
                           <ReplyAll className="w-4 h-4" /> {t("email_viewer.reply_all")}
                         </button>
                       )}
                       {onForward && (
-                        <button onClick={(e) => { e.stopPropagation(); setShowMoreMenu(false); onForward(); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                        <button type="button" onClick={() => { setShowMoreMenu(false); onForward(); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors text-left">
                           <Forward className="w-4 h-4" /> {t("email_viewer.forward")}
                         </button>
                       )}
