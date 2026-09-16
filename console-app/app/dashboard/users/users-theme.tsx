@@ -15,19 +15,20 @@ export function UsersStyles() {
   return (
     <style>{`
       .userspage {
-        --u-accent: #2F56FF;
-        --u-accent-soft: rgba(47,86,255,.08);
-        --u-ink: #0A1228;
-        --u-ink2: #374264;
-        --u-muted: #7A8CAE;
-        --u-border: #dbeafe;
-        --u-surface: #ffffff;
-        --u-surface2: #F0F4FF;
-        --u-green: #0B9E58;
-        --u-amber: #B45309;
-        --u-red: #B0231F;
-        --u-shadow-s: 0 1px 3px rgba(10,18,40,.06), 0 1px 2px rgba(10,18,40,.04);
-        --u-shadow-m: 0 4px 20px rgba(10,18,40,.08), 0 2px 8px rgba(10,18,40,.05);
+        --u-accent: #0866F5;
+        --u-accent-hover: #0756D8;
+        --u-accent-soft: #EEF5FF;
+        --u-ink: #0B1739;
+        --u-ink2: #607392;
+        --u-muted: #94A3B8;
+        --u-border: #E2EAF5;
+        --u-surface: #FFFFFF;
+        --u-surface2: #EEF5FF;
+        --u-green: #10B981;
+        --u-amber: #F5A800;
+        --u-red: #EF4444;
+        --u-shadow-s: 0 1px 3px rgba(11, 23, 57, 0.05), 0 1px 2px rgba(11, 23, 57, 0.03);
+        --u-shadow-m: 0 4px 20px rgba(11, 23, 57, 0.07), 0 2px 8px rgba(11, 23, 57, 0.04);
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       .userspage code, .userspage .u-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }

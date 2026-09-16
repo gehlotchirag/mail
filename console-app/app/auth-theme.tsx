@@ -23,19 +23,20 @@ export function AuthStyles() {
   return (
     <style>{`
       .authpage {
-        --bg: #F4F7FF;
+        --bg: #F7FAFF;
         --surface: #FFFFFF;
-        --surface2: #F0F4FF;
-        --ink: #0A1228;
-        --ink2: #374264;
-        --muted: #7A8CAE;
-        --border: rgba(10,18,40,.09);
-        --accent: #2F56FF;
-        --accentd: rgba(47,86,255,.10);
-        --green: #0B9E58;
-        --danger: #dc2626;
-        --shadow-m: 0 4px 20px rgba(10,18,40,.09), 0 2px 8px rgba(10,18,40,.05);
-        --shadow-l: 0 24px 64px rgba(10,18,40,.12), 0 8px 24px rgba(10,18,40,.07);
+        --surface2: #EEF5FF;
+        --ink: #0B1739;
+        --ink2: #607392;
+        --muted: #94A3B8;
+        --border: #E2EAF5;
+        --accent: #0866F5;
+        --accent-hover: #0756D8;
+        --accentd: #EEF5FF;
+        --green: #10B981;
+        --danger: #EF4444;
+        --shadow-m: 0 4px 20px rgba(11, 23, 57, 0.07), 0 2px 8px rgba(11, 23, 57, 0.04);
+        --shadow-l: 0 20px 50px rgba(11, 23, 57, 0.09), 0 4px 16px rgba(11, 23, 57, 0.04);
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         min-height: 100vh;
         display: grid;
