@@ -1,6 +1,93 @@
 import type { Email, ThreadGroup } from "./jmap/types";
 
 /**
+ * Normalizes email subjects by stripping common reply/forward prefixes.
+ */
+export function normalizeThreadSubject(subject?: string): string {
+  if (!subject) return '';
+  return subject
+    .replace(/^(\s*(re|fwd|fw|aw|sv|vs)\s*[:;–-]\s*)+/gi, '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Strips reply/forward prefixes for clean thread header display (matches Gmail).
+ */
+export function cleanThreadSubject(subject?: string): string {
+  if (!subject) return '';
+  return subject
+    .replace(/^(\s*(re|fwd|fw|aw|sv|vs)\s*[:;–-]\s*)+/gi, '')
+    .trim();
+}
+
+/**
+ * Deduplicates emails within a thread or email list.
+ * Handles duplicate emails across folders (e.g. self-addressed emails delivered
+ * to Inbox and saved to Sent) by matching RFC 5322 Message-ID, composite fingerprint,
+ * and JMAP ID. Merges mailboxIds and keywords into the surviving email.
+ */
+export function deduplicateEmails(emails: Email[]): Email[] {
+  if (!emails || emails.length <= 1) return emails || [];
+
+  const seenIds = new Set<string>();
+  const seenMessageIds = new Map<string, Email>();
+  const seenFingerprints = new Map<string, Email>();
+  const result: Email[] = [];
+
+  for (const email of emails) {
+    if (!email) continue;
+    if (seenIds.has(email.id)) continue;
+    seenIds.add(email.id);
+
+    // 1. Match RFC 5322 Message-ID
+    const rawMid = Array.isArray(email.messageId) ? email.messageId[0] : email.messageId;
+    const mid = rawMid ? rawMid.trim().replace(/^<+/, '').replace(/>+$/, '').trim().toLowerCase() : null;
+
+    if (mid) {
+      const existing = seenMessageIds.get(mid);
+      if (existing) {
+        if (email.mailboxIds) {
+          existing.mailboxIds = { ...existing.mailboxIds, ...email.mailboxIds };
+        }
+        if (email.keywords) {
+          existing.keywords = { ...existing.keywords, ...email.keywords };
+        }
+        continue;
+      }
+    }
+
+    // 2. Composite fingerprint for cases where Message-ID is missing or stripped.
+    // Requires non-empty preview (at least 10 chars) to prevent false positives on mock emails.
+    const preview = (email.preview || '').trim().slice(0, 80);
+    if (preview.length >= 10) {
+      const fromEmail = email.from?.[0]?.email?.toLowerCase() || '';
+      const timestamp = email.sentAt ? new Date(email.sentAt).getTime() : new Date(email.receivedAt).getTime();
+      const timeBucket = Math.round(timestamp / 15000); // 15-second window
+      const normSubject = normalizeThreadSubject(email.subject);
+      const fingerprint = `${fromEmail}|${timeBucket}|${normSubject}|${preview}`;
+
+      const existing = seenFingerprints.get(fingerprint);
+      if (existing) {
+        if (email.mailboxIds) {
+          existing.mailboxIds = { ...existing.mailboxIds, ...email.mailboxIds };
+        }
+        if (email.keywords) {
+          existing.keywords = { ...existing.keywords, ...email.keywords };
+        }
+        continue;
+      }
+      seenFingerprints.set(fingerprint, email);
+    }
+
+    result.push(email);
+    if (mid) seenMessageIds.set(mid, email);
+  }
+
+  return result;
+}
+
+/**
  * Groups emails by their threadId and creates ThreadGroup objects for UI display.
  * Single-email threads are still returned as ThreadGroups with emailCount=1.
  * When disableThreading is true, each email is placed into its own group using
@@ -26,8 +113,9 @@ export function groupEmailsByThread(emails: Email[], disableThreading = false): 
   const threadGroups: ThreadGroup[] = [];
 
   for (const [threadId, threadEmails] of threadMap) {
+    const uniqueThreadEmails = deduplicateEmails(threadEmails);
     // Sort emails by receivedAt descending (newest first)
-    const sortedEmails = [...threadEmails].sort(
+    const sortedEmails = [...uniqueThreadEmails].sort(
       (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
     );
 
@@ -105,22 +193,10 @@ export function mergeThreadEmails(
   existingGroup: ThreadGroup,
   fetchedEmails: Email[]
 ): ThreadGroup {
-  // Create a map of existing emails by ID
-  const emailMap = new Map<string, Email>();
-
-  for (const email of existingGroup.emails) {
-    emailMap.set(email.id, email);
-  }
-
-  // Add fetched emails that aren't already in the group
-  for (const email of fetchedEmails) {
-    if (!emailMap.has(email.id)) {
-      emailMap.set(email.id, email);
-    }
-  }
-
-  // Convert back to array and sort
-  const mergedEmails = Array.from(emailMap.values()).sort(
+  const mergedEmails = deduplicateEmails([
+    ...existingGroup.emails,
+    ...fetchedEmails,
+  ]).sort(
     (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
   );
 

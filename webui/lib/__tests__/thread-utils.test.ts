@@ -6,6 +6,9 @@ import {
   mergeThreadEmails,
   getEmailColorTag,
   getThreadColorTag,
+  deduplicateEmails,
+  cleanThreadSubject,
+  normalizeThreadSubject,
 } from '../thread-utils';
 import type { Email, ThreadGroup } from '../jmap/types';
 
@@ -302,5 +305,76 @@ describe('getThreadColorTag', () => {
 
   it('returns null for empty email array', () => {
     expect(getThreadColorTag([])).toBeNull();
+  });
+});
+
+describe('cleanThreadSubject and normalizeThreadSubject', () => {
+  it('strips Re: and Fwd: prefixes for clean display', () => {
+    expect(cleanThreadSubject('Re: Testing for sending multiple mails')).toBe('Testing for sending multiple mails');
+    expect(cleanThreadSubject('Re: Re: test subject')).toBe('test subject');
+    expect(cleanThreadSubject('Fwd: Project Update')).toBe('Project Update');
+    expect(cleanThreadSubject('Testing for sending multiple mails')).toBe('Testing for sending multiple mails');
+  });
+
+  it('normalizes subject to lowercase without prefixes', () => {
+    expect(normalizeThreadSubject('Re: Testing for sending multiple mails')).toBe('testing for sending multiple mails');
+    expect(normalizeThreadSubject('Testing for sending multiple mails')).toBe('testing for sending multiple mails');
+  });
+});
+
+describe('deduplicateEmails', () => {
+  it('deduplicates emails with identical RFC 5322 Message-ID (e.g. Sent vs Inbox copy)', () => {
+    const email1 = makeEmail({
+      id: 'msg-sent-1',
+      messageId: '<unique-msg-123@example.com>',
+      mailboxIds: { sent: true },
+      keywords: { $seen: true },
+    });
+    const email2 = makeEmail({
+      id: 'msg-inbox-2',
+      messageId: '<unique-msg-123@example.com>',
+      mailboxIds: { inbox: true },
+      keywords: { $seen: true },
+    });
+
+    const result = deduplicateEmails([email1, email2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('msg-sent-1');
+    // Mailbox IDs are merged
+    expect(result[0].mailboxIds).toEqual({ sent: true, inbox: true });
+  });
+
+  it('deduplicates by composite fingerprint when preview matches and timestamp is within 15s', () => {
+    const email1 = makeEmail({
+      id: 'e1',
+      from: [{ name: 'Siddhant', email: 'siddhant@example.com' }],
+      subject: 'Re: Test',
+      preview: 'This is to reply all with some extended content',
+      receivedAt: '2026-09-16T11:26:00Z',
+    });
+    const email2 = makeEmail({
+      id: 'e2',
+      from: [{ name: 'Siddhant', email: 'siddhant@example.com' }],
+      subject: 'Re: Test',
+      preview: 'This is to reply all with some extended content',
+      receivedAt: '2026-09-16T11:26:05Z', // 5 seconds later
+    });
+
+    const result = deduplicateEmails([email1, email2]);
+    expect(result).toHaveLength(1);
+  });
+
+  it('keeps distinct emails with different previews intact', () => {
+    const email1 = makeEmail({
+      id: 'e1',
+      preview: 'First message body that is unique and longer than 10 characters',
+    });
+    const email2 = makeEmail({
+      id: 'e2',
+      preview: 'Second message body that is unique and completely different',
+    });
+
+    const result = deduplicateEmails([email1, email2]);
+    expect(result).toHaveLength(2);
   });
 });

@@ -3,6 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
 import DOMPurify from "dompurify";
 import { Email, ContactCard, Mailbox } from "@/lib/jmap/types";
+import { deduplicateEmails } from "@/lib/thread-utils";
 import { EMAIL_IFRAME_SANITIZE_CONFIG, collapseBlockedImageContainers, plainTextToSafeHtml } from "@/lib/email-sanitization";
 import { hasMeaningfulHtmlBody } from "@/lib/signature-utils";
 import { Button } from "@/components/ui/button";
@@ -958,25 +959,26 @@ export function EmailViewer({
   const currentColor = currentColors[0] ?? null;
 
   // Thread conversation view state
-  const isThreadView = !!(threadEmails && threadEmails.length > 1);
+  const uniqueThreadEmails = useMemo(() => deduplicateEmails(threadEmails || []), [threadEmails]);
+  const isThreadView = !!(uniqueThreadEmails && uniqueThreadEmails.length > 1);
   const [expandedThreadEmailIds, setExpandedThreadEmailIds] = useState<Set<string>>(new Set());
   const [allowExternalThreadIds, setAllowExternalThreadIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (threadEmails && threadEmails.length > 1) {
+    if (uniqueThreadEmails && uniqueThreadEmails.length > 1) {
       const ids = new Set<string>();
       // Auto-expand the newest email (last in chronological order)
-      const last = threadEmails[threadEmails.length - 1];
+      const last = uniqueThreadEmails[uniqueThreadEmails.length - 1];
       if (last) ids.add(last.id);
       // Auto-expand any unread emails
-      threadEmails.forEach((e) => {
+      uniqueThreadEmails.forEach((e) => {
         if (!e.keywords?.$seen) ids.add(e.id);
       });
       // Expand currently selected email if present in thread
       if (email?.id) ids.add(email.id);
       setExpandedThreadEmailIds(ids);
     }
-  }, [threadEmails, email?.id]);
+  }, [uniqueThreadEmails, email?.id]);
 
   const handleToggleThreadEmail = (emailId: string) => {
     setExpandedThreadEmailIds((prev) => {
@@ -4129,10 +4131,10 @@ export function EmailViewer({
       {/* Email Content Area */}
       <div className={cn("flex-1 overflow-auto overscroll-contain bg-muted/30", isMobile && "pb-16")}>
 
-      {isThreadView && threadEmails ? (
+      {isThreadView && uniqueThreadEmails ? (
         <div className="max-w-5xl mx-auto py-3 px-2 sm:px-4 space-y-2">
-          {threadEmails.map((msg, idx) => {
-            const isLast = idx === threadEmails.length - 1;
+          {uniqueThreadEmails.map((msg, idx) => {
+            const isLast = idx === uniqueThreadEmails.length - 1;
             const isExpanded = expandedThreadEmailIds.has(msg.id);
             const allowExternal = allowExternalThreadIds.has(msg.id);
             return (

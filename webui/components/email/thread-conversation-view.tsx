@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import { Email, ThreadGroup } from "@/lib/jmap/types";
+import { deduplicateEmails, cleanThreadSubject } from "@/lib/thread-utils";
 import { EMAIL_SANITIZE_CONFIG, collapseBlockedImageContainers, plainTextToSafeHtml } from "@/lib/email-sanitization";
 import { hasMeaningfulHtmlBody } from "@/lib/signature-utils";
 import { transformInlineStyles, transformColorForDarkMode, transformBgColorForDarkMode } from "@/lib/color-transform";
@@ -85,19 +86,22 @@ export function ThreadConversationView({
   const [allowExternalContent, setAllowExternalContent] = useState<Set<string>>(new Set());
   const [showAllEmails, setShowAllEmails] = useState(false);
 
+  // Deduplicate emails (e.g. self-sent emails that exist in both Sent and Inbox)
+  const uniqueEmails = useMemo(() => deduplicateEmails(emails), [emails]);
+
   // emails arrive oldest-first from getThreadEmails — no need to reverse
   // Auto-expand the newest email (last in array) + any unread emails
   useEffect(() => {
-    if (emails.length > 0) {
+    if (uniqueEmails.length > 0) {
       const idsToExpand = new Set<string>();
-      idsToExpand.add(emails[emails.length - 1].id);
-      emails.forEach(email => {
+      idsToExpand.add(uniqueEmails[uniqueEmails.length - 1].id);
+      uniqueEmails.forEach(email => {
         if (!email.keywords?.$seen) idsToExpand.add(email.id);
       });
       setExpandedIds(idsToExpand);
       setShowAllEmails(false);
     }
-  }, [emails]);
+  }, [uniqueEmails]);
 
   const toggleExpanded = (emailId: string) => {
     setExpandedIds(prev => {
@@ -112,7 +116,7 @@ export function ThreadConversationView({
   };
 
   // newest email is last in sorted array — used for bottom reply pills
-  const latestEmail = emails[emails.length - 1];
+  const latestEmail = uniqueEmails[uniqueEmails.length - 1];
 
   if (isLoading) {
     return (
@@ -128,20 +132,12 @@ export function ThreadConversationView({
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      {/* This is the actual top-of-screen header on mobile (it replaces
-          MobileHeader while an email is open), but it's `sticky` inside this
-          pane's own scrollable message list — not a direct child of body —
-          so body's safe-area padding doesn't reach it the way it does
-          MobileHeader. Add the inset directly rather than depend on that
-          cascade holding across whatever scroll container ends up between
-          them. paddingBlock (shorthand) is split into top/bottom so the
-          inset only affects the top, not the existing bottom spacing. */}
       <div className="flex items-center gap-3 px-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 sticky top-0 z-10" style={{ paddingTop: 'calc(var(--density-header-py) + env(safe-area-inset-top, 0px))', paddingBottom: 'var(--density-header-py)' }}>
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors flex-shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="flex-1 min-w-0 font-semibold text-foreground truncate text-base">
-          {thread.latestEmail.subject || t("email_viewer.no_subject")}
+          {cleanThreadSubject(thread.latestEmail.subject) || thread.latestEmail.subject || t("email_viewer.no_subject")}
         </h1>
         {onRestoreToInbox && (
           <Button variant="outline" size="sm" onClick={onRestoreToInbox} className="flex-shrink-0 gap-1.5">
@@ -152,28 +148,22 @@ export function ThreadConversationView({
       </div>
 
       {/* Thread emails */}
-      {/* Same reasoning as the header's top inset above, but for the bottom:
-          this pane sits inside the `fixed inset-0` mobile viewer/composer
-          shell (app/[locale]/page.tsx), so body's safe-area-bottom padding
-          never reaches it either. Without this, the last line of a message
-          — or the Reply/Forward pills below it — renders underneath
-          Android's on-screen navigation bar. */}
       <div className="flex-1 overflow-y-auto min-h-0 pb-[env(safe-area-inset-bottom,0px)]">
         <div className="py-2">
           {(() => {
-            const collapseMiddle = !showAllEmails && emails.length > 3;
-            const hiddenCount = collapseMiddle ? emails.length - 2 : 0;
+            const collapseMiddle = !showAllEmails && uniqueEmails.length > 3;
+            const hiddenCount = collapseMiddle ? uniqueEmails.length - 2 : 0;
             const visibleEmails = collapseMiddle
-              ? [emails[0], emails[emails.length - 1]]
-              : emails;
+              ? [uniqueEmails[0], uniqueEmails[uniqueEmails.length - 1]]
+              : uniqueEmails;
 
             return visibleEmails.map((email, visibleIndex) => {
-              const originalIndex = collapseMiddle && visibleIndex === 1 ? emails.length - 1 : visibleIndex;
+              const originalIndex = collapseMiddle && visibleIndex === 1 ? uniqueEmails.length - 1 : visibleIndex;
               const senderEmail = email.from?.[0]?.email?.toLowerCase();
               const senderIsTrusted = senderEmail
                 ? isSenderTrusted(senderEmail) || (trustedSendersAddressBook && isTrustedAddressBookSender(senderEmail))
                 : false;
-              const isLast = originalIndex === emails.length - 1;
+              const isLast = originalIndex === uniqueEmails.length - 1;
               return (
                 <div key={email.id}>
                   {collapseMiddle && visibleIndex === 1 && (
@@ -213,8 +203,8 @@ export function ThreadConversationView({
           })()}
         </div>
 
-        {/* Gmail-style pill Reply / Forward at bottom */}
-        {latestEmail && (onReply || onForward) && (
+        {/* Gmail-style pill Reply / Reply All / Forward at bottom */}
+        {latestEmail && (onReply || onReplyAll || onForward) && (
           <div className="flex items-center gap-3 px-6 py-5 border-t border-border">
             {onReply && (
               <button
@@ -223,6 +213,15 @@ export function ThreadConversationView({
               >
                 <Reply className="w-4 h-4" />
                 {t("email_viewer.reply")}
+              </button>
+            )}
+            {onReplyAll && (
+              <button
+                onClick={() => onReplyAll(latestEmail)}
+                className="flex items-center gap-2 px-5 py-2 rounded-full border border-border hover:bg-muted transition-colors text-sm font-medium text-foreground"
+              >
+                <ReplyAll className="w-4 h-4" />
+                {t("email_viewer.reply_all")}
               </button>
             )}
             {onForward && (

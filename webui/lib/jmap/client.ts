@@ -5,6 +5,7 @@ import { toWildcardQuery } from "./search-utils";
 import { debug } from "@/lib/debug";
 import { normalizeCalendarEventLike } from "@/lib/calendar-event-normalization";
 import { saveNativeAs } from "@/lib/native-attachment";
+import { deduplicateEmails } from "@/lib/thread-utils";
 
 export class RateLimitError extends Error {
   retryAfterMs: number;
@@ -1797,14 +1798,8 @@ export class JMAPClient implements IJMAPClient {
           namespaceMailboxIds(emails, accountId);
         }
 
-        // Deduplicate by id — the server may return the same email twice
-        // if it appears in multiple mailboxes or due to draft accumulation.
-        const seen = new Set<string>();
-        const unique = (emails as Email[]).filter(e => {
-          if (seen.has(e.id)) return false;
-          seen.add(e.id);
-          return true;
-        });
+        // Deduplicate emails (handles self-sent emails in both Sent and Inbox, identical Message-IDs, etc.)
+        const unique = deduplicateEmails(emails as Email[]);
 
         // Sort oldest first so thread views show chronological order (Gmail style)
         return unique.sort((a: Email, b: Email) =>

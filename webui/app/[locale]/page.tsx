@@ -11,6 +11,7 @@ import type { ComposerDraftData } from "@/components/email/email-composer";
 import { ThreadConversationView } from "@/components/email/thread-conversation-view";
 import { MobileHeader } from "@/components/layout/mobile-header";
 import { ThreadGroup, Email, isUnifiedMailboxId, UNIFIED_ROLE_BY_ID } from "@/lib/jmap/types";
+import { cleanThreadSubject, deduplicateEmails, getThreadParticipants } from "@/lib/thread-utils";
 import { useAccountStore } from "@/stores/account-store";
 import type { UnifiedAccountClient } from "@/lib/unified-mailbox";
 import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
@@ -834,7 +835,8 @@ export default function Home() {
 
     fetchClient.getThreadEmails(threadId).then((emails) => {
       if (!isCancelled) {
-        setCurrentThreadEmails(emails || []);
+        const unique = deduplicateEmails(emails || []);
+        setCurrentThreadEmails(unique);
       }
     }).catch((err) => {
       console.error('Failed to fetch thread emails for viewer:', err);
@@ -1742,10 +1744,15 @@ export default function Home() {
     const originalEmailId = selectedEmail.id;
 
     // RFC 5322 §3.6.4 threading - keep the conversation stitched together.
-    let emailForThreading = selectedEmail;
-    if (!selectedEmail.messageId) {
+    // When replying in a conversation thread, reply to the latest message in the thread
+    const targetEmailForReply = (currentThreadEmails && currentThreadEmails.length > 0)
+      ? currentThreadEmails[currentThreadEmails.length - 1]
+      : selectedEmail;
+
+    let emailForThreading = targetEmailForReply;
+    if (!targetEmailForReply.messageId) {
       try {
-        const fullEmail = await client.getEmail(selectedEmail.id);
+        const fullEmail = await client.getEmail(targetEmailForReply.id);
         if (fullEmail) emailForThreading = fullEmail;
       } catch (e) {
         debug.error('Failed to fetch full email for threading headers:', e);
@@ -1758,7 +1765,7 @@ export default function Home() {
     });
 
     const threadId = selectedEmail.threadId;
-    const cleanSubject = selectedEmail.subject?.replace(/^(Re:\s*)+/i, '') || '(no subject)';
+    const cleanSubject = cleanThreadSubject(selectedEmail.subject) || '(no subject)';
     const replySubject = `Re: ${cleanSubject}`;
 
     // Send reply with just the body text
@@ -1800,7 +1807,11 @@ export default function Home() {
       try {
         const updatedThread = await client.getThreadEmails(threadId);
         if (updatedThread && updatedThread.length > 0) {
-          setCurrentThreadEmails(updatedThread);
+          const unique = deduplicateEmails(updatedThread);
+          setCurrentThreadEmails(unique);
+          if (conversationThread) {
+            setConversationEmails(unique);
+          }
         }
       } catch (e) {
         debug.error('Failed to refresh thread emails after quick reply:', e);
