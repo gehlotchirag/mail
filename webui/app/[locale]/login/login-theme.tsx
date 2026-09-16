@@ -26,46 +26,122 @@ export function LoginStyles() {
   return (
     <style>{`
       .inbox-login {
-        --il-accent: #2F56FF;
-        --il-accent-soft: color-mix(in srgb, var(--il-accent) 10%, transparent);
+        /* Palette Tokens */
+        --color-primary: #0866F5;
+        --color-primary-hover: #0756D8;
+        --color-primary-foreground: #FFFFFF;
+
+        --color-accent: #EEF5FF;
+        --color-accent-foreground: #0866F5;
+
+        --color-background: #F7FAFF;
+        --color-foreground: #0B1739;
+
+        --color-card: #FFFFFF;
+        --color-card-foreground: #0B1739;
+
+        --color-popover: #FFFFFF;
+        --color-popover-foreground: #0B1739;
+
+        --color-border: #E2EAF5;
+        --color-input: #E2EAF5;
+        --color-ring: #35A8FF;
+
+        --color-secondary: #EEF5FF;
+        --color-secondary-foreground: #0866F5;
+
+        --color-muted: #EEF5FF;
+        --color-muted-foreground: #607392;
+
+        --color-destructive: #EF4444;
+        --color-destructive-foreground: #FFFFFF;
+
+        --color-success: #10B981;
+        --color-success-foreground: #FFFFFF;
+
+        --color-warning: #F5A800;
+        --color-warning-foreground: #0B1739;
+
+        --color-unread: #0875FF;
+        --color-star: #F5A800;
+
+        --il-accent: #0866F5;
+        --il-accent-hover: #0756D8;
+        --il-accent-light: #35A8FF;
+        --il-accent-soft: #EEF5FF;
+
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: #F7FAFF;
+        color: #0B1739;
       }
+
+      :root.dark .inbox-login,
+      .dark .inbox-login {
+        --color-background: #070D1E;
+        --color-foreground: #F7FAFF;
+        --color-card: #0B1739;
+        --color-card-foreground: #F7FAFF;
+        --color-popover: #0B1739;
+        --color-popover-foreground: #F7FAFF;
+        --color-border: #1E2D4A;
+        --color-input: #1E2D4A;
+        --color-secondary: #132247;
+        --color-muted: #132247;
+        --color-muted-foreground: #94A3B8;
+        --il-accent-soft: rgba(8, 102, 245, 0.18);
+        background-color: #070D1E;
+        color: #F7FAFF;
+      }
+
       .inbox-login::before {
         content: "";
         position: absolute; inset: 0; pointer-events: none; z-index: 0;
-        background: radial-gradient(ellipse 65% 55% at 50% -8%, var(--il-accent-soft), transparent 70%);
+        background: radial-gradient(ellipse 65% 55% at 50% -8%, rgba(8, 102, 245, 0.12), transparent 70%);
       }
       .inbox-login > * { position: relative; z-index: 1; }
+
       .inbox-login .il-wordmark {
-        background: linear-gradient(90deg, var(--il-accent), #7CACFF);
+        background: linear-gradient(90deg, #0866F5, #35A8FF);
         -webkit-background-clip: text; background-clip: text; color: transparent;
       }
+
       .inbox-login .il-card {
-        box-shadow: 0 24px 64px rgba(10,18,40,.12), 0 8px 24px rgba(10,18,40,.07);
+        background-color: #FFFFFF !important;
+        border-color: #E2EAF5 !important;
+        box-shadow: 0 20px 50px rgba(11, 23, 57, 0.08), 0 4px 12px rgba(11, 23, 57, 0.03);
       }
-      :root.dark .inbox-login .il-card {
+      :root.dark .inbox-login .il-card,
+      .dark .inbox-login .il-card {
+        background-color: #0B1739 !important;
+        border-color: #1E2D4A !important;
         box-shadow: 0 24px 64px rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.3);
       }
+
       .inbox-login .il-chip {
         display: flex; align-items: center; gap: 8px; margin-top: 8px;
         padding: 9px 12px; border-radius: 10px;
-        background: var(--il-accent-soft); border: 1px solid color-mix(in srgb, var(--il-accent) 22%, transparent);
-        font-size: 12.5px; color: var(--il-accent);
+        background: #EEF5FF; border: 1px solid #E2EAF5;
+        font-size: 12.5px; color: #0866F5;
       }
       .inbox-login .il-chip svg {
         width: 15px; height: 15px; flex: none; border-radius: 50%;
-        background: var(--il-accent); color: #fff; padding: 2px;
+        background: #0866F5; color: #FFFFFF; padding: 2px;
       }
-      .inbox-login .il-chip b { font-weight: 700; }
+      .inbox-login .il-chip b { font-weight: 700; color: #0B1739; }
+
       .inbox-login .il-oauth {
         width: 100%; height: 44px; border-radius: 0.75rem;
         display: flex; align-items: center; justify-content: center; gap: 10px;
         font-weight: 500; font-size: 15px;
-        border: 1px solid var(--color-border);
-        background: var(--color-background); color: var(--color-foreground);
-        transition: background-color .2s ease;
+        border: 1px solid #E2EAF5;
+        background: #FFFFFF; color: #0B1739;
+        transition: all .2s ease;
       }
-      .inbox-login .il-oauth:hover:not(:disabled) { background: var(--color-muted); }
+      .inbox-login .il-oauth:hover:not(:disabled) {
+        background: #EEF5FF;
+        border-color: #35A8FF;
+        color: #0866F5;
+      }
       .inbox-login .il-oauth svg { width: 18px; height: 18px; flex: none; }
 
       /* top bar */
@@ -74,37 +150,92 @@ export function LoginStyles() {
         display: flex; align-items: center; justify-content: space-between; gap: 16px;
         padding: 14px 20px calc(14px) 20px;
         padding-top: calc(14px + env(safe-area-inset-top, 0px));
-        border-bottom: 1px solid var(--color-border);
-        background: color-mix(in srgb, var(--color-background) 88%, transparent);
+        border-bottom: 1px solid #E2EAF5;
+        background: rgba(247, 250, 255, 0.88);
         backdrop-filter: blur(10px);
       }
-      .inbox-login .il-topbrand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15px; color: var(--color-foreground); }
+      :root.dark .inbox-login .il-topbar,
+      .dark .inbox-login .il-topbar {
+        border-bottom: 1px solid #1E2D4A;
+        background: rgba(7, 13, 30, 0.88);
+      }
+      .inbox-login .il-topbrand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 15px; color: #0B1739; }
+      :root.dark .inbox-login .il-topbrand,
+      .dark .inbox-login .il-topbrand { color: #F7FAFF; }
       .inbox-login .il-topbrand img { width: 24px; height: 24px; flex: none; }
-      .inbox-login .il-topbrand .il-sub { font-weight: 500; color: var(--color-muted-foreground); font-size: 12.5px; }
+      .inbox-login .il-topbrand .il-sub { font-weight: 500; color: #607392; font-size: 12.5px; }
       .inbox-login .il-topbrand .il-host { font-family: 'JetBrains Mono', ui-monospace, monospace; }
       .inbox-login .il-topright { display: flex; align-items: center; gap: 10px; }
       .inbox-login .il-admin-link {
-        font-size: 12.5px; font-weight: 600; color: var(--color-muted-foreground); text-decoration: none;
+        font-size: 12.5px; font-weight: 600; color: #607392; text-decoration: none;
         display: none;
       }
-      .inbox-login .il-admin-link:hover { color: var(--color-foreground); }
+      .inbox-login .il-admin-link:hover { color: #0866F5; }
       @media (min-width: 560px) { .inbox-login .il-admin-link { display: inline; } }
 
       /* card badge */
       .inbox-login .il-badge {
         display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 800;
-        letter-spacing: .04em; text-transform: uppercase; color: var(--il-accent);
-        background: var(--il-accent-soft); border: 1px solid color-mix(in srgb, var(--il-accent) 22%, transparent);
+        letter-spacing: .04em; text-transform: uppercase; color: #0866F5;
+        background: #EEF5FF; border: 1px solid #E2EAF5;
         padding: 3px 9px; border-radius: 999px; vertical-align: middle; margin-left: 8px;
       }
 
-      /* input icon slots */
+      /* input icon slots & input styling */
       .inbox-login .il-inputwrap { position: relative; }
       .inbox-login .il-inputwrap svg.il-inputicon {
         position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
-        width: 16px; height: 16px; color: var(--color-muted-foreground); pointer-events: none;
+        width: 16px; height: 16px; color: #94A3B8; pointer-events: none;
       }
       .inbox-login .il-inputwrap input { padding-left: 38px !important; }
+
+      .inbox-login input,
+      .inbox-login select {
+        color: #0B1739 !important;
+        border-color: #E2EAF5 !important;
+        background-color: #FFFFFF !important;
+      }
+      .inbox-login input::placeholder {
+        color: #94A3B8 !important;
+      }
+      .inbox-login input:focus,
+      .inbox-login select:focus {
+        border-color: #0866F5 !important;
+        box-shadow: 0 0 0 3px rgba(53, 168, 255, 0.25) !important;
+      }
+
+      :root.dark .inbox-login input,
+      :root.dark .inbox-login select,
+      .dark .inbox-login input,
+      .dark .inbox-login select {
+        color: #F7FAFF !important;
+        border-color: #1E2D4A !important;
+        background-color: #070D1E !important;
+      }
+      :root.dark .inbox-login input::placeholder,
+      .dark .inbox-login input::placeholder {
+        color: #607392 !important;
+      }
+      :root.dark .inbox-login input:focus,
+      :root.dark .inbox-login select:focus,
+      .dark .inbox-login input:focus,
+      .dark .inbox-login select:focus {
+        border-color: #35A8FF !important;
+        box-shadow: 0 0 0 3px rgba(8, 102, 245, 0.35) !important;
+      }
+
+      /* Primary buttons */
+      .inbox-login button[type="submit"],
+      .inbox-login .bg-primary {
+        background-color: #0866F5 !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 4px 14px rgba(8, 102, 245, 0.25) !important;
+      }
+      .inbox-login button[type="submit"]:hover:not(:disabled),
+      .inbox-login .bg-primary:hover:not(:disabled) {
+        background-color: #0756D8 !important;
+        box-shadow: 0 6px 20px rgba(8, 102, 245, 0.35) !important;
+      }
 
       /* soft blurred backdrop hinting at the app behind the card */
       .inbox-login .il-backdrop {
@@ -115,20 +246,29 @@ export function LoginStyles() {
       }
       .inbox-login .il-backdrop .il-bd-row {
         display: flex; align-items: center; gap: 10px; max-width: 640px; margin: 0 auto 14px;
-        padding: 12px 18px; border-radius: 12px; background: var(--color-card); border: 1px solid var(--color-border);
+        padding: 12px 18px; border-radius: 12px; background: #FFFFFF; border: 1px solid #E2EAF5;
       }
-      .inbox-login .il-backdrop .il-bd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--il-accent); flex: none; }
-      .inbox-login .il-backdrop .il-bd-line { height: 9px; border-radius: 5px; background: var(--color-muted); }
+      .inbox-login .il-backdrop .il-bd-dot { width: 8px; height: 8px; border-radius: 50%; background: #0875FF; flex: none; }
+      .inbox-login .il-backdrop .il-bd-line { height: 9px; border-radius: 5px; background: #EEF5FF; }
+
+      :root.dark .inbox-login .il-backdrop .il-bd-row,
+      .dark .inbox-login .il-backdrop .il-bd-row {
+        background: #0B1739; border: 1px solid #1E2D4A;
+      }
+      :root.dark .inbox-login .il-backdrop .il-bd-line,
+      .dark .inbox-login .il-backdrop .il-bd-line {
+        background: #132247;
+      }
 
       /* footer */
       .inbox-login .il-foot {
         display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;
         margin-top: 26px; padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
-        font-size: 12px; color: var(--color-muted-foreground);
+        font-size: 12px; color: #607392;
       }
-      .inbox-login .il-foot a { color: var(--color-muted-foreground); text-decoration: none; }
-      .inbox-login .il-foot a:hover { color: var(--color-foreground); text-decoration: underline; }
-      .inbox-login .il-foot .il-dot { opacity: .5; }
+      .inbox-login .il-foot a { color: #607392; text-decoration: none; }
+      .inbox-login .il-foot a:hover { color: #0866F5; text-decoration: underline; }
+      .inbox-login .il-foot .il-dot { opacity: .5; color: #94A3B8; }
     `}</style>
   );
 }

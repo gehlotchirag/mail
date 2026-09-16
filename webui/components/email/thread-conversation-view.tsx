@@ -184,14 +184,19 @@ export function ThreadConversationView({
               return (
                 <div key={email.id}>
                   {collapseMiddle && visibleIndex === 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllEmails(true)}
-                      className="flex items-center gap-1.5 mx-4 my-1 px-3 h-7 rounded-full border border-border bg-muted hover:bg-muted/70 text-muted-foreground text-xs font-medium transition-colors"
-                    >
-                      <span className="text-base leading-none tracking-widest">···</span>
-                      <span>{hiddenCount} more message{hiddenCount !== 1 ? 's' : ''}</span>
-                    </button>
+                    <div className="flex items-center justify-center my-2.5 px-4 relative">
+                      <div className="absolute inset-0 flex items-center px-4" aria-hidden="true">
+                        <div className="w-full border-t border-border/60" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAllEmails(true)}
+                        className="relative z-10 flex items-center gap-1.5 px-3.5 h-7 rounded-full border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                      >
+                        <span className="text-base leading-none tracking-widest">···</span>
+                        <span>{hiddenCount} more message{hiddenCount !== 1 ? 's' : ''}</span>
+                      </button>
+                    </div>
                   )}
                   <EmailCard
                     email={email}
