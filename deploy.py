@@ -111,19 +111,27 @@ def main():
         raw = open(f, 'rb').read()
         want = hashlib.md5(raw).hexdigest()
         b = base64.b64encode(gzip.compress(raw, 9)).decode()
-        if len(b) > MAX_B64:
-            sys.exit('ERROR: %s is too large for SSM (%d b64 bytes).' % (f, len(b)))
         dest = '%s/%s' % (remote, f[len(local) + 1:])
+        tmp_b64 = '/tmp/_deploy_%s.b64' % hashlib.md5(dest.encode()).hexdigest()[:8]
+
+        CHUNK_SIZE = 40_000
+        chunks = [b[i:i + CHUNK_SIZE] for i in range(0, len(b), CHUNK_SIZE)]
+        for idx, chunk in enumerate(chunks):
+            redir = '>' if idx == 0 else '>>'
+            st, out, err = ssm("echo -n '%s' %s %s" % (chunk, redir, tmp_b64), 60)
+            if st != 'Success':
+                sys.exit('ERROR: failed to send chunk %d for %s: %s' % (idx, f, err[:300]))
+
         # SSM runs as root; without the chown the app's own user loses ownership
         # of files it has to rebuild from.
         st, out, err = ssm(
             'set -e\nmkdir -p "$(dirname "%s")"\ncp -n "%s" "%s.bak-predeploy" 2>/dev/null || true\n'
-            "echo '%s' | base64 -d | gunzip > \"%s\"\nchown ec2-user:ec2-user \"%s\"\n"
-            'md5sum "%s" | cut -d" " -f1\n' % (dest, dest, dest, b, dest, dest, dest), 180)
+            'cat "%s" | base64 -d | gunzip > "%s"\nrm -f "%s"\nchown ec2-user:ec2-user "%s"\n'
+            'md5sum "%s" | cut -d" " -f1\n' % (dest, dest, dest, tmp_b64, dest, tmp_b64, dest, dest), 180)
         got = out.splitlines()[-1] if out else ''
         if st != 'Success' or got != want:
             sys.exit('ERROR: failed to ship %s (%s) %s' % (f, st, err[:300]))
-        print('   sent %s' % dest)
+        print('   sent %s (%d bytes, %d chunk%s)' % (dest, len(raw), len(chunks), 's' if len(chunks) > 1 else ''))
 
     for f in deleted:
         ssm('rm -f "%s/%s"' % (remote, f[len(local) + 1:]), 60)
