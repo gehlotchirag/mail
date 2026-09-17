@@ -357,7 +357,7 @@ export default function BillingPage() {
               <div className="b-planlabel">{p.name}</div>
               {isFreeSignupPlan ? (
                 <>
-                  <div className="b-planprice"><b>Free</b><span>for 12 months</span></div>
+                  <div className="b-planprice"><b>Free</b><span>for 1 month</span></div>
                   <div className="b-plantotal">Then ₹{p.pricePerUser}/mailbox/month{gstNote}</div>
                 </>
               ) : (
@@ -367,7 +367,7 @@ export default function BillingPage() {
                 </>
               )}
               {isFreeSignupPlan
-                ? <div className="b-plansaving">Up to 20 mailboxes included, no card required</div>
+                ? <div className="b-plansaving">Up to 10 mailboxes included, no card required</div>
                 : (zoho && saving > 0 && <div className="b-plansaving">{saving}% under {zoho.plan} (₹{zoho.price})</div>)}
               <ul className="b-planfeatures">
                 {p.features.map(f => <li key={f}>{f}</li>)}
