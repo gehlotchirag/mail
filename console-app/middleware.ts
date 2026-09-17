@@ -28,8 +28,7 @@ export async function middleware(req: NextRequest) {
   // narrow, explicit exception.
   if (pathname === '/') return NextResponse.next();
   if (pathname === '/robots.txt') return NextResponse.next();
-  if (pathname === '/privacy') return NextResponse.redirect(new URL('https://arhamworkspace.tech/privacy'), 301);
-  if (pathname === '/terms') return NextResponse.redirect(new URL('https://arhamworkspace.tech/terms'), 301);
+  if (pathname === '/privacy' || pathname === '/terms') return NextResponse.next();
   if (PUBLIC.some(p => pathname.startsWith(p))) return NextResponse.next();
   // /icon/ is the app icon set (favicons, apple-touch-icon, the logo the
   // landing page and login screen both reference) — a public static asset
