@@ -158,9 +158,9 @@ export default function SignupPage() {
 
           <p className="a-legal">
             By signing up you agree to our{' '}
-            <a href="https://arhamworkspace.tech/terms">Terms of Service</a>{' '}
+            <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>{' '}
             and{' '}
-            <a href="https://arhamworkspace.tech/privacy">Privacy Policy</a>.
+            <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
           </p>
         </div>
       </div>

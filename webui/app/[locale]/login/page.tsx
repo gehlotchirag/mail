@@ -1274,14 +1274,14 @@ export default function LoginPage() {
           <span className="il-dot">·</span>
           <span>End-to-end encrypted</span>
           <span className="il-dot">·</span>
-          <a href={loginPrivacyPolicyUrl || 'https://arhamworkspace.tech/privacy'} target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+          <a href={loginPrivacyPolicyUrl || 'https://inbox.arhamworkspace.tech/privacy'} target="_blank" rel="noopener noreferrer">Privacy Policy</a>
           <span className="il-dot">·</span>
           {/* No admin-configurable Terms URL exists (only Imprint/Privacy/
               Website) — this is a static link, not a fallback for one of
               those, since loginImprintUrl means something different (a
               legal-notice page, not Terms) and mislabeling it would be
               wrong even when the admin has set it. */}
-          <a href="https://arhamworkspace.tech/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+          <a href="https://inbox.arhamworkspace.tech/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
         </p>
 
         {/* Company name & links - below card */}
