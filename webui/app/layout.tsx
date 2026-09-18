@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { getLocale } from "next-intl/server";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
+import { PlayStoreBanner } from "@/components/play-store-banner";
 import { ServiceWorkerRegistration } from "@/components/service-worker-registration";
 import { CapacitorPushRegistration } from "@/components/capacitor-push-registration";
 import { CapacitorBackButton } from "@/components/capacitor-back-button";
@@ -99,6 +100,7 @@ export default async function RootLayout({
         <ServiceWorkerRegistration />
         <CapacitorPushRegistration />
         <CapacitorBackButton />
+        <PlayStoreBanner />
         {children}
         <PWAInstallPrompt />
       </body>

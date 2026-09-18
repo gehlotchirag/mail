@@ -642,11 +642,11 @@ src="https://www.facebook.com/tr?id=1565498614904428&ev=PageView&noscript=1"
     </div>
     <div class="mob-app-content">
       <div class="mob-app-title">INBOX by Arham Workspace</div>
-      <div class="mob-app-sub">Fast, Secure Business Email • 10 Mails Free</div>
+      <div class="mob-app-sub">Rated 4.9 ★ • Google Play Store</div>
     </div>
-    <a id="mobAppInstallBtn" class="mob-app-btn" href="https://inbox.arhamworkspace.tech/signup">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Install App
+    <a id="mobAppInstallBtn" class="mob-app-btn" href="https://play.google.com/store/apps/details?id=tech.arhamworkspace.inbox&hl=en" target="_blank" rel="noopener noreferrer">
+      <svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px"><path d="M3.609 1.814L13.793 12 3.61 22.186a2.38 2.38 0 0 1-.22-.976V2.79c0-.36.08-.7.22-.976zm11.242 11.243l2.25 2.25-11.83 6.64 9.58-8.89zm0-2.114L5.27 2.052l11.83 6.64-2.25 2.251zm1.472 1.057l3.87 2.172c.98.55.98 1.45 0 2l-3.87 2.172-2.38-2.38 2.38-2.38z" /></svg>
+      Install from Play Store
     </a>
   </div>
 </div>
@@ -1320,24 +1320,33 @@ src="https://www.facebook.com/tr?id=1565498614904428&ev=PageView&noscript=1"
       if (installBtn) installBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install App';
     });
 
-    if (installBtn) {
-      var installUrl = buildUtmUrl('https://inbox.arhamworkspace.tech/signup', 'mobile_header_app_install');
-      installBtn.href = installUrl;
+    function buildPlayStoreUrl(defaultContent) {
+      var base = 'https://play.google.com/store/apps/details?id=tech.arhamworkspace.inbox&hl=en';
+      var refParts = [];
+      var hasSource = false;
+      Object.keys(currentUtms).forEach(function (k) {
+        base += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(currentUtms[k]);
+        refParts.push(encodeURIComponent(k) + '=' + encodeURIComponent(currentUtms[k]));
+        if (k === 'utm_source') hasSource = true;
+      });
+      if (!hasSource) {
+        refParts.push('utm_source%3Darham_inbox');
+        refParts.push('utm_medium%3Dmobile_header');
+      }
+      if (defaultContent && !currentUtms['utm_content']) {
+        refParts.push('utm_content%3D' + encodeURIComponent(defaultContent));
+      }
+      if (refParts.length > 0) {
+        base += '&referrer=' + refParts.join('%26');
+      }
+      return base;
+    }
 
-      installBtn.addEventListener('click', function (e) {
-        if (deferredPrompt) {
-          e.preventDefault();
-          deferredPrompt.prompt();
-          deferredPrompt.userChoice.then(function (choice) {
-            if (choice.outcome === 'accepted') {
-              if (typeof fbq === 'function') fbq('trackCustom', 'MobileAppInstalled', currentUtms);
-              if (banner) banner.classList.add('banner-dismissed');
-            }
-            deferredPrompt = null;
-          });
-        } else {
-          // Native PWA not prompted (e.g. iOS or standalone browser) - track conversion and proceed to signup
-          if (typeof fbq === 'function') fbq('trackCustom', 'MobileAppInstallClicked', currentUtms);
+    if (installBtn) {
+      installBtn.href = buildPlayStoreUrl('inbox_mobile_header');
+      installBtn.addEventListener('click', function () {
+        if (typeof fbq === 'function') {
+          fbq('trackCustom', 'PlayStoreInstallClicked', currentUtms);
         }
       });
     }
