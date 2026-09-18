@@ -50,14 +50,14 @@ export default function LoginPage() {
 
             <form onSubmit={submit}>
               <div className="a-field">
-                <label className="a-label" htmlFor="email">Email address</label>
+                <label className="a-label" htmlFor="email">Email or domain name</label>
                 <div className="a-inputwrap">
                   <svg className="a-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="M22 6l-10 7L2 6" /></svg>
                   <input
-                    id="email" type="email" className="a-input" placeholder="admin@yourcompany.com" required
+                    id="email" type="text" className="a-input" placeholder="admin@yourcompany.com or yourcompany.com" required
                     value={form.email}
                     onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                    autoComplete="email"
+                    autoComplete="username"
                   />
                 </div>
               </div>

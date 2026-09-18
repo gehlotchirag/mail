@@ -88,6 +88,8 @@ export async function initDb(): Promise<void> {
 
   // Adopt an existing dev table created before scoping existed.
   await query(`ALTER TABLE email_suppressions ADD COLUMN IF NOT EXISTS org_id UUID`);
+  await query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS phone TEXT`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_organizations_phone ON organizations (phone)`);
   await query(`ALTER TABLE email_suppressions DROP CONSTRAINT IF EXISTS email_suppressions_pkey`);
   await query(
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_email_suppressions_org_email

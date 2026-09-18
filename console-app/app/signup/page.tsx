@@ -1,6 +1,6 @@
 'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthStyles, AuthFonts, AuthPanel } from '../auth-theme';
 import { trackPixel } from '@/lib/pixel';
 
@@ -34,13 +34,28 @@ function PasswordHints({ pw }: { pw: string }) {
   );
 }
 
-/* ── Page ─────────────────────────────────────────────────────────────────── */
-export default function SignupPage() {
+/* ── Form Component ───────────────────────────────────────────────────────── */
+function SignupForm() {
   const router = useRouter();
-  const [form, setForm] = useState({ orgName: '', email: '', password: '' });
+  const searchParams = useSearchParams();
+  const [form, setForm] = useState({
+    orgName: '',
+    domain: '',
+    phone: '',
+    email: '',
+    password: ''
+  });
   const [showHints, setShowHints] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const domainParam = searchParams.get('domain');
+    if (domainParam) {
+      const clean = domainParam.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+      setForm(p => ({ ...p, domain: clean }));
+    }
+  }, [searchParams]);
 
   const pwValid = PW_REQS.every(r => r.met(form.password));
 
@@ -56,7 +71,13 @@ export default function SignupPage() {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.orgName.trim(), email: form.email.trim().toLowerCase(), password: form.password }),
+        body: JSON.stringify({
+          name: form.orgName.trim(),
+          domain: form.domain.trim().toLowerCase() || undefined,
+          phone: form.phone.trim() || undefined,
+          email: form.email.trim().toLowerCase(),
+          password: form.password
+        }),
       });
       if (res.ok) {
         trackPixel('CompleteRegistration', { content_name: 'Lite plan signup' });
@@ -108,6 +129,35 @@ export default function SignupPage() {
                   />
                 </div>
                 <div className="a-hint">This is how your workspace will appear to users.</div>
+              </div>
+
+              <div className="a-field">
+                <label className="a-label" htmlFor="domain">Domain name</label>
+                <div className="a-inputwrap">
+                  <svg className="a-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20 15 15 0 010-20z"/></svg>
+                  <input
+                    id="domain" type="text" className="a-input" placeholder="yourcompany.com"
+                    value={form.domain}
+                    onChange={e => setForm(p => ({ ...p, domain: e.target.value }))}
+                    autoComplete="url"
+                    spellCheck="false"
+                  />
+                </div>
+                <div className="a-hint">Your business website or email domain (e.g. acme.com).</div>
+              </div>
+
+              <div className="a-field">
+                <label className="a-label" htmlFor="phone">Phone number</label>
+                <div className="a-inputwrap">
+                  <svg className="a-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                  <input
+                    id="phone" type="tel" className="a-input" placeholder="+91 98765 43210"
+                    value={form.phone}
+                    onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
+                    autoComplete="tel"
+                  />
+                </div>
+                <div className="a-hint">For account recovery and setup support.</div>
               </div>
 
               <div className="a-field">
@@ -165,5 +215,14 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── Page Root ────────────────────────────────────────────────────────────── */
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupForm />
+    </Suspense>
   );
 }

@@ -5,6 +5,7 @@ import { createSession } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { issueVerificationEmail } from '@/lib/tokens';
 import { PLANS } from '@/lib/plans';
+import { provisionDomain, normaliseDomain, isValidDomain } from '@/lib/domain-provisioning';
 
 export async function POST(req: Request) {
   // 5 signups per hour per IP
@@ -15,7 +16,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { name, email, password } = await req.json() as { name?: string; email?: string; password?: string };
+    const { name, email, password, domain, phone } = await req.json() as {
+      name?: string;
+      email?: string;
+      password?: string;
+      domain?: string;
+      phone?: string;
+    };
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'name, email and password are required' }, { status: 400 });
     }
@@ -23,18 +30,39 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
     }
 
+    const cleanDomain = domain ? normaliseDomain(domain) : null;
+    if (cleanDomain && !isValidDomain(cleanDomain)) {
+      return NextResponse.json({ error: 'Invalid domain name format (e.g. yourcompany.com)' }, { status: 400 });
+    }
+
     await ensureDb();
+
+    if (cleanDomain) {
+      const existingDomain = await queryOne('SELECT id FROM domains WHERE domain = $1', [cleanDomain]);
+      if (existingDomain) {
+        return NextResponse.json({ error: 'This domain name is already registered by another organization' }, { status: 409 });
+      }
+    }
 
     const existing = await queryOne('SELECT id FROM organizations WHERE owner_email = $1', [email.toLowerCase()]);
     if (existing) return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
 
+    const cleanPhone = phone && phone.trim().length > 0 ? phone.trim() : null;
     const hash = await bcrypt.hash(password, 12);
     const org = await queryOne<{ id: string }>(`
-      INSERT INTO organizations (name, owner_email, password_hash)
-      VALUES ($1, $2, $3) RETURNING id
-    `, [name, email.toLowerCase(), hash]);
+      INSERT INTO organizations (name, owner_email, password_hash, phone)
+      VALUES ($1, $2, $3, $4) RETURNING id
+    `, [name, email.toLowerCase(), hash, cleanPhone]);
 
     if (!org) return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
+
+    if (cleanDomain) {
+      try {
+        await provisionDomain(org.id, cleanDomain);
+      } catch (domainErr) {
+        console.warn(`[signup] Could not auto-provision domain "${cleanDomain}":`, domainErr);
+      }
+    }
 
     // Every new org is provisioned straight onto the free Lite offer — 20
     // mailboxes, free for a year, no card — not the old 14-day/3-mailbox

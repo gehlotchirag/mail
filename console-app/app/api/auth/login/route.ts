@@ -14,19 +14,30 @@ export async function POST(req: Request) {
 
   try {
     const { email, password } = await req.json() as { email?: string; password?: string };
-    if (!email || !password) return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
+    if (!email || !password) return NextResponse.json({ error: 'Email or domain and password required' }, { status: 400 });
 
     await ensureDb();
-    const org = await queryOne<{ id: string; name: string; password_hash: string }>(
-      'SELECT id, name, password_hash FROM organizations WHERE owner_email = $1',
-      [email.toLowerCase()]
+    const rawInput = email.trim().toLowerCase();
+    const cleanDomain = rawInput.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+    // Allow sign-in by owner email, registered domain, or phone
+    const org = await queryOne<{ id: string; name: string; owner_email: string; password_hash: string }>(
+      `SELECT o.id, o.name, o.owner_email, o.password_hash 
+       FROM organizations o 
+       LEFT JOIN domains d ON d.org_id = o.id 
+       WHERE o.owner_email = $1 
+          OR d.domain = $2 
+          OR o.phone = $1
+          OR REPLACE(REPLACE(REPLACE(COALESCE(o.phone, ''), ' ', ''), '-', ''), '+', '') = REPLACE(REPLACE(REPLACE($1, ' ', ''), '-', ''), '+', '')
+       LIMIT 1`,
+      [rawInput, cleanDomain]
     );
-    if (!org) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    if (!org) return NextResponse.json({ error: 'Invalid email/domain or password' }, { status: 401 });
 
     const valid = await bcrypt.compare(password, org.password_hash);
-    if (!valid) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+    if (!valid) return NextResponse.json({ error: 'Invalid email/domain or password' }, { status: 401 });
 
-    const token = await createSession({ orgId: org.id, email: email.toLowerCase(), name: org.name });
+    const token = await createSession({ orgId: org.id, email: org.owner_email, name: org.name });
     const res = NextResponse.json({ ok: true });
     res.cookies.set('console_token', token, {
       httpOnly: true, secure: process.env.NODE_ENV === 'production',
