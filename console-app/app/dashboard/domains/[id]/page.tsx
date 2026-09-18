@@ -39,7 +39,7 @@ function toAutoResult(d: Partial<AutoResult> & { error?: string }): AutoResult {
   return { ok: false, results: [{ record: 'request', status: 'error', error: d.error ?? 'Unexpected response from the DNS provider' }] };
 }
 
-const STEPS = ['Verify Ownership', 'Configure DNS', 'Done'];
+const STEPS = ['1. Verify Domain', '2. Configure DNS', '3. Personalised Email'];
 
 // autoSupport = we have a real API integration for auto-adding records
 const PROVIDERS: Record<string, { label: string; color: string; logo: string; autoSupport: boolean }> = {
@@ -123,10 +123,36 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
   // Real mailboxes on this domain, from the same source /dashboard/users reads.
   const [mailboxes, setMailboxes] = useState<FluxUserLite[]>([]);
   const [mailboxesLoaded, setMailboxesLoaded] = useState(false);
+  const [creatingMailbox, setCreatingMailbox] = useState(false);
+  const [autoMailboxEmail, setAutoMailboxEmail] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [isOnboarding, setIsOnboarding] = useState(false);
+
+  async function ensurePersonalisedMailbox(dId = domainId) {
+    if (!dId) return;
+    setCreatingMailbox(true);
+    try {
+      const res = await fetch(`/api/domains/${dId}/auto-mailbox`, { method: 'POST' });
+      const data = await res.json() as { ok?: boolean; mailbox?: string };
+      if (data.ok && data.mailbox) {
+        setAutoMailboxEmail(data.mailbox);
+      }
+      const uRes = await fetch('/api/users');
+      if (uRes.ok) {
+        const d = await uRes.json() as { domains: Array<{ domainId: string; users: FluxUserLite[] }> };
+        const mine = d.domains.find(x => x.domainId === dId);
+        if (mine?.users?.length) {
+          setMailboxes(mine.users);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to auto-provision mailbox:', err);
+    } finally {
+      setCreatingMailbox(false);
+    }
+  }
 
   function loadDomain(id: string) {
     return fetch(`/api/domains/${id}`)
@@ -135,7 +161,8 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
         setDomain(d);
         setRecords(d.records ?? []);
         setVerifyRecord(d.verifyRecord ?? null);
-        if (d.verified) setStep(1);
+        const isOb = typeof window !== 'undefined' && window.location.search.includes('onboarding=1');
+        if (d.verified && !isOb) setStep(1);
         if (d.dnsProvider && PROVIDERS[d.dnsProvider]) setActiveProvider(d.dnsProvider);
         return d;
       });
@@ -453,10 +480,14 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
             </div>
             <div>
               <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1rem' }}>
-                Activate your business email in 2 steps
+                {step === 0 ? 'Step 1 of 2: Verify Domain Ownership' : step === 1 ? 'Step 2 of 2: Configure & Verify DNS' : '🎉 Setup Complete!'}
               </div>
               <div style={{ color: 'var(--d-muted)', fontSize: '0.84rem', marginTop: 2 }}>
-                1. Verify domain ownership &nbsp;→&nbsp; 2. Configure DNS. Your primary mailbox is already provisioned!
+                {step === 0
+                  ? `Verify that you own ${domain.domain}, then click Next to configure DNS.`
+                  : step === 1
+                  ? `Add MX & DKIM records for ${domain.domain}, then click Next to activate your personalised email.`
+                  : `Your personalised business email on ${domain.domain} is ready to use!`}
               </div>
             </div>
           </div>
@@ -464,7 +495,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
             background: '#0866F5', color: '#fff', fontSize: '0.75rem', fontWeight: 700,
             padding: '5px 12px', borderRadius: 20, letterSpacing: 0.3
           }}>
-            Quick Onboarding
+            {step === 0 ? 'Step 1/2' : step === 1 ? 'Step 2/2' : 'Completed'}
           </span>
         </div>
       )}
@@ -487,10 +518,8 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
         </button>
       </div>
 
-      {/* Health matrix — always visible once ownership is verified; the four
-          boxes are independent failure modes (ownership / routing / DKIM /
-          sending), each backed by its own field in GET /api/domains/[id]. */}
-      {domain.verified && (
+      {/* Health matrix — visible once ownership is verified (hidden on Step 0 during onboarding to keep focus) */}
+      {domain.verified && (!isOnboarding || step >= 1) && (
         <div className="d-hero" style={{ marginBottom: 20 }}>
           <div className="d-hero-top">
             <div>
@@ -590,10 +619,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* Migration readiness safeguard — real data from /migration-readiness:
-          addresses that exist in a connected source mailbox but have no
-          mailbox here yet. Switching MX before these exist means new mail to
-          them bounces the instant it takes effect. */}
+      {/* Migration readiness safeguard */}
       {readiness?.checked && (readiness.missing?.length ?? 0) > 0 && (
         <div className="d-safeguard" style={{ marginBottom: 20 }}>
           <div className="d-safeguard-top">
@@ -626,45 +652,87 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
         {STEPS.map((s, i) => (
           <div key={s} onClick={() => i < step && setStep(i)}
             style={{ flex: 1, padding: '.75rem 1rem', fontSize: '0.85rem', fontWeight: i === step ? 700 : 500, cursor: i < step ? 'pointer' : 'default', borderRight: i < STEPS.length - 1 ? '1px solid var(--d-border)' : 'none', background: i === step ? 'var(--d-accent)' : i < step ? 'var(--d-accent-soft)' : 'var(--d-surface)', color: i === step ? '#fff' : i < step ? 'var(--d-green)' : 'var(--d-muted)' }}>
-            <span style={{ marginRight: '.4rem', opacity: .8 }}>{i < step ? '✓' : `${i + 1}.`}</span>{s}
+            <span style={{ marginRight: '.4rem', opacity: .8 }}>{i < step ? '✓' : ''}</span>{s}
           </div>
         ))}
       </div>
 
-      {/* ── Step 0: Verify ── */}
+      {/* ── Step 0: Verify Domain Ownership ── */}
       {step === 0 && (
-        domain.verified ? (
-          <div className="d-addcard" style={{ marginBottom: 20 }}>
-            <p style={{ color: 'var(--d-green)', fontWeight: 600, marginBottom: '.75rem' }}>✓ Domain already verified.</p>
-            <button onClick={() => setStep(1)} className="d-btn d-btn-primary">Next: Configure DNS →</button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
-            <div className="d-addcard">
-              <div style={{ fontWeight: 700, color: 'var(--d-ink2)', marginBottom: '.25rem' }}>
-                {detected ? `Verify via ${PROVIDERS[detected]?.label} — one click` : 'Connect your DNS provider to verify instantly'}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
+          {domain.verified ? (
+            <div className="d-addcard" style={{
+              background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.02) 100%)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              padding: '24px 20px',
+              borderRadius: 12
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#22c55e', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
+                  ✓
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, color: '#15803d', fontSize: '1.05rem' }}>
+                    Domain Ownership Verified
+                  </div>
+                  <div style={{ color: 'var(--d-muted)', fontSize: '0.85rem', marginTop: 2 }}>
+                    Ownership of <strong>{domain.domain}</strong> is confirmed. Click Next to configure DNS records.
+                  </div>
+                </div>
               </div>
-              <p style={{ color: 'var(--d-muted)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
-                We&apos;ll add the verification TXT record automatically — no copy-pasting.
-              </p>
-              <ProviderTabs detected={detected} providers={providerList} active={activeProvider} onSwitch={switchProvider} />
-              {renderProviderPanel('verify')}
-              {verifyResult && <Alert ok={verifyResult.ok} msg={verifyResult.message} />}
+              <div style={{ marginTop: 18, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setStep(1)}
+                  className="d-btn d-btn-primary"
+                  style={{
+                    background: '#0866F5',
+                    padding: '11px 26px',
+                    fontWeight: 700,
+                    fontSize: '0.95rem',
+                    boxShadow: '0 2px 8px rgba(8, 102, 245, 0.25)'
+                  }}
+                >
+                  Next: Configure DNS →
+                </button>
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="d-addcard">
+                <div style={{ fontWeight: 700, color: 'var(--d-ink2)', marginBottom: '.25rem' }}>
+                  {detected ? `Verify via ${PROVIDERS[detected]?.label} — one click` : 'Connect your DNS provider to verify instantly'}
+                </div>
+                <p style={{ color: 'var(--d-muted)', fontSize: '0.82rem', marginBottom: '1.25rem' }}>
+                  We&apos;ll add the verification TXT record automatically — no copy-pasting.
+                </p>
+                <ProviderTabs detected={detected} providers={providerList} active={activeProvider} onSwitch={switchProvider} />
+                {renderProviderPanel('verify')}
+                {verifyResult && <Alert ok={verifyResult.ok} msg={verifyResult.message} />}
+              </div>
 
-            <div className="d-addcard">
-              <div style={{ fontWeight: 700, color: 'var(--d-ink2)', marginBottom: '.25rem' }}>Or add the TXT record manually</div>
-              <p style={{ color: 'var(--d-muted)', fontSize: '0.82rem', marginBottom: '1rem' }}>Add this in your DNS provider&apos;s dashboard, then click Check.</p>
-              {verifyRecord && <DnsRow rec={verifyRecord} idx={0} copiedIdx={copiedIdx} onCopy={copy} />}
-              <button onClick={triggerVerify} disabled={verifying} className="d-btn d-btn-primary" style={{ marginTop: '.5rem' }}>
-                {verifying ? 'Checking DNS…' : 'Check Verification'}
-              </button>
-            </div>
-          </div>
-        )
+              <div className="d-addcard">
+                <div style={{ fontWeight: 700, color: 'var(--d-ink2)', marginBottom: '.25rem' }}>Or add the TXT record manually</div>
+                <p style={{ color: 'var(--d-muted)', fontSize: '0.82rem', marginBottom: '1rem' }}>Add this in your DNS provider&apos;s dashboard, then click Check.</p>
+                {verifyRecord && <DnsRow rec={verifyRecord} idx={0} copiedIdx={copiedIdx} onCopy={copy} />}
+                <div style={{ marginTop: '1.25rem', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={triggerVerify} disabled={verifying} className="d-btn d-btn-primary">
+                    {verifying ? 'Checking DNS…' : 'Check Verification'}
+                  </button>
+                  <button
+                    onClick={() => setStep(1)}
+                    className="d-btn"
+                    style={{ background: 'var(--d-surface2)', border: '1px solid var(--d-border)', fontWeight: 600 }}
+                  >
+                    Next: Configure DNS →
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
-      {/* ── Step 1: Configure DNS ── */}
+      {/* ── Step 1: Configure & Verify DNS ── */}
       {step === 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }} id="dns-records">
           <div className="d-addcard">
@@ -715,48 +783,78 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
 
-          <button onClick={() => setStep(2)} className="d-btn d-btn-primary" style={{ alignSelf: 'flex-start' }}>Mark done &amp; finish →</button>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+            <button
+              onClick={() => {
+                setStep(2);
+                ensurePersonalisedMailbox();
+              }}
+              className="d-btn d-btn-primary"
+              style={{
+                background: '#0866F5',
+                padding: '11px 26px',
+                fontWeight: 700,
+                fontSize: '0.95rem',
+                boxShadow: '0 2px 8px rgba(8, 102, 245, 0.25)'
+              }}
+            >
+              Next: Create &amp; Activate Personalised Email →
+            </button>
+            <button onClick={refreshDomain} className="d-btn" disabled={refreshing}>
+              <RefreshIcon /> {refreshing ? 'Verifying DNS…' : 'Check DNS Records'}
+            </button>
+            <button onClick={() => setStep(0)} className="d-btn" style={{ background: 'transparent' }}>
+              ← Back to Verification
+            </button>
+          </div>
         </div>
       )}
 
-      {/* ── Step 2: Done ── */}
+      {/* ── Step 2: Personalised Email Created ── */}
       {step === 2 && (
-        <div className="d-addcard" style={{ textAlign: 'center', marginBottom: 20, padding: '32px 24px' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🎉</div>
-          <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1.4rem', marginBottom: '.5rem' }}>
-            {domain.domain} is set up &amp; ready!
+        <div className="d-addcard" style={{ textAlign: 'center', marginBottom: 20, padding: '36px 24px' }}>
+          <div style={{ fontSize: '3.2rem', marginBottom: '0.75rem' }}>🎉</div>
+          <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1.45rem', marginBottom: '.5rem' }}>
+            Your Personalised Business Email is Ready!
           </div>
           <p style={{ color: 'var(--d-muted)', fontSize: '0.92rem', marginBottom: '1.75rem' }}>
-            Domain ownership verified and DNS configured.
+            Domain ownership verified, DNS configured, and your personalised email is created on <strong>{domain.domain}</strong>.
           </p>
 
-          {mailboxes.length > 0 && (
+          {creatingMailbox ? (
+            <div style={{ padding: '24px', color: 'var(--d-muted)', fontSize: '0.95rem' }}>
+              ⏳ Provisioning your personalised business mailbox...
+            </div>
+          ) : (mailboxes.length > 0 || autoMailboxEmail) ? (
             <div style={{
-              background: 'var(--d-surface2)',
-              border: '1px solid var(--d-border)',
-              borderRadius: 12,
-              padding: '16px 20px',
-              maxWidth: 480,
-              margin: '0 auto 2rem',
+              background: 'linear-gradient(135deg, rgba(8, 102, 245, 0.04) 0%, rgba(37, 99, 235, 0.02) 100%)',
+              border: '1.5px solid rgba(8, 102, 245, 0.25)',
+              borderRadius: 14,
+              padding: '20px 24px',
+              maxWidth: 520,
+              margin: '0 auto 2.2rem',
               textAlign: 'left',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+              boxShadow: '0 4px 14px rgba(8, 102, 245, 0.06)'
             }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--d-accent)', letterSpacing: 0.8, marginBottom: 6 }}>
-                Primary Business Mailbox
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#0866F5', letterSpacing: 0.8 }}>
+                  Personalised Business Mailbox
+                </span>
+                <span className="d-pill ok" style={{ flexShrink: 0 }}>Active &amp; Ready</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ fontWeight: 700, color: 'var(--d-ink)', fontSize: 15, wordBreak: 'break-all' }}>
-                  {mailboxes[0].emailAddress}
+                <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1.25rem', wordBreak: 'break-all' }}>
+                  {mailboxes[0]?.emailAddress ?? autoMailboxEmail}
                 </div>
-                <span className="d-pill ok" style={{ flexShrink: 0 }}>Active</span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--d-muted)', marginTop: 4 }}>
-                Ready to send and receive business emails right away.
+              <div style={{ fontSize: 12.5, color: 'var(--d-muted)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 16 }}>
+                <span>✓ Domain: <strong>{domain.domain}</strong></span>
+                <span>✓ Storage: <strong>10 GB included</strong></span>
               </div>
             </div>
-          )}
+          ) : null}
 
-          <div style={{ display: 'flex', gap: '.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '.85rem', justifyContent: 'center', flexWrap: 'wrap' }}>
             <a
               href="https://app.arhamworkspace.tech"
               target="_blank"
@@ -766,20 +864,21 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
                 background: '#0866F5',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '10px 22px',
-                fontSize: '0.95rem',
+                gap: 8,
+                padding: '12px 28px',
+                fontSize: '1rem',
                 fontWeight: 700,
-                boxShadow: '0 2px 8px rgba(8, 102, 245, 0.25)',
+                boxShadow: '0 3px 12px rgba(8, 102, 245, 0.3)',
+                borderRadius: 8
               }}
             >
               Open INBOX Webmail ↗
             </a>
-            <a href="/dashboard/users" className="d-btn" style={{ padding: '10px 18px', fontSize: '0.95rem' }}>
+            <a href="/dashboard/users" className="d-btn" style={{ padding: '12px 20px', fontSize: '0.95rem' }}>
               Add Team Mailboxes
             </a>
-            <a href="/dashboard/migration" className="d-btn" style={{ padding: '10px 18px', fontSize: '0.95rem' }}>
-              Import Email
+            <a href="/dashboard/migration" className="d-btn" style={{ padding: '12px 20px', fontSize: '0.95rem' }}>
+              Import Emails
             </a>
           </div>
         </div>
