@@ -7,6 +7,7 @@ import { issueVerificationEmail } from '@/lib/tokens';
 import { PLANS, resolvePlanLimits } from '@/lib/plans';
 import { provisionDomain, normaliseDomain, isValidDomain } from '@/lib/domain-provisioning';
 import { createUser } from '@/lib/flux';
+import { tryAutoConfigureDns } from '@/lib/dns-auto-config';
 
 export async function POST(req: Request) {
   // 5 signups per hour per IP
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
       phone?: string;
     };
     if (!name || !email || !password) {
-      return NextResponse.json({ error: 'name, email and password are required' }, { status: 400 });
+      return NextResponse.json({ error: 'Name, email and password are required' }, { status: 400 });
     }
     if (password.length < 8) {
       return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
@@ -33,27 +34,25 @@ export async function POST(req: Request) {
 
     const cleanDomain = domain ? normaliseDomain(domain) : null;
     if (cleanDomain && !isValidDomain(cleanDomain)) {
-      return NextResponse.json({ error: 'Invalid domain name format (e.g. yourcompany.com)' }, { status: 400 });
+      return NextResponse.json({ error: 'Please enter a valid domain name (e.g. yourcompany.com)' }, { status: 400 });
     }
 
     await ensureDb();
 
-    if (cleanDomain) {
-      const existingDomain = await queryOne('SELECT id FROM domains WHERE domain = $1', [cleanDomain]);
-      if (existingDomain) {
-        return NextResponse.json({ error: 'This domain name is already registered by another organization' }, { status: 409 });
-      }
+    // Check email not already registered
+    const existing = await queryOne('SELECT id FROM organizations WHERE owner_email = $1', [email.toLowerCase()]);
+    if (existing) {
+      return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
     }
 
-    const existing = await queryOne('SELECT id FROM organizations WHERE owner_email = $1', [email.toLowerCase()]);
-    if (existing) return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
+    const passwordHash = await bcrypt.hash(password, 12);
+    const cleanPhone = (phone ?? '').trim().slice(0, 32);
 
-    const cleanPhone = phone && phone.trim().length > 0 ? phone.trim() : null;
-    const hash = await bcrypt.hash(password, 12);
     const org = await queryOne<{ id: string }>(`
       INSERT INTO organizations (name, owner_email, password_hash, phone)
-      VALUES ($1, $2, $3, $4) RETURNING id
-    `, [name, email.toLowerCase(), hash, cleanPhone]);
+      VALUES ($1, $2, $3, $4)
+      RETURNING id
+    `, [name, email.toLowerCase(), passwordHash, cleanPhone || null]);
 
     if (!org) return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });
 
@@ -61,10 +60,8 @@ export async function POST(req: Request) {
     // mailboxes, free for a year, no card — not the old 14-day/3-mailbox
     // `trial` plan. `status: 'trial'` is deliberate, not a typo: it reuses
     // getActiveSub()'s existing trial-expiry check (status='trial' AND
-    // trial_ends_at in the past => no active subscription) as the enforcement
-    // for the free year, so nothing new has to detect the free period ending.
-    // The seat cap is likewise just `max_users`, enforced by the ordinary
-    // per-plan seat check every other tier already goes through.
+    // trial_ends_at > NOW()) so the rest of the codebase keeps working with
+    // zero changes. See PLANS.lite.
     await query(`
       INSERT INTO subscriptions (org_id, plan, max_users, status, trial_ends_at)
       VALUES ($1, 'lite', $2, 'trial', NOW() + ($3 || ' days')::interval)
@@ -72,6 +69,8 @@ export async function POST(req: Request) {
 
     let domainId: string | null = null;
     let autoMailbox: string | null = null;
+    let dnsProvider: string | null = null;
+    let autoConfigured = false;
 
     if (cleanDomain) {
       try {
@@ -79,14 +78,12 @@ export async function POST(req: Request) {
         if (prov?.id) {
           domainId = prov.id;
 
-          // Automatically provision primary business mailbox for the user
+          // Automatically provision primary business mailbox using user's first name
           try {
-            let username = 'admin';
+            const firstName = name.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            let username = firstName.length >= 2 ? firstName : 'admin';
             if (email.toLowerCase().endsWith(`@${cleanDomain}`)) {
               username = email.toLowerCase().split('@')[0];
-            } else {
-              const handle = email.toLowerCase().split('@')[0].replace(/[^a-z0-9._-]/g, '');
-              if (handle.length >= 2) username = handle;
             }
 
             const limits = resolvePlanLimits({ plan: 'lite', max_users: PLANS.lite.freeIncludedUsers });
@@ -104,6 +101,15 @@ export async function POST(req: Request) {
             }
           } catch (mboxErr) {
             console.warn('[signup] Could not auto-create primary mailbox:', mboxErr);
+          }
+
+          // Auto-detect DNS provider (GoDaddy, etc.) and auto-configure if credentials available
+          try {
+            const autoDns = await tryAutoConfigureDns(prov.id, cleanDomain, prov.verifyToken);
+            dnsProvider = autoDns.provider;
+            autoConfigured = autoDns.autoConfigured;
+          } catch (dnsErr) {
+            console.warn('[signup] Auto-DNS configure check error:', dnsErr);
           }
         }
       } catch (domainErr) {
@@ -124,6 +130,8 @@ export async function POST(req: Request) {
       domainId,
       domain: cleanDomain,
       mailbox: autoMailbox,
+      dnsProvider,
+      autoConfigured,
     }, { status: 201 });
     res.cookies.set('console_token', token, {
       httpOnly: true, secure: process.env.NODE_ENV === 'production',

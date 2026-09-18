@@ -36,17 +36,17 @@ export async function POST(req: Request, { params }: Params) {
       body = await req.json();
     } catch { /* empty body is ok */ }
 
-    // Derive personalised username from session or desired name
+    // Derive personalised username from user's first name or desired name
     let username = 'admin';
     if (body.desiredUsername && /^[a-z0-9._-]+$/i.test(body.desiredUsername)) {
       username = body.desiredUsername.toLowerCase();
+    } else if (session.name) {
+      const firstName = session.name.trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (firstName.length >= 2) username = firstName;
     } else if (session.email?.toLowerCase().endsWith(`@${domain.domain}`)) {
       username = session.email.toLowerCase().split('@')[0];
     } else if (session.email) {
       const handle = session.email.toLowerCase().split('@')[0].replace(/[^a-z0-9._-]/g, '');
-      if (handle.length >= 2) username = handle;
-    } else if (session.name) {
-      const handle = session.name.toLowerCase().replace(/[^a-z0-9]/g, '');
       if (handle.length >= 2) username = handle;
     }
 

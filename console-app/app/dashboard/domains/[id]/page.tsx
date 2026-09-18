@@ -129,6 +129,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [isOnboarding, setIsOnboarding] = useState(false);
+  const [isAutoConfigured, setIsAutoConfigured] = useState(false);
 
   async function ensurePersonalisedMailbox(dId = domainId) {
     if (!dId) return;
@@ -162,20 +163,35 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
         setRecords(d.records ?? []);
         setVerifyRecord(d.verifyRecord ?? null);
         const isOb = typeof window !== 'undefined' && window.location.search.includes('onboarding=1');
-        if (d.verified && !isOb) setStep(1);
+        const isAuto = typeof window !== 'undefined' && window.location.search.includes('autoconfigured=1');
+        if (isAuto) {
+          setStep(2);
+        } else if (d.verified && !isOb) {
+          setStep(1);
+        }
         if (d.dnsProvider && PROVIDERS[d.dnsProvider]) setActiveProvider(d.dnsProvider);
         return d;
       });
   }
 
   useEffect(() => {
+    let autoconfig = false;
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
       if (p.get('onboarding') === '1') setIsOnboarding(true);
+      if (p.get('autoconfigured') === '1') {
+        setIsAutoConfigured(true);
+        autoconfig = true;
+        setStep(2);
+      }
     }
     params.then(({ id }) => {
       setDomainId(id);
-      loadDomain(id);
+      loadDomain(id).then(d => {
+        if (autoconfig || (d.verified && d.mxLive)) {
+          setStep(2);
+        }
+      });
       fetch('/api/users')
         .then(r => r.json() as Promise<{ domains: Array<{ domainId: string; users: FluxUserLite[] }> }>)
         .then(d => {
@@ -458,8 +474,12 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
 
       {isOnboarding && (
         <div style={{
-          background: 'linear-gradient(135deg, rgba(8, 102, 245, 0.08) 0%, rgba(37, 99, 235, 0.03) 100%)',
-          border: '1px solid rgba(8, 102, 245, 0.25)',
+          background: isAutoConfigured
+            ? 'linear-gradient(135deg, rgba(22, 163, 74, 0.09) 0%, rgba(34, 197, 94, 0.03) 100%)'
+            : 'linear-gradient(135deg, rgba(8, 102, 245, 0.08) 0%, rgba(37, 99, 235, 0.03) 100%)',
+          border: isAutoConfigured
+            ? '1px solid rgba(22, 163, 74, 0.35)'
+            : '1px solid rgba(8, 102, 245, 0.25)',
           borderRadius: 12,
           padding: '16px 20px',
           marginBottom: 20,
@@ -468,23 +488,33 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
           justifyContent: 'space-between',
           gap: 16,
           flexWrap: 'wrap',
-          boxShadow: '0 2px 10px rgba(8, 102, 245, 0.06)'
+          boxShadow: '0 2px 10px rgba(0,0,0,0.04)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{
-              width: 40, height: 40, borderRadius: 10, background: '#0866F5', color: '#fff',
+              width: 40, height: 40, borderRadius: 10,
+              background: isAutoConfigured ? '#16a34a' : '#0866F5',
+              color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(8, 102, 245, 0.3)'
+              boxShadow: isAutoConfigured ? '0 2px 8px rgba(22, 163, 74, 0.3)' : '0 2px 8px rgba(8, 102, 245, 0.3)'
             }}>
-              ⚡
+              {isAutoConfigured ? '✓' : '⚡'}
             </div>
             <div>
               <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1rem' }}>
-                {step === 0 ? 'Step 1 of 2: Verify Domain Ownership' : step === 1 ? 'Step 2 of 2: Configure & Verify DNS' : '🎉 Setup Complete!'}
+                {isAutoConfigured
+                  ? '⚡ DNS Auto-Configured & Email Ready!'
+                  : step === 0
+                  ? (detected ? `Step 1 of 2: DNS Provider Detected (${PROVIDERS[detected]?.label})` : 'Step 1 of 2: Verify Domain Ownership')
+                  : step === 1
+                  ? 'Step 2 of 2: Configure & Verify DNS'
+                  : '🎉 Setup Complete!'}
               </div>
               <div style={{ color: 'var(--d-muted)', fontSize: '0.84rem', marginTop: 2 }}>
-                {step === 0
-                  ? `Verify that you own ${domain.domain}, then click Next to configure DNS.`
+                {isAutoConfigured
+                  ? `DNS records were automatically published to ${PROVIDERS[detected ?? 'godaddy']?.label ?? 'GoDaddy'}. Your personalised business email on ${domain.domain} is live!`
+                  : step === 0
+                  ? (detected ? `We detected your domain DNS is hosted on ${PROVIDERS[detected]?.label}. Verify and click Next.` : `Verify that you own ${domain.domain}, then click Next to configure DNS.`)
                   : step === 1
                   ? `Add MX & DKIM records for ${domain.domain}, then click Next to activate your personalised email.`
                   : `Your personalised business email on ${domain.domain} is ready to use!`}
@@ -492,10 +522,10 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
           <span style={{
-            background: '#0866F5', color: '#fff', fontSize: '0.75rem', fontWeight: 700,
+            background: isAutoConfigured ? '#16a34a' : '#0866F5', color: '#fff', fontSize: '0.75rem', fontWeight: 700,
             padding: '5px 12px', borderRadius: 20, letterSpacing: 0.3
           }}>
-            {step === 0 ? 'Step 1/2' : step === 1 ? 'Step 2/2' : 'Completed'}
+            {isAutoConfigured ? 'Auto-Configured' : step === 0 ? 'Step 1/2' : step === 1 ? 'Step 2/2' : 'Completed'}
           </span>
         </div>
       )}
@@ -815,10 +845,12 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
         <div className="d-addcard" style={{ textAlign: 'center', marginBottom: 20, padding: '36px 24px' }}>
           <div style={{ fontSize: '3.2rem', marginBottom: '0.75rem' }}>🎉</div>
           <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1.45rem', marginBottom: '.5rem' }}>
-            Your Personalised Business Email is Ready!
+            {isAutoConfigured ? 'DNS Configured & Personalised Email Ready!' : 'Your Personalised Business Email is Ready!'}
           </div>
           <p style={{ color: 'var(--d-muted)', fontSize: '0.92rem', marginBottom: '1.75rem' }}>
-            Domain ownership verified, DNS configured, and your personalised email is created on <strong>{domain.domain}</strong>.
+            {isAutoConfigured
+              ? `DNS records were automatically published to GoDaddy. Your business mailbox on ${domain.domain} is live and ready!`
+              : `Domain ownership verified, DNS configured, and your personalised email is created on ${domain.domain}.`}
           </p>
 
           {creatingMailbox ? (

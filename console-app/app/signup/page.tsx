@@ -87,12 +87,15 @@ export default function SignupPage() {
         domainId?: string;
         domain?: string;
         mailbox?: string;
+        dnsProvider?: string;
+        autoConfigured?: boolean;
         error?: string;
       };
       if (res.ok) {
         trackPixel('CompleteRegistration', { content_name: 'Lite plan signup' });
         if (data.domainId) {
-          router.push(`/dashboard/domains/${data.domainId}?onboarding=1`);
+          const autoParam = data.autoConfigured ? '&autoconfigured=1' : '';
+          router.push(`/dashboard/domains/${data.domainId}?onboarding=1${autoParam}`);
         } else {
           router.push('/dashboard/domains?onboarding=1');
         }
