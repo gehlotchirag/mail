@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { AuthStyles, AuthFonts, AuthPanel } from '../auth-theme';
 import { trackPixel } from '@/lib/pixel';
 
@@ -34,10 +34,9 @@ function PasswordHints({ pw }: { pw: string }) {
   );
 }
 
-/* ── Form Component ───────────────────────────────────────────────────────── */
-function SignupForm() {
+/* ── Page ─────────────────────────────────────────────────────────────────── */
+export default function SignupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [form, setForm] = useState({
     orgName: '',
     domain: '',
@@ -50,12 +49,16 @@ function SignupForm() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const domainParam = searchParams.get('domain');
-    if (domainParam) {
-      const clean = domainParam.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
-      setForm(p => ({ ...p, domain: clean }));
-    }
-  }, [searchParams]);
+    if (typeof window === 'undefined') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const domainParam = params.get('domain');
+      if (domainParam) {
+        const clean = domainParam.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+        setForm(p => ({ ...p, domain: clean }));
+      }
+    } catch {}
+  }, []);
 
   const pwValid = PW_REQS.every(r => r.met(form.password));
 
@@ -215,14 +218,5 @@ function SignupForm() {
         </div>
       </div>
     </div>
-  );
-}
-
-/* ── Page Root ────────────────────────────────────────────────────────────── */
-export default function SignupPage() {
-  return (
-    <Suspense fallback={null}>
-      <SignupForm />
-    </Suspense>
   );
 }
