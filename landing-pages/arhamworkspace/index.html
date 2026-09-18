@@ -2936,6 +2936,108 @@
     @media (max-width: 900px) {
       .scroll-waypoint-rail { display: none; }
     }
+
+    /* ── MOBILE APP INSTALL HEADER BANNER ── */
+    .mob-app-banner {
+      background: #FFFFFF;
+      border-bottom: 1px solid #E2E8F0;
+      position: sticky;
+      top: 0;
+      z-index: 1001;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+      transition: all .25s ease;
+    }
+    .mob-app-banner.banner-dismissed {
+      display: none !important;
+    }
+    .mob-app-banner-in {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .mob-app-close {
+      background: none;
+      border: none;
+      color: #94A3B8;
+      font-size: 22px;
+      line-height: 1;
+      width: 26px;
+      height: 26px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      flex-shrink: 0;
+      transition: color .15s ease, background .15s ease;
+    }
+    .mob-app-close:hover {
+      color: #0F172A;
+      background: #F1F5F9;
+    }
+    .mob-app-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 9px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+      flex-shrink: 0;
+      border: 1px solid #E2E8F0;
+      background: #FFFFFF;
+    }
+    .mob-app-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .mob-app-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .mob-app-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0F172A;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mob-app-sub {
+      font-size: 11px;
+      color: #64748B;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .mob-app-btn {
+      background: #2563EB;
+      color: #FFFFFF !important;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 20px;
+      white-space: nowrap;
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+      transition: all .15s ease;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mob-app-btn:hover {
+      background: #1D4ED8;
+      transform: translateY(-1px);
+    }
+    @media (min-width: 861px) {
+      .mob-app-banner { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -2967,6 +3069,24 @@
       <span class="waypoint-dot"></span>
     </a>
   </nav>
+
+  <!-- ── MOBILE APP INSTALL HEADER BANNER ── -->
+  <div id="mobAppBanner" class="mob-app-banner">
+    <div class="mob-app-banner-in">
+      <button id="mobAppClose" class="mob-app-close" aria-label="Dismiss app install banner">&times;</button>
+      <div class="mob-app-icon">
+        <img src="inbox-logo.png" alt="Arham INBOX" width="38" height="38" />
+      </div>
+      <div class="mob-app-content">
+        <div class="mob-app-title">INBOX by Arham Workspace</div>
+        <div class="mob-app-sub">Fast, Secure Business Email • 10 Mails Free</div>
+      </div>
+      <a id="mobAppInstallBtn" class="mob-app-btn" href="https://inbox.arhamworkspace.tech/signup">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Install App
+      </a>
+    </div>
+  </div>
 
   <!-- ── TOP NAVIGATION ── -->
   <header class="navbar" id="navbar">
@@ -4468,6 +4588,94 @@
 
         studioObserver.observe(studioSection);
       }
+    })();
+
+    // ── UTM Parameter Extraction & Mobile App Install Handler ──
+    (function () {
+      var search = window.location.search;
+      var params = new URLSearchParams(search);
+      var utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'];
+      var currentUtms = {};
+      var foundNew = false;
+
+      utmKeys.forEach(function (key) {
+        var val = params.get(key);
+        if (val) {
+          currentUtms[key] = val;
+          foundNew = true;
+        }
+      });
+
+      if (foundNew) {
+        try { sessionStorage.setItem('arham_utm', JSON.stringify(currentUtms)); } catch (e) {}
+      } else {
+        try {
+          var stored = sessionStorage.getItem('arham_utm');
+          if (stored) currentUtms = JSON.parse(stored);
+        } catch (e) {}
+      }
+
+      function buildUtmUrl(urlStr, defaultContent) {
+        try {
+          var u = new URL(urlStr, window.location.origin);
+          Object.keys(currentUtms).forEach(function (k) {
+            u.searchParams.set(k, currentUtms[k]);
+          });
+          if (defaultContent && !u.searchParams.has('utm_content')) {
+            u.searchParams.set('utm_content', defaultContent);
+          }
+          return u.toString();
+        } catch (e) {
+          return urlStr;
+        }
+      }
+
+      var banner = document.getElementById('mobAppBanner');
+      var closeBtn = document.getElementById('mobAppClose');
+      var installBtn = document.getElementById('mobAppInstallBtn');
+
+      try {
+        if (sessionStorage.getItem('arham_app_banner_dismissed') === '1') {
+          if (banner) banner.classList.add('banner-dismissed');
+        }
+      } catch (e) {}
+
+      if (closeBtn && banner) {
+        closeBtn.addEventListener('click', function () {
+          banner.classList.add('banner-dismissed');
+          try { sessionStorage.setItem('arham_app_banner_dismissed', '1'); } catch (e) {}
+        });
+      }
+
+      var deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (installBtn) installBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install App';
+      });
+
+      if (installBtn) {
+        installBtn.href = buildUtmUrl('https://inbox.arhamworkspace.tech/signup', 'workspace_mobile_header_install');
+        installBtn.addEventListener('click', function (e) {
+          if (deferredPrompt) {
+            e.preventDefault();
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(function (choice) {
+              if (choice.outcome === 'accepted') {
+                if (banner) banner.classList.add('banner-dismissed');
+              }
+              deferredPrompt = null;
+            });
+          }
+        });
+      }
+
+      // Propagate UTM parameters to all signup CTAs on this landing page
+      document.querySelectorAll('a[href*="/signup"], a[href*="arhamworkspace.tech/signup"]').forEach(function (link) {
+        if (link !== installBtn) {
+          link.href = buildUtmUrl(link.href, 'workspace_landing_cta');
+        }
+      });
     })();
   </script>
 </body>
