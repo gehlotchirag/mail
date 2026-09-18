@@ -126,6 +126,7 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
   const [readiness, setReadiness] = useState<ReadinessResult | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [isOnboarding, setIsOnboarding] = useState(false);
 
   function loadDomain(id: string) {
     return fetch(`/api/domains/${id}`)
@@ -141,6 +142,10 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
   }
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('onboarding') === '1') setIsOnboarding(true);
+    }
     params.then(({ id }) => {
       setDomainId(id);
       loadDomain(id);
@@ -424,6 +429,46 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
 
       <a href="/dashboard/domains" className="d-back">← Back to Domains</a>
 
+      {isOnboarding && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(8, 102, 245, 0.08) 0%, rgba(37, 99, 235, 0.03) 100%)',
+          border: '1px solid rgba(8, 102, 245, 0.25)',
+          borderRadius: 12,
+          padding: '16px 20px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          flexWrap: 'wrap',
+          boxShadow: '0 2px 10px rgba(8, 102, 245, 0.06)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 10, background: '#0866F5', color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 19, flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(8, 102, 245, 0.3)'
+            }}>
+              ⚡
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1rem' }}>
+                Activate your business email in 2 steps
+              </div>
+              <div style={{ color: 'var(--d-muted)', fontSize: '0.84rem', marginTop: 2 }}>
+                1. Verify domain ownership &nbsp;→&nbsp; 2. Configure DNS. Your primary mailbox is already provisioned!
+              </div>
+            </div>
+          </div>
+          <span style={{
+            background: '#0866F5', color: '#fff', fontSize: '0.75rem', fontWeight: 700,
+            padding: '5px 12px', borderRadius: 20, letterSpacing: 0.3
+          }}>
+            Quick Onboarding
+          </span>
+        </div>
+      )}
+
       <div className="d-detailhead">
         <div>
           <div className="d-detailtitle">
@@ -676,13 +721,66 @@ export default function DomainSetupPage({ params }: { params: Promise<{ id: stri
 
       {/* ── Step 2: Done ── */}
       {step === 2 && (
-        <div className="d-addcard" style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
-          <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1.3rem', marginBottom: '.5rem' }}>{domain.domain} is set up!</div>
-          <p style={{ color: 'var(--d-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>Domain verified and DNS configured.</p>
+        <div className="d-addcard" style={{ textAlign: 'center', marginBottom: 20, padding: '32px 24px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🎉</div>
+          <div style={{ fontWeight: 800, color: 'var(--d-ink)', fontSize: '1.4rem', marginBottom: '.5rem' }}>
+            {domain.domain} is set up &amp; ready!
+          </div>
+          <p style={{ color: 'var(--d-muted)', fontSize: '0.92rem', marginBottom: '1.75rem' }}>
+            Domain ownership verified and DNS configured.
+          </p>
+
+          {mailboxes.length > 0 && (
+            <div style={{
+              background: 'var(--d-surface2)',
+              border: '1px solid var(--d-border)',
+              borderRadius: 12,
+              padding: '16px 20px',
+              maxWidth: 480,
+              margin: '0 auto 2rem',
+              textAlign: 'left',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--d-accent)', letterSpacing: 0.8, marginBottom: 6 }}>
+                Primary Business Mailbox
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ fontWeight: 700, color: 'var(--d-ink)', fontSize: 15, wordBreak: 'break-all' }}>
+                  {mailboxes[0].emailAddress}
+                </div>
+                <span className="d-pill ok" style={{ flexShrink: 0 }}>Active</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--d-muted)', marginTop: 4 }}>
+                Ready to send and receive business emails right away.
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <a href="/dashboard/users" className="d-btn d-btn-primary">Create email users</a>
-            <a href="/dashboard/migration" className="d-btn">Import email</a>
+            <a
+              href="https://app.arhamworkspace.tech"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="d-btn d-btn-primary"
+              style={{
+                background: '#0866F5',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '10px 22px',
+                fontSize: '0.95rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(8, 102, 245, 0.25)',
+              }}
+            >
+              Open INBOX Webmail ↗
+            </a>
+            <a href="/dashboard/users" className="d-btn" style={{ padding: '10px 18px', fontSize: '0.95rem' }}>
+              Add Team Mailboxes
+            </a>
+            <a href="/dashboard/migration" className="d-btn" style={{ padding: '10px 18px', fontSize: '0.95rem' }}>
+              Import Email
+            </a>
           </div>
         </div>
       )}

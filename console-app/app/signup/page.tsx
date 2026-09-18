@@ -82,13 +82,23 @@ export default function SignupPage() {
           password: form.password
         }),
       });
+      const data = await res.json() as {
+        ok?: boolean;
+        domainId?: string;
+        domain?: string;
+        mailbox?: string;
+        error?: string;
+      };
       if (res.ok) {
         trackPixel('CompleteRegistration', { content_name: 'Lite plan signup' });
-        router.push('/dashboard');
+        if (data.domainId) {
+          router.push(`/dashboard/domains/${data.domainId}?onboarding=1`);
+        } else {
+          router.push('/dashboard/domains?onboarding=1');
+        }
         return;
       }
-      const d = await res.json() as { error?: string };
-      setError(d.error ?? 'Signup failed. Please try again.');
+      setError(data.error ?? 'Signup failed. Please try again.');
     } catch {
       setError('Network error. Please check your connection.');
     } finally {

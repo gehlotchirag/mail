@@ -22,6 +22,7 @@ import { ensureSesIdentity } from './ses';
 export interface ProvisionedDomain {
   id: string;
   domain: string;
+  fluxDomainId: string;
   verifyToken: string;
   sesTokens: Array<{ host: string; value: string }>;
   sesVerified: boolean;
@@ -81,6 +82,7 @@ export async function provisionDomain(orgId: string, rawDomain: string): Promise
   return {
     id: row?.id ?? '',
     domain,
+    fluxDomainId,
     verifyToken,
     sesTokens: ses.tokens,
     sesVerified: ses.verified,
