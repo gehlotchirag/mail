@@ -7,7 +7,7 @@ import { issueVerificationEmail } from '@/lib/tokens';
 import { PLANS, resolvePlanLimits } from '@/lib/plans';
 import { provisionDomain, normaliseDomain, isValidDomain } from '@/lib/domain-provisioning';
 import { createUser } from '@/lib/flux';
-import { tryAutoConfigureDns } from '@/lib/dns-auto-config';
+import { detectDomainDnsProvider } from '@/lib/dns-auto-config';
 
 export async function POST(req: Request) {
   // 5 signups per hour per IP
@@ -103,13 +103,12 @@ export async function POST(req: Request) {
             console.warn('[signup] Could not auto-create primary mailbox:', mboxErr);
           }
 
-          // Auto-detect DNS provider (GoDaddy, etc.) and auto-configure if credentials available
+          // Auto-detect DNS provider (GoDaddy, Cloudflare, etc.) to streamline user onboarding
           try {
-            const autoDns = await tryAutoConfigureDns(prov.id, cleanDomain, prov.verifyToken);
+            const autoDns = await detectDomainDnsProvider(cleanDomain);
             dnsProvider = autoDns.provider;
-            autoConfigured = autoDns.autoConfigured;
           } catch (dnsErr) {
-            console.warn('[signup] Auto-DNS configure check error:', dnsErr);
+            console.warn('[signup] DNS provider detection error:', dnsErr);
           }
         }
       } catch (domainErr) {
@@ -131,7 +130,6 @@ export async function POST(req: Request) {
       domain: cleanDomain,
       mailbox: autoMailbox,
       dnsProvider,
-      autoConfigured,
     }, { status: 201 });
     res.cookies.set('console_token', token, {
       httpOnly: true, secure: process.env.NODE_ENV === 'production',
